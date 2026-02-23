@@ -52,7 +52,7 @@ const STRINGS = {
     btn_guide: 'Przewodnik', btn_clear: 'Wyczyść', btn_run: 'Uruchom',
     sidebar_training: 'Trening', sidebar_inference: 'Predykcja',
     block_camera_input: 'Kamera: Dane', block_label_classes: 'Etykiety klas',
-    block_prepare_data: 'Augmentacja danych', block_pretrained_model: 'Model bazowy',
+    block_prepare_data: 'Dane', block_pretrained_model: 'Model bazowy',
     block_train_model: 'Trenuj model', block_save_model: 'Zapisz model',
     block_upload_model: 'Wczytaj model', block_camera_infer: 'Kamera: Predykcja',
     block_predict: 'Predykcja', block_show_results: 'Pokaż wyniki',
@@ -114,7 +114,7 @@ const STRINGS = {
     btn_guide: 'Guide', btn_clear: 'Clear', btn_run: 'Run',
     sidebar_training: 'Training', sidebar_inference: 'Prediction',
     block_camera_input: 'Camera: Input', block_label_classes: 'Label Classes',
-    block_prepare_data: 'Data Augmentation', block_pretrained_model: 'Pretrained Model',
+    block_prepare_data: 'Data', block_pretrained_model: 'Pretrained Model',
     block_train_model: 'Train Model', block_save_model: 'Save Model',
     block_upload_model: 'Load Model', block_camera_infer: 'Camera: Prediction',
     block_predict: 'Predict', block_show_results: 'Show Results',
@@ -361,6 +361,7 @@ function renderLabelRows(id) {
   oninput="classNames[${i}]=this.value;updateClassNamesEverywhere()" placeholder="${lang === 'pl' ? 'nazwa klasy...' : 'class name...'}">
 <span class="class-count" id="cc-${id}-${i}">${(capturedSamples[i] || []).length} ${t('lbl_samples')}</span>
 <button style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${CLASS_COLORS[i]};color:#fff" onclick="labelCapture(${i})">${lang === 'pl' ? 'zbierz' : 'capture'}</button>
+<button class="class-delete-btn" onclick="clearClassSamples(${i})" title="${lang === 'pl' ? 'Usuń próbki' : 'Delete samples'}">✕</button>
 </div>
 <div id="thumbs-label-${i}-${id}" class="thumb-strip"></div>`;
   }
@@ -377,6 +378,20 @@ function labelCapture(classIdx) {
   }
   window.activeClass = classIdx;
   blockCapture(camBlock.id, classIdx);
+}
+
+function clearClassSamples(classIdx) {
+  if (!capturedSamples[classIdx] || capturedSamples[classIdx].length === 0) return;
+  capturedSamples[classIdx] = [];
+  log('info', lang === 'pl'
+    ? `Usunięto próbki klasy "${classNames[classIdx]}"`
+    : `Deleted samples for class "${classNames[classIdx]}"`);
+  // Refresh all label-classes blocks so counts and thumbnails update
+  placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
+    const body = document.getElementById(b.id)?.querySelector('.bk-body');
+    if (body) body.innerHTML = renderLabelRows(b.id);
+  });
+  updateThumbStrips();
 }
 
 function setActiveClass(idx, labelBlockId) {
@@ -411,17 +426,21 @@ function addClass(labelBlockId) {
 }
 
 function buildPrepareDataBody(id) {
+  const hint = lang === 'pl'
+    ? 'Przeskaluj zebrane zdjęcia do rozmiaru modelu. Opcjonalnie augmentuj dane, aby zwiększyć liczbę próbek.'
+    : 'Resize captured images to model input size. Optionally augment to increase sample count.';
   return `
+<div style="font-size:12px;color:var(--c-muted);line-height:1.4;padding-bottom:4px">${hint}</div>
 ${makeParam(t('param_augment'), `<select id="aug-${id}">
-  <option value="flip">Flip</option>
-  <option value="all" selected>Flip + Rotate + Brightness</option>
+  <option value="none" selected>${lang === 'pl' ? 'Tylko przygotowanie' : 'Prepare only'}</option>
+  <option value="all">Flip + Rotate + Brightness</option>
 </select>`)}
 ${makeParam(t('param_multiplier'), `<select id="mul-${id}">
   <option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option>
 </select>`)}
 <progress id="prog-${id}" value="0" max="100" style="margin-top:6px"></progress>
 <div id="prep-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">—</div>
-${makeBtn('Generate', `runPrepare('${id}')`, 'var(--c-prep)')}`;
+${makeBtn(lang === 'pl' ? 'Przygotuj dane' : 'Prepare data', `runPrepare('${id}')`, 'var(--c-prep)')}`;
 }
 
 function buildPretrainedModelBody(id) {
