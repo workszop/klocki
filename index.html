@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KlockiAI — Teachable AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+</head>
+
+<body>
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div id="logo">Klocki<span>AI</span></div>
+
+    <div id="topbar-actions" style="margin-left:auto">
+      <button id="btn-lang" class="tb-btn" onclick="toggleLang()">EN</button>
+      <button class="tb-btn" onclick="showGuide()" data-i18n="btn_guide">Przewodnik</button>
+      <button class="tb-btn" onclick="clearCanvas()" data-i18n="btn_clear">Wyczyść</button>
+    </div>
+  </div>
+
+  <!-- WORKSPACE -->
+  <div id="workspace">
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title" data-i18n="sidebar_training">Trening</div>
+        <div class="palette-block" draggable="true" data-type="camera-input" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-data)"></div>
+          <span data-i18n="block_camera_input">Kamera — Dane</span>
+        </div>
+        <div class="palette-block" draggable="true" data-type="label-classes" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-label)"></div>
+          <span data-i18n="block_label_classes">Etykiety klas</span>
+        </div>
+        <div class="palette-block" draggable="true" data-type="prepare-data" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-prep)"></div>
+          <span data-i18n="block_prepare_data">Augmentacja danych</span>
+        </div>
+        <div class="palette-block" draggable="true" data-type="pretrained-model" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-model)"></div>
+          <span data-i18n="block_pretrained_model">Model bazowy</span>
+        </div>
+        <div class="palette-block" draggable="true" data-type="train-model" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-train)"></div>
+          <span data-i18n="block_train_model">Trenuj model</span>
+        </div>
+        <div class="palette-block" draggable="true" data-type="save-model" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-deploy)"></div>
+          <span data-i18n="block_save_model">Zapisz model</span>
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-title" data-i18n="sidebar_inference">Predykcja</div>
+        <div class="palette-block" draggable="true" data-type="upload-model" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-data)"></div>
+          <span data-i18n="block_upload_model">Wczytaj model</span>
+        </div>
+        <div class="palette-block" draggable="true" data-type="camera-infer" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-data)"></div>
+          <span data-i18n="block_camera_infer">Kamera: Predykcja</span>
+        </div>
+
+        <div class="palette-block" draggable="true" data-type="predict" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-deploy)"></div>
+          <span data-i18n="block_predict">Predykcja</span>
+        </div>
+        <div class="palette-block" draggable="true" data-type="show-results" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-eval)"></div>
+          <span data-i18n="block_show_results">Pokaż wyniki</span>
+        </div>
+        <div class="palette-block" draggable="true" data-type="zero-shot" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-model)"></div>
+          <span data-i18n="block_zero_shot">Model bazowy / Predykcja</span>
+        </div>
+        <div class="palette-block" draggable="true" data-type="explain-ai" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-eval)"></div>
+          <span data-i18n="block_explain_ai">Explainable AI</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CANVAS -->
+    <div id="canvas" ondragover="canvasDragOver(event)" ondrop="canvasDrop(event)">
+      <div id="canvas-inner"></div>
+      <div id="trash-zone">Kosz</div>
+    </div>
+
+    <!-- LOG PANEL -->
+    <div id="log-panel">
+      <div id="log-header">
+        <div id="log-header-title" data-i18n="log_title">Pipeline Log</div>
+        <button id="log-clear" onclick="clearLog()">CLR</button>
+      </div>
+      <div id="log-entries"></div>
+    </div>
+  </div>
+
+  <!-- GUIDE MODAL -->
+  <div class="modal-overlay hidden" id="guide-modal">
+    <div class="modal-box">
+      <div class="modal-title" data-i18n="guide_title">Przewodnik — KlockiAI</div>
+      <div class="modal-subtitle" data-i18n="guide_subtitle">Jak zbudować swój pierwszy model AI w przeglądarce</div>
+      <div class="guide-steps" id="guide-steps-container"></div>
+      <div class="modal-footer">
+        <button class="modal-close-btn" onclick="closeGuide()" data-i18n="guide_close">Zrozumiałem!</button>
+        <label><input type="checkbox" id="chk-no-guide" onchange="saveGuidePrefs()"> <span
+            data-i18n="guide_dontshow">Nie pokazuj ponownie</span></label>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
