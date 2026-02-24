@@ -711,12 +711,24 @@ function updateClassNamesEverywhere() {
 
 // ===== CAMERA — Training =====
 let cameraStreams = {};
+
+async function getCameraStream() {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+  } catch (err) {
+    if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError' || err.name === 'OverconstrainedError') {
+      return await navigator.mediaDevices.getUserMedia({ video: true });
+    }
+    throw err;
+  }
+}
+
 async function blockStartCamera(id) {
   try {
     if (cameraStreams[id]) {
       cameraStreams[id].getTracks().forEach(t => t.stop());
     }
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+    const stream = await getCameraStream();
     cameraStreams[id] = stream;
     const vid = document.getElementById('vid-' + id);
     if (vid) { vid.srcObject = stream; }
@@ -1354,7 +1366,7 @@ async function startZeroShot(id) {
   }
   if (zsStreams[id]) zsStreams[id].getTracks().forEach(t => t.stop());
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+    const stream = await getCameraStream();
     zsStreams[id] = stream;
     const vid = document.getElementById('zsvid-' + id);
     if (vid) vid.srcObject = stream;
@@ -1423,7 +1435,7 @@ async function runZeroShot(id) {
 async function startInferCamera(id) {
   try {
     if (inferCameraStream) inferCameraStream.getTracks().forEach(t => t.stop());
-    inferCameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+    inferCameraStream = await getCameraStream();
     const vid = document.getElementById('vid-' + id);
     const showVid = document.querySelector('[id^="show-vid-"]');
     if (vid) { vid.srcObject = inferCameraStream; }
