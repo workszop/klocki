@@ -731,7 +731,7 @@ async function blockStartCamera(id) {
     const stream = await getCameraStream();
     cameraStreams[id] = stream;
     const vid = document.getElementById('vid-' + id);
-    if (vid) { vid.srcObject = stream; }
+    if (vid) { vid.srcObject = stream; vid.play().catch(() => {}); }
     setBlockStatus(document.getElementById(id), 'running');
     log('success', t('log_camera_start'));
   } catch (err) {
@@ -1369,7 +1369,7 @@ async function startZeroShot(id) {
     const stream = await getCameraStream();
     zsStreams[id] = stream;
     const vid = document.getElementById('zsvid-' + id);
-    if (vid) vid.srcObject = stream;
+    if (vid) { vid.srcObject = stream; vid.play().catch(() => {}); }
     setBlockStatus(document.getElementById(id), 'running');
     // Ensure labels are loaded
     loadImagenetLabels();
@@ -1438,8 +1438,8 @@ async function startInferCamera(id) {
     inferCameraStream = await getCameraStream();
     const vid = document.getElementById('vid-' + id);
     const showVid = document.querySelector('[id^="show-vid-"]');
-    if (vid) { vid.srcObject = inferCameraStream; }
-    if (showVid) { showVid.srcObject = inferCameraStream; }
+    if (vid) { vid.srcObject = inferCameraStream; vid.play().catch(() => {}); }
+    if (showVid) { showVid.srcObject = inferCameraStream; showVid.play().catch(() => {}); }
     inferVideoEl = vid || showVid;
     setBlockStatus(document.getElementById(id), 'running');
     log('success', t('log_camera_start') + ' (inference)');
