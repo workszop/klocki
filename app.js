@@ -547,17 +547,12 @@ ${makeBtn(t('btn_run_xai'), `runXAI('${id}')`, 'var(--c-eval)')}
 }
 
 function buildModelExplorerBody(id) {
-  return `
-<div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:8px">
-  ${lang === 'pl'
-    ? 'Eksploruj architekturę MobileNet V3 Small — warstwy, mapy cech i inferencję na żywo.'
-    : 'Explore MobileNet V3 Small — layers, feature maps and live inference.'}
-</div>
-${makeBtn(
-  lang === 'pl' ? 'Otwórz eksplorator' : 'Open Explorer',
-  `window.open('model-explorer.html', '_blank')`,
-  'var(--c-eval)'
-)}`;
+  const desc = lang === 'pl'
+    ? 'Eksploruj architektur\u0119 MobileNet V3 Small \u2014 warstwy, mapy cech i inferencj\u0119 na \u017cywo.'
+    : 'Explore MobileNet V3 Small \u2014 layers, feature maps and live inference.';
+  const btnLabel = lang === 'pl' ? 'Otwórz eksplorator' : 'Open Explorer';
+  return '<div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:4px">' + desc + '</div>'
+    + makeBtn(btnLabel, "window.open('model-explorer.html','_blank')", 'var(--c-eval)');
 }
 
 
