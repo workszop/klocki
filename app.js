@@ -729,6 +729,31 @@ function updateClassNamesEverywhere() {
 // ===== CAMERA — Training =====
 let cameraStreams = {};
 
+function cameraErrorHint(err) {
+  const pl = lang === 'pl';
+  if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+    return pl
+      ? ' — Windows: Ustawienia → Prywatność → Kamera → włącz dostęp. Lub sprawdź, czy kamera jest podłączona.'
+      : ' — Windows: Settings → Privacy → Camera → enable access. Or check that a camera is connected.';
+  }
+  if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+    return pl
+      ? ' — Zezwól przeglądarce na dostęp do kamery (ikona kłódki w pasku adresu).'
+      : ' — Allow camera access in your browser (lock icon in the address bar).';
+  }
+  if (err.name === 'NotReadableError' || err.name === 'AbortError') {
+    return pl
+      ? ' — Kamera jest zajęta przez inną aplikację (Teams, Zoom, Meet…). Zamknij ją i spróbuj ponownie.'
+      : ' — Camera is in use by another app (Teams, Zoom, Meet…). Close it and try again.';
+  }
+  if (location.protocol === 'file:') {
+    return pl
+      ? ' ⚠️ Otwórz przez http://localhost:8765, nie file://'
+      : ' ⚠️ Open via http://localhost:8765, not file://';
+  }
+  return '';
+}
+
 async function getCameraStream() {
   const bail = e => e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError';
   // Attempt 1: preferred resolution
@@ -764,13 +789,7 @@ async function blockStartCamera(id) {
     setBlockStatus(document.getElementById(id), 'running');
     log('success', t('log_camera_start'));
   } catch (err) {
-    let msg = t('log_camera_err') + err.message;
-    if (location.protocol === 'file:') {
-      msg += lang === 'pl'
-        ? ' ⚠️ Otwórz przez http://localhost:8765 (nie file://)'
-        : ' ⚠️ Open via http://localhost:8765 (not file://)';
-    }
-    log('error', msg);
+    log('error', t('log_camera_err') + err.message + cameraErrorHint(err));
     setBlockStatus(document.getElementById(id), 'error');
   }
 }
@@ -1436,7 +1455,7 @@ async function startZeroShot(id) {
     zsIntervals[id] = setInterval(() => runZeroShot(id), interval);
     log('success', lang === 'pl' ? 'Zero-shot uruchomiony' : 'Zero-shot started');
   } catch (err) {
-    log('error', (lang === 'pl' ? 'B\u0142\u0105d kamery: ' : 'Camera error: ') + err.message);
+    log('error', t('log_camera_err') + err.message + cameraErrorHint(err));
     setBlockStatus(document.getElementById(id), 'error');
   }
 }
@@ -1506,7 +1525,7 @@ async function startInferCamera(id) {
     if (inferInterval) clearInterval(inferInterval);
     inferInterval = setInterval(() => runInference(id), interval);
   } catch (err) {
-    log('error', t('log_camera_err') + err.message);
+    log('error', t('log_camera_err') + err.message + cameraErrorHint(err));
     setBlockStatus(document.getElementById(id), 'error');
   }
 }
