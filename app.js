@@ -338,7 +338,7 @@ function buildCameraInputBody(id) {
     `<button class="bk-btn" style="background:${CLASS_COLORS[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${id}',${i})">${name}</button>`
   ).join('');
   return `
-<div class="video-wrap"><video class="bk-video" id="vid-${id}" autoplay playsinline muted style="height:120px;background:#000"></video></div>
+<div class="video-wrap"><video class="bk-video" id="vid-${id}" autoplay playsinline muted></video></div>
 ${makeParam(t('param_resolution'), `<select id="res-${id}"><option value="224">224\u00d7224</option><option value="128">128\u00d7128</option></select>`)}
 ${makeParam(t('param_samples'), `<input type="number" id="spc-${id}" value="10" min="1" max="100" style="width:60px">`)}
 ${makeBtn(t('btn_start_camera'), `blockStartCamera('${id}')`, 'var(--c-data)')}
@@ -495,7 +495,7 @@ ${makeBtn(t('btn_load_idb'), `runLoadIDB('${id}')`, '#64748B')}
 
 function buildCameraInferBody(id) {
   return `
-<div class="video-wrap"><video class="bk-video" id="vid-${id}" autoplay playsinline muted style="height:120px"></video></div>
+<div class="video-wrap"><video class="bk-video" id="vid-${id}" autoplay playsinline muted></video></div>
 ${makeParam(t('param_fps'), `<select id="fps-${id}"><option value="1000">1</option><option value="200" selected>5</option><option value="100">10</option></select>`)}
 ${makeBtn(t('btn_start_camera'), `startInferCamera('${id}')`, 'var(--c-data)')}
 ${makeBtn(t('btn_stop_camera'), `stopInferCamera('${id}')`, '#64748B')}`;
@@ -508,7 +508,7 @@ function buildZeroShotBody(id) {
     : 'This model has never seen your custom classes: watch what it recognizes on its own!';
   return `
 <div style="font-size:10px;color:var(--c-muted);line-height:1.6;padding:4px 0 6px;border-bottom:1px solid var(--c-border);margin-bottom:6px">${note}</div>
-<div class="video-wrap"><video class="bk-video" id="zsvid-${id}" autoplay playsinline muted style="height:110px;background:#000"></video></div>
+<div class="video-wrap"><video class="bk-video" id="zsvid-${id}" autoplay playsinline muted></video></div>
 ${makeParam('FPS', `<select id="zsfps-${id}"><option value="1000">1</option><option value="200" selected>5</option><option value="100">10</option></select>`)}
 <div id="zs-results-${id}" style="margin-top:6px"></div>
 <div style="display:flex;gap:6px;margin-top:4px">

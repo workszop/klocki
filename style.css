@@ -514,8 +514,9 @@ progress::-webkit-progress-value {
 
 video.bk-video {
   width: 100%;
+  height: 180px;
   border-radius: 6px;
-  background: #000;
+  object-fit: cover;
   display: block
 }
 
