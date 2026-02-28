@@ -1976,10 +1976,6 @@ document.addEventListener('DOMContentLoaded', () => {
   applyLang();
   renderGuideSteps();
 
-  // Show guide on first visit
-  const noGuide = localStorage.getItem('ml-blocks-no-guide') === '1';
-  if (!noGuide) showGuide();
-
   // Canvas scroll sync
   const canvas = document.getElementById('canvas');
   canvas.addEventListener('wheel', (e) => {
