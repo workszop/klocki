@@ -56,7 +56,7 @@ const STRINGS = {
     block_train_model: 'Trenuj model', block_save_model: 'Zapisz model',
     block_upload_model: 'Wczytaj model', block_camera_infer: 'Kamera: Predykcja',
     block_predict: 'Predykcja', block_show_results: 'Pokaż wyniki',
-    block_zero_shot: 'Model bazowy / Predykcja', block_explain_ai: 'Explainable AI',
+    block_zero_shot: 'Model bazowy / Predykcja', block_explain_ai: 'Explainable AI', block_model_explorer: 'Eksplorator modelu',
     log_title: 'Pipeline Log',
     guide_title: 'Przewodnik — KlockiAI', guide_subtitle: 'Jak zbudować swój pierwszy model AI w przeglądarce',
     guide_close: 'OK', guide_dontshow: 'Nie pokazuj ponownie',
@@ -118,7 +118,7 @@ const STRINGS = {
     block_train_model: 'Train Model', block_save_model: 'Save Model',
     block_upload_model: 'Load Model', block_camera_infer: 'Camera: Prediction',
     block_predict: 'Predict', block_show_results: 'Show Results',
-    block_zero_shot: 'Base Model / Predict', block_explain_ai: 'Explainable AI',
+    block_zero_shot: 'Base Model / Predict', block_explain_ai: 'Explainable AI', block_model_explorer: 'Model Explorer',
     log_title: 'Pipeline Log',
     guide_title: 'Guide — KlockiAI', guide_subtitle: 'How to build your first AI model in the browser',
     guide_close: 'OK', guide_dontshow: 'Do not show again',
@@ -284,14 +284,14 @@ function buildBlockHTML(type, id) {
     'upload-model': 'var(--c-data)', 'camera-infer': 'var(--c-data)',
     'predict': 'var(--c-deploy)',
     'show-results': 'var(--c-eval)', 'zero-shot': 'var(--c-model)',
-    'explain-ai': 'var(--c-eval)'
+    'explain-ai': 'var(--c-eval)', 'model-explorer': 'var(--c-eval)'
   };
   const phases = {
     'camera-input': 'DATA', 'label-classes': 'LABEL', 'prepare-data': 'PREP',
     'pretrained-model': 'MODEL', 'train-model': 'TRAIN', 'save-model': 'DEPLOY',
     'upload-model': 'DATA', 'camera-infer': 'DATA',
     'predict': 'PRED', 'show-results': 'EVAL', 'zero-shot': 'PRED',
-    'explain-ai': 'EVAL'
+    'explain-ai': 'EVAL', 'model-explorer': 'EVAL'
   };
   const titles = {
     'camera-input': t('block_camera_input'), 'label-classes': t('block_label_classes'),
@@ -299,7 +299,7 @@ function buildBlockHTML(type, id) {
     'train-model': t('block_train_model'), 'save-model': t('block_save_model'),
     'upload-model': t('block_upload_model'), 'camera-infer': t('block_camera_infer'),
     'predict': t('block_predict'), 'show-results': t('block_show_results'), 'zero-shot': t('block_zero_shot'),
-    'explain-ai': t('block_explain_ai')
+    'explain-ai': t('block_explain_ai'), 'model-explorer': t('block_model_explorer')
   };
   const bg = phaseColors[type] || '#64748B';
   const phase = phases[type] || '';
@@ -319,6 +319,7 @@ function buildBlockHTML(type, id) {
     case 'show-results': body = buildShowResultsBody(id); break;
     case 'zero-shot': body = buildZeroShotBody(id); break;
     case 'explain-ai': body = buildExplainAIBody(id); break;
+    case 'model-explorer': body = buildModelExplorerBody(id); break;
   }
 
   return `
@@ -545,6 +546,19 @@ ${makeBtn(t('btn_run_xai'), `runXAI('${id}')`, 'var(--c-eval)')}
 </div>`;
 }
 
+function buildModelExplorerBody(id) {
+  return `
+<div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:8px">
+  ${lang === 'pl'
+    ? 'Eksploruj architekturę MobileNet V3 Small — warstwy, mapy cech i inferencję na żywo.'
+    : 'Explore MobileNet V3 Small — layers, feature maps and live inference.'}
+</div>
+${makeBtn(
+  lang === 'pl' ? 'Otwórz eksplorator' : 'Open Explorer',
+  `window.open('model-explorer.html', '_blank')`,
+  'var(--c-eval)'
+)}`;
+}
 
 
 // ============================================================
@@ -576,7 +590,7 @@ function getPhaseColor(type) {
     'train-model': 'var(--c-train)', 'save-model': 'var(--c-deploy)',
     'upload-model': 'var(--c-data)', 'camera-infer': 'var(--c-data)',
     'predict': 'var(--c-deploy)', 'show-results': 'var(--c-eval)',
-    'explain-ai': 'var(--c-eval)'
+    'explain-ai': 'var(--c-eval)', 'model-explorer': 'var(--c-eval)'
   };
   return map[type] || '#64748B';
 }
@@ -601,7 +615,7 @@ function refreshBlockText(b) {
       'train-model': t('block_train_model'), 'save-model': t('block_save_model'),
       'upload-model': t('block_upload_model'), 'camera-infer': t('block_camera_infer'),
       'predict': t('block_predict'), 'show-results': t('block_show_results'),
-      'explain-ai': t('block_explain_ai')
+      'explain-ai': t('block_explain_ai'), 'model-explorer': t('block_model_explorer')
     };
     title.textContent = titles[b.type] || b.type;
   }
