@@ -730,14 +730,26 @@ function updateClassNamesEverywhere() {
 let cameraStreams = {};
 
 async function getCameraStream() {
+  const bail = e => e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError';
+  // Attempt 1: preferred resolution
   try {
     return await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-  } catch (err) {
-    if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError' || err.name === 'OverconstrainedError') {
-      return await navigator.mediaDevices.getUserMedia({ video: true });
+  } catch (e) { if (bail(e)) throw e; }
+  // Attempt 2: any video, no resolution constraints
+  try {
+    return await navigator.mediaDevices.getUserMedia({ video: true });
+  } catch (e) { if (bail(e)) throw e; }
+  // Attempt 3: enumerate devices and try each by explicit deviceId
+  // (works around "Requested device not found" on some hardware/drivers)
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    for (const dev of devices.filter(d => d.kind === 'videoinput' && d.deviceId)) {
+      try {
+        return await navigator.mediaDevices.getUserMedia({ video: { deviceId: dev.deviceId } });
+      } catch (e) { if (bail(e)) throw e; }
     }
-    throw err;
-  }
+  } catch (e) { if (bail(e)) throw e; }
+  throw new Error(lang === 'pl' ? 'Nie znaleziono kamery' : 'No camera found');
 }
 
 async function blockStartCamera(id) {
