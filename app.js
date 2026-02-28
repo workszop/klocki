@@ -70,7 +70,7 @@ const STRINGS = {
     param_fmap: 'Mapa cech',
     btn_load_model: 'Załaduj z CDN', btn_save_idb: 'Zapisz w przeglądarce',
     btn_download: 'Pobierz model', btn_load_idb: 'Wczytaj z przeglądarki',
-    btn_pick_files: 'Wybierz plik (.json)',
+    btn_pick_files: 'Wybierz plik (.json)', param_model_name: 'Nazwa modelu', lbl_no_saved_models: 'Brak zapisanych modeli',
     btn_train: 'Trenuj', btn_stop_train: 'Zatrzymaj',
     btn_freeze_frame: 'Zamroź klatkę', btn_run_xai: 'Analizuj (Zamroź kadr)',
     lbl_class: 'Klasa', lbl_samples: 'próbek', lbl_accuracy: 'Dokładność',
@@ -132,7 +132,7 @@ const STRINGS = {
     param_fmap: 'Feature Maps',
     btn_load_model: 'Load from CDN', btn_save_idb: 'Save to Browser',
     btn_download: 'Download model', btn_load_idb: 'Load from Browser',
-    btn_pick_files: 'Pick file (.json)',
+    btn_pick_files: 'Pick file (.json)', param_model_name: 'Model name', lbl_no_saved_models: 'No saved models',
     btn_train: 'Train', btn_stop_train: 'Stop',
     btn_freeze_frame: 'Freeze Frame', btn_run_xai: 'Analyze (Freeze frame)',
     lbl_class: 'Class', lbl_samples: 'samples', lbl_accuracy: 'Accuracy',
@@ -472,6 +472,7 @@ ${makeBtn(t('btn_stop_train'), `stopTraining('${id}')`, '#64748B')}
 
 function buildSaveModelBody(id) {
   return `
+${makeParam(t('param_model_name'), `<input type="text" id="model-name-${id}" value="model-1" placeholder="model-1" style="width:90px;font-size:12px">`)}
 <div id="save-info-${id}" style="font-size:11px;color:var(--c-muted)">—</div>
 ${makeBtn(t('btn_save_idb'), `runSaveIDB('${id}')`, 'var(--c-deploy)')}
 ${makeBtn(t('btn_download'), `runDownload('${id}')`, '#0369A1')}`;
@@ -482,6 +483,12 @@ function buildUploadModelBody(id) {
 <div class="warn-banner" id="warn-${id}">${t('warn_version')}</div>
 <input type="file" id="file-model-${id}" accept=".json,.bin,.weights.bin" multiple style="display:none">
 ${makeBtn(t('btn_pick_files'), `pickModelFiles('${id}')`, 'var(--c-data)')}
+<div style="display:flex;gap:4px;align-items:center;margin-top:2px">
+  <select id="idb-select-${id}" style="flex:1;font-size:12px;padding:4px 6px;border-radius:4px;border:1px solid var(--c-border);background:var(--c-bg)">
+    <option value="" disabled selected>${t('lbl_no_saved_models')}</option>
+  </select>
+  <button class="bk-btn" style="background:#64748B;padding:4px 8px;font-size:13px;width:auto" onclick="refreshIDBList('${id}')">↺</button>
+</div>
 ${makeBtn(t('btn_load_idb'), `runLoadIDB('${id}')`, '#64748B')}
 <div id="meta-${id}" style="font-size:10px;color:var(--c-muted);margin-top:4px;line-height:1.8">—</div>`;
 }
@@ -598,6 +605,7 @@ function initBlockAfterPlace(id, type) {
   if (type === 'upload-model') {
     const inp = document.getElementById('file-model-' + id);
     if (inp) inp.addEventListener('change', () => tryLoadModelFiles(id));
+    refreshIDBList(id);
   }
 }
 
@@ -1170,13 +1178,13 @@ function stopTraining(id) {
 async function runSaveIDB(id) {
   if (!fullModel) { log('warn', t('lbl_no_model')); return; }
   if (!baseModel) { log('warn', t('log_no_model_base')); return; }
+  const nameEl = document.getElementById('model-name-' + id);
+  const name = (nameEl ? nameEl.value.trim() : '') || 'model-1';
   try {
     fullModel.userDefinedMetadata = modelMetadata; // bake labels into model JSON
-    await fullModel.save('indexeddb://ml-blocks-model-v1');
-    // Save the base model (GraphModel) alongside the classifier so that the
-    // inference pipeline is fully self-contained and works without CDN access.
-    await baseModel.save('indexeddb://ml-blocks-base-v1');
-    localStorage.setItem('ml-blocks-meta', JSON.stringify(modelMetadata));
+    await fullModel.save('indexeddb://ml-blocks-' + name);
+    await baseModel.save('indexeddb://ml-blocks-base-' + name);
+    localStorage.setItem('ml-blocks-meta-' + name, JSON.stringify(modelMetadata));
     log('success', t('log_save_idb'));
     setBlockStatus(document.getElementById(id), 'done');
     const el = document.getElementById('save-info-' + id);
@@ -1209,12 +1217,14 @@ async function runDownload(id) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'klocki-full-model.json';
+    const nameEl = document.getElementById('model-name-' + id);
+    const fname = ((nameEl ? nameEl.value.trim() : '') || 'klocki-model') + '.json';
+    a.download = fname;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    log('success', lang === 'pl' ? 'Model pobrany ✓ (klocki-full-model.json)' : 'Model downloaded ✓ (klocki-full-model.json)');
+    log('success', (lang === 'pl' ? 'Model pobrany ✓ (' : 'Model downloaded ✓ (') + fname + ')');
   } catch (err) {
     log('error', 'Download error: ' + err.message);
   }
@@ -1281,21 +1291,31 @@ async function tryLoadModelFiles(id) {
 }
 
 async function runLoadIDB(id) {
+  const sel = document.getElementById('idb-select-' + id);
+  const name = sel ? sel.value : '';
+  if (!name) {
+    log('warn', lang === 'pl' ? 'Wybierz model z listy (kliknij ↺ aby odświeżyć)' : 'Select a model from the list (click ↺ to refresh)');
+    return;
+  }
   setBlockStatus(document.getElementById(id), 'running');
-  log('step', 'Loading from IndexedDB...');
+  log('step', 'Loading from IndexedDB: ' + name + '...');
   try {
-    inferModel = await tf.loadLayersModel('indexeddb://ml-blocks-model-v1');
-    // Restore the base model from IDB so inference is fully self-contained.
-    // Fall back gracefully if it was never saved (older save format).
+    inferModel = await tf.loadLayersModel('indexeddb://ml-blocks-' + name);
     try {
-      baseModel = await tf.loadGraphModel('indexeddb://ml-blocks-base-v1');
+      baseModel = await tf.loadGraphModel('indexeddb://ml-blocks-base-' + name);
       log('info', lang === 'pl' ? 'Model bazowy wczytany z przeglądarki ✓' : 'Base model loaded from browser ✓');
     } catch (_) {
-      log('warn', lang === 'pl'
-        ? 'Brak modelu bazowego w przeglądarce — załaduj blok "Model bazowy" z CDN'
-        : 'Base model not in browser — load the Pretrained Model block from CDN');
+      // Backward compat: try old fixed key
+      try {
+        baseModel = await tf.loadGraphModel('indexeddb://ml-blocks-base-v1');
+        log('info', lang === 'pl' ? 'Model bazowy wczytany z przeglądarki ✓' : 'Base model loaded from browser ✓');
+      } catch (_2) {
+        log('warn', lang === 'pl'
+          ? 'Brak modelu bazowego w przeglądarce — załaduj blok "Model bazowy" z CDN'
+          : 'Base model not in browser — load the Pretrained Model block from CDN');
+      }
     }
-    const metaStr = localStorage.getItem('ml-blocks-meta');
+    const metaStr = localStorage.getItem('ml-blocks-meta-' + name) || localStorage.getItem('ml-blocks-meta');
     const meta = metaStr ? JSON.parse(metaStr) : {};
     processLoadedMeta(id, meta);
     setBlockStatus(document.getElementById(id), 'done');
@@ -1303,6 +1323,22 @@ async function runLoadIDB(id) {
   } catch (err) {
     log('error', 'IDB load error: ' + err.message);
     setBlockStatus(document.getElementById(id), 'error');
+  }
+}
+
+async function refreshIDBList(id) {
+  const sel = document.getElementById('idb-select-' + id);
+  if (!sel) return;
+  try {
+    const models = await tf.io.listModels();
+    const names = Object.keys(models)
+      .filter(k => k.startsWith('indexeddb://ml-blocks-') && !k.startsWith('indexeddb://ml-blocks-base-'))
+      .map(k => k.replace('indexeddb://ml-blocks-', ''));
+    sel.innerHTML = names.length
+      ? names.map(n => '<option value="' + n + '">' + n + '</option>').join('')
+      : '<option value="" disabled selected>' + t('lbl_no_saved_models') + '</option>';
+  } catch (e) {
+    sel.innerHTML = '<option value="" disabled selected>' + t('lbl_no_saved_models') + '</option>';
   }
 }
 
