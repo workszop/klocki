@@ -1,7 +1,14 @@
 // ===== CONSTANTS =====
 const SCHEMA_VERSION = "v1";
 const CLASS_COLORS = ['#0369A1', '#7C3AED', '#D97706', '#DC2626', '#059669', '#DB2777'];
+// Feature-vector variant: 576-dim output, used as the frozen backbone for
+// transfer-learning (Train Model block). The full classifier variant is loaded
+// separately by the Zero-shot block — see CLASSIFIER_MODEL_URL.
 const MODEL_URL = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-feature-vector/versions/1/model.json?tfjs-format=file';
+// Full MobileNetV3-Small with the original 1001-class ImageNet softmax head.
+// Used by the Zero-shot block to demonstrate "what does the base model know
+// without any training" — produces actual ImageNet probabilities.
+const CLASSIFIER_MODEL_URL = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-classification/versions/1/model.json?tfjs-format=file';
 
 // ===== BUNDLE HELPERS =====
 // Chunked encoding — avoids O(n²) string concat for multi-MB weight buffers.
@@ -49,7 +56,7 @@ const STRINGS = {
   pl: {
     phase_data: 'Dane', phase_label: 'Etykiety', phase_prep: 'Przygotowanie',
     phase_model: 'Model', phase_train: 'Trening', phase_deploy: 'Zapis', phase_infer: 'Predykcja', phase_xai: 'Wyjaśnialne AI',
-    btn_guide: 'Przewodnik', btn_clear: 'Wyczyść', btn_run: 'Uruchom',
+    btn_guide: 'Przewodnik', btn_clear: 'Wyczyść', btn_run: 'Uruchom', btn_edu: '🎓 Edu',
     sidebar_training: 'Trening', sidebar_inference: 'Predykcja',
     block_camera_input: 'Kamera: Dane', block_label_classes: 'Etykiety klas',
     block_prepare_data: 'Dane', block_pretrained_model: 'Model bazowy',
@@ -64,10 +71,9 @@ const STRINGS = {
     btn_start_camera: 'Uruchom kamerę', btn_stop_camera: 'Zatrzymaj',
     btn_capture: 'Zrób zdjęcie', btn_capture_hold: 'Zbierz próbki',
     param_resolution: 'Rozdzielczość', param_samples: 'Próbek/klasę',
-    param_augment: 'Augmentacja', param_multiplier: 'Mnożnik', param_augment_none: 'Brak',
+    param_augment: 'Augmentacja', param_augment_none: 'Brak',
     param_epochs: 'Epoki', param_lr: 'Learning rate', param_batch: 'Batch size',
     param_freeze: 'Zamroź warstwy', param_fps: 'FPS', param_threshold: 'Próg',
-    param_fmap: 'Mapa cech',
     btn_load_model: 'Załaduj z CDN', btn_save_idb: 'Zapisz w przeglądarce',
     btn_download: 'Pobierz model', btn_load_idb: 'Wczytaj z przeglądarki',
     btn_pick_files: 'Wybierz plik (.json)', param_model_name: 'Nazwa modelu', lbl_no_saved_models: 'Brak zapisanych modeli',
@@ -99,6 +105,24 @@ const STRINGS = {
     log_no_model_base: 'Brak modelu bazowego! Załaduj go najpierw.',
     log_no_infer_model: 'Brak modelu do predykcji!',
     warn_version: 'Niezgodna wersja schematu modelu. Kontynuuj z ostrożnością.',
+    sidebar_dataset: 'Dataset',
+    btn_export_dataset: '⬇ Pobierz dataset',
+    btn_clear_dataset: '🗑 Usuń z pamięci',
+    btn_load_dataset: '📂 Wczytaj dataset',
+    empty_title: 'Pusty obszar roboczy',
+    empty_subtitle: 'Przeciągnij blok z lewej strony albo użyj szablonu',
+    empty_qs_train: '🎓 Szybki start: Trening',
+    empty_qs_infer: '🔮 Szybki start: Predykcja',
+    empty_hint: 'Szablony dodają wszystkie potrzebne bloki w odpowiedniej kolejności.',
+    prereq_label_samples: 'Próbki',
+    prereq_label_prepared: 'Dane przygotowane',
+    prereq_label_baseModel: 'Model bazowy',
+    prereq_label_fullModel: 'Wytrenowany model',
+    prereq_label_inferModel: 'Klasyfikator',
+    prereq_label_inferStream: 'Kamera predykcji',
+    prereq_label_classes: 'Min. 2 klasy',
+    prereq_heading: 'Wymagania:',
+    prereq_all_satisfied: 'Gotowe do uruchomienia',
     guide_steps: [
       { title: 'Krok 1 — Kamera', desc: 'Dodaj blok "Kamera — Dane" na tablicę. Uruchom kamerę i zbieraj zdjęcia dla każdej klasy, klikając "Zbierz próbki".' },
       { title: 'Krok 2 — Etykiety', desc: 'Dodaj blok "Etykiety klas" i nazwij swoje kategorie, np. "Pies", "Kot", "Inne". Wybierz aktywną klasę przed zbieraniem.' },
@@ -111,7 +135,7 @@ const STRINGS = {
   en: {
     phase_data: 'Data', phase_label: 'Labels', phase_prep: 'Prepare',
     phase_model: 'Model', phase_train: 'Train', phase_deploy: 'Save', phase_infer: 'Prediction', phase_xai: 'Explainable AI',
-    btn_guide: 'Guide', btn_clear: 'Clear', btn_run: 'Run',
+    btn_guide: 'Guide', btn_clear: 'Clear', btn_run: 'Run', btn_edu: '🎓 Edu',
     sidebar_training: 'Training', sidebar_inference: 'Prediction',
     block_camera_input: 'Camera: Input', block_label_classes: 'Label Classes',
     block_prepare_data: 'Data', block_pretrained_model: 'Pretrained Model',
@@ -126,10 +150,9 @@ const STRINGS = {
     btn_start_camera: 'Start Camera', btn_stop_camera: 'Stop',
     btn_capture: 'Capture', btn_capture_hold: 'Collect Samples',
     param_resolution: 'Resolution', param_samples: 'Samples/class',
-    param_augment: 'Augmentation', param_multiplier: 'Multiplier', param_augment_none: 'None',
+    param_augment: 'Augmentation', param_augment_none: 'None',
     param_epochs: 'Epochs', param_lr: 'Learning rate', param_batch: 'Batch size',
     param_freeze: 'Freeze layers', param_fps: 'FPS', param_threshold: 'Threshold',
-    param_fmap: 'Feature Maps',
     btn_load_model: 'Load from CDN', btn_save_idb: 'Save to Browser',
     btn_download: 'Download model', btn_load_idb: 'Load from Browser',
     btn_pick_files: 'Pick file (.json)', param_model_name: 'Model name', lbl_no_saved_models: 'No saved models',
@@ -161,6 +184,24 @@ const STRINGS = {
     log_no_model_base: 'No base model! Load it first.',
     log_no_infer_model: 'No model for prediction!',
     warn_version: 'Incompatible schema version. Proceed with caution.',
+    sidebar_dataset: 'Dataset',
+    btn_export_dataset: '⬇ Download dataset',
+    btn_clear_dataset: '🗑 Delete from storage',
+    btn_load_dataset: '📂 Load dataset',
+    empty_title: 'Empty workspace',
+    empty_subtitle: 'Drag a block from the left, or use a template',
+    empty_qs_train: '🎓 Quick start: Training',
+    empty_qs_infer: '🔮 Quick start: Inference',
+    empty_hint: 'Templates add every block you need, in the right order.',
+    prereq_label_samples: 'Samples',
+    prereq_label_prepared: 'Prepared data',
+    prereq_label_baseModel: 'Base model',
+    prereq_label_fullModel: 'Trained model',
+    prereq_label_inferModel: 'Classifier',
+    prereq_label_inferStream: 'Inference camera',
+    prereq_label_classes: 'Min. 2 classes',
+    prereq_heading: 'Needs:',
+    prereq_all_satisfied: 'Ready to run',
     guide_steps: [
       { title: 'Step 1 — Camera', desc: 'Add the "Camera — Input" block to the canvas. Start the camera and collect images for each class by clicking "Collect Samples".' },
       { title: 'Step 2 — Labels', desc: 'Add the "Label Classes" block and name your categories, e.g. "Dog", "Cat", "Other". Select the active class before collecting.' },
@@ -177,6 +218,17 @@ let lang = localStorage.getItem('ml-blocks-lang') || 'pl';
 let S = STRINGS[lang];
 let placedBlocks = [];
 let blockIdCounter = 0;
+// Type -> first matching block record. Kept in sync via placeBlock /
+// removeBlock so the inference hot path doesn't have to .find() per frame.
+let blocksByType = {};
+// Cached static NodeList; populated once after DOMContentLoaded.
+let _flowPillEls = null;
+// Predict-block UI state cache (set of <div.pred-row> nodes built once,
+// then patched per frame instead of innerHTML rebuild).
+const _predUI = new WeakMap(); // block -> { rows:[{label,pct,fill}], thrLabel }
+// Rate-limit raw-probability log: only on class change or 1s elapsed.
+let _lastLoggedClass = -1;
+let _lastLogTime = 0;
 let draggedPaletteType = null;
 let dragOffsetX = 0, dragOffsetY = 0;
 let draggedCard = null;
@@ -193,7 +245,12 @@ let modelMetadata = null;
 let inferModel = null;
 let inferMetadata = null;
 let inferInterval = null;
-const EDU_MODE = new URLSearchParams(location.search).get('edu') === '1';
+// Educational mode: shows annotation tooltips above each block, disables drag
+// repositioning, and pre-populates a training pipeline. Toggleable from the
+// topbar; URL param ?edu=1 also enables it (for embedding in iframes).
+let eduMode = (new URLSearchParams(location.search).get('edu') === '1')
+  || (localStorage.getItem('ml-blocks-edu') === '1');
+// (toggleEduMode below mutates `eduMode` — every consumer reads the live let.)
 
 // ===== i18n ENGINE =====
 function t(key, ...args) {
@@ -257,6 +314,572 @@ function canvasDrop(e) {
   }
 }
 
+// Educational notes shown at the top of certain blocks. They explain the
+// implicit data-flow relationships between blocks (which block "listens" to
+// which) — the prereq strip alone tells you what's missing, not why.
+const BLOCK_NOTES = {
+  'show-results': {
+    pl: 'Reaguje na klatki z bloku „Kamera: Predykcja" — pokazuje obraz, paski pewności klas i wynik na żywo.',
+    en: 'Listens to frames from "Camera: Prediction" — shows the image, per-class confidence bars and the live prediction.'
+  },
+  'explain-ai': {
+    pl: 'Analizuje pojedynczą klatkę kamery predykcji i pokazuje, które obszary wpłynęły na decyzję.',
+    en: 'Analyses a single inference-camera frame and highlights which regions drove the decision.'
+  },
+  'zero-shot': {
+    pl: 'Pokazuje, co model bazowy rozpoznaje samodzielnie — przed jakimkolwiek treningiem.',
+    en: 'Shows what the base model recognises on its own — before any training.'
+  }
+};
+
+function renderBlockNote(type) {
+  const n = BLOCK_NOTES[type];
+  if (!n) return '';
+  return `<div class="bk-note">${n[lang] || n.en}</div>`;
+}
+
+// EDU-mode annotations rendered above each block when teaching mode is on.
+// Bilingual; keeps the lesson short and conceptual rather than instructional.
+const EDU_ANNOTATIONS = {
+  'camera-input':     { pl: '📷 Zbieramy dane treningowe — zdjęcia dla każdej klasy', en: '📷 Collect training data — images for each class' },
+  'label-classes':    { pl: '🏷️ Etykiety identyfikują każdą kategorię obrazów',     en: '🏷️ Labels identify each image category' },
+  'prepare-data':     { pl: '⚙️ Zdjęcia są przeskalowane i augmentowane w Web Worker', en: '⚙️ Images resized + augmented in a Web Worker' },
+  'pretrained-model': { pl: '🧠 MobileNet widział 1.2M zdjęć — "transfer learning"',  en: '🧠 MobileNet has seen 1.2M images — "transfer learning"' },
+  'train-model':      { pl: '🚀 model.fit() dostosowuje wagi do naszych klas',         en: '🚀 model.fit() adapts weights to your classes' },
+  'save-model':       { pl: '💾 Wagi modelu zapisywane w IndexedDB przeglądarki',    en: '💾 Model weights saved to browser IndexedDB' },
+  'upload-model':     { pl: '📤 Wczytujemy wagi modelu z pliku .json + .bin',        en: '📤 Load model weights from .json + .bin file' },
+  'camera-infer':     { pl: '📷 Kamera streamuje klatki do predykcji',                en: '📷 Camera streams frames for prediction' },
+  'show-results':     { pl: '🎯 model.predict() — paski pewności + klasa o najwyższym prawdopodobieństwie', en: '🎯 model.predict() — confidence bars + class with the highest probability' },
+  'zero-shot':        { pl: '🌍 1001 klas ImageNet — to, co MobileNet już zna',      en: '🌍 1001 ImageNet classes — what MobileNet already knows' },
+  'explain-ai':       { pl: '🔍 Sprawdzamy które fragmenty obrazu wpływają na decyzję', en: '🔍 Find which image regions drove the decision' },
+  'model-explorer':   { pl: '🔬 Architektura warstwa po warstwie',                   en: '🔬 Architecture layer by layer' }
+};
+function getEduAnnotation(type) {
+  const a = EDU_ANNOTATIONS[type];
+  return a ? (a[lang] || a.en) : '';
+}
+
+// ===== DATASET PERSISTENCE (IndexedDB) =====
+// Each class's captured ImageData objects are JPEG-encoded and stored in IDB.
+// JPEG at quality 0.82 reduces each 224×224 sample from ~200 KB to ~10-15 KB,
+// keeping a 50-sample × 6-class dataset under 5 MB total.
+//
+// Schema:  DB 'ml-blocks-v2'  /  objectStore 'dataset'
+//   key:   classIndex (integer 0-5)
+//   value: { name, color, jpegData: ArrayBuffer[] }
+
+const DATASET_DB_NAME = 'ml-blocks-v2';
+const DATASET_STORE   = 'dataset';
+let _datasetDB = null;
+let _saveDebounceTimers = {};
+
+function openDatasetDB() {
+  if (_datasetDB) return Promise.resolve(_datasetDB);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DATASET_DB_NAME, 1);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore(DATASET_STORE);
+    };
+    req.onsuccess = e => { _datasetDB = e.target.result; resolve(_datasetDB); };
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+// Encode one ImageData as a JPEG ArrayBuffer.
+function imageDataToJPEG(imgData, quality) {
+  return new Promise(resolve => {
+    const cv = document.createElement('canvas');
+    cv.width = imgData.width; cv.height = imgData.height;
+    cv.getContext('2d').putImageData(imgData, 0, 0);
+    cv.toBlob(blob => {
+      blob.arrayBuffer().then(resolve);
+    }, 'image/jpeg', quality || 0.82);
+  });
+}
+
+// Decode a JPEG ArrayBuffer back to ImageData.
+function jpegToImageData(buf, width, height) {
+  return new Promise(resolve => {
+    const blob = new Blob([buf], { type: 'image/jpeg' });
+    createImageBitmap(blob).then(bmp => {
+      const cv = document.createElement('canvas');
+      cv.width = width || bmp.width; cv.height = height || bmp.height;
+      cv.getContext('2d').drawImage(bmp, 0, 0);
+      resolve(cv.getContext('2d').getImageData(0, 0, cv.width, cv.height));
+    });
+  });
+}
+
+// Save one class's samples to IDB. Debounced per-class to avoid hammering the
+// encoder during rapid capture bursts.
+function saveClassToIDB(classIdx, immediate) {
+  if (!classIdx && classIdx !== 0) return;
+  clearTimeout(_saveDebounceTimers[classIdx]);
+  const delay = immediate ? 0 : 600;
+  _saveDebounceTimers[classIdx] = setTimeout(async () => {
+    try {
+      const db = await openDatasetDB();
+      const samples = capturedSamples[classIdx] || [];
+      const jpegData = await Promise.all(
+        samples.map(imgData => imageDataToJPEG(imgData))
+      );
+      const record = {
+        name: classNames[classIdx],
+        color: classColors[classIdx],
+        jpegData
+      };
+      await new Promise((res, rej) => {
+        const tx = db.transaction(DATASET_STORE, 'readwrite');
+        const req = tx.objectStore(DATASET_STORE).put(record, classIdx);
+        req.onsuccess = res; req.onerror = e => rej(e.target.error);
+      });
+    } catch (err) {
+      console.warn('saveClassToIDB failed:', err);
+    }
+  }, delay);
+}
+
+// Restore all classes from IDB into classNames / classColors / capturedSamples.
+// Called when a camera-input or label-classes block is placed.
+let datasetLoadPromise = null;
+async function loadDatasetFromIDB() {
+  if (datasetLoadPromise) return datasetLoadPromise;
+  datasetLoadPromise = (async () => {
+    try {
+      const db = await openDatasetDB();
+      const records = await new Promise((res, rej) => {
+        const tx = db.transaction(DATASET_STORE, 'readonly');
+        const req = tx.objectStore(DATASET_STORE).getAll();
+        req.onsuccess = e => res(e.target.result);
+        req.onerror = e => rej(e.target.error);
+      });
+      const keys = await new Promise((res, rej) => {
+        const tx = db.transaction(DATASET_STORE, 'readonly');
+        const req = tx.objectStore(DATASET_STORE).getAllKeys();
+        req.onsuccess = e => res(e.target.result);
+        req.onerror = e => rej(e.target.error);
+      });
+      if (!keys.length) return; // nothing stored yet
+
+      // Restore class metadata first (fast)
+      const maxKey = Math.max(...keys);
+      // Expand arrays to match stored class count
+      while (classNames.length <= maxKey) { classNames.push(''); classColors.push(CLASS_COLORS[classNames.length - 1] || '#64748B'); capturedSamples.push([]); }
+      for (let ki = 0; ki < keys.length; ki++) {
+        const idx = keys[ki];
+        const rec = records[ki];
+        if (!rec) continue;
+        classNames[idx] = rec.name;
+        classColors[idx] = rec.color || classColors[idx];
+      }
+      log('info', lang === 'pl'
+        ? `Wczytywanie ${keys.length} klas z bazy danych...`
+        : `Loading ${keys.length} classes from database...`);
+
+      // Decode JPEG blobs — done in parallel per class
+      const decodePromises = keys.map(async (idx, ki) => {
+        const rec = records[ki];
+        if (!rec || !rec.jpegData || !rec.jpegData.length) return;
+        const decoded = await Promise.all(
+          rec.jpegData.map(buf => jpegToImageData(buf))
+        );
+        capturedSamples[idx] = decoded;
+      });
+      await Promise.all(decodePromises);
+
+      log('success', lang === 'pl'
+        ? `Dataset załadowany: ${capturedSamples.flat().length} próbek`
+        : `Dataset loaded: ${capturedSamples.flat().length} samples`);
+      // Refresh UI
+      updateSampleCounts();
+      placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
+        const body = document.getElementById(b.id)?.querySelector('.bk-body');
+        if (body) body.innerHTML = renderLabelRows(b.id);
+      });
+      placedBlocks.filter(b => b.type === 'camera-input').forEach(b => updateThumbStrips(b.id));
+      evaluatePipelineState();
+      refreshDatasetInfo();
+    } catch (err) {
+      console.warn('loadDatasetFromIDB failed:', err);
+    } finally {
+      datasetLoadPromise = null;
+    }
+  })();
+  return datasetLoadPromise;
+}
+
+// Remove a single class entry from IDB and repack remaining entries so keys
+// stay contiguous (0, 1, 2 … n-1).
+async function deleteClassFromIDB(classIdx) {
+  try {
+    const db = await openDatasetDB();
+    const keys = await new Promise((res, rej) => {
+      const tx = db.transaction(DATASET_STORE, 'readonly');
+      const req = tx.objectStore(DATASET_STORE).getAllKeys();
+      req.onsuccess = e => res(e.target.result); req.onerror = e => rej(e.target.error);
+    });
+    const records = await new Promise((res, rej) => {
+      const tx = db.transaction(DATASET_STORE, 'readonly');
+      const req = tx.objectStore(DATASET_STORE).getAll();
+      req.onsuccess = e => res(e.target.result); req.onerror = e => rej(e.target.error);
+    });
+    // Rebuild: skip the deleted key, shift remaining down
+    const tx = db.transaction(DATASET_STORE, 'readwrite');
+    const store = tx.objectStore(DATASET_STORE);
+    // Clear everything
+    store.clear();
+    let newIdx = 0;
+    for (let ki = 0; ki < keys.length; ki++) {
+      if (keys[ki] === classIdx) continue;
+      store.put(records[ki], newIdx++);
+    }
+    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = e => rej(e.target.error); });
+  } catch (err) {
+    console.warn('deleteClassFromIDB failed:', err);
+  }
+}
+
+// ===== DATASET EXPORT / IMPORT =====
+// Format: { version: 'dataset-v1', exportedAt: ISO, classes: [{name, color, samples: base64[]}] }
+// JPEG quality 0.82 keeps each sample ~10-15 KB; a typical 50-sample × 3-class
+// dataset downloads as a ~2 MB JSON file.
+
+async function exportDataset() {
+  const total = capturedSamples.flat().length;
+  if (total === 0) {
+    log('warn', lang === 'pl' ? 'Brak próbek do pobrania.' : 'No samples to export.');
+    return;
+  }
+  log('step', lang === 'pl' ? 'Przygotowywanie datasetu...' : 'Preparing dataset...');
+  try {
+    const classes = await Promise.all(classNames.map(async (name, i) => {
+      const samples = capturedSamples[i] || [];
+      const jpegBuffers = await Promise.all(samples.map(imgData => imageDataToJPEG(imgData)));
+      // Convert ArrayBuffer → base64 string for JSON embedding
+      const base64Samples = jpegBuffers.map(buf => {
+        const bytes = new Uint8Array(buf);
+        const CHUNK = 0x8000;
+        const parts = [];
+        for (let j = 0; j < bytes.length; j += CHUNK) {
+          parts.push(String.fromCharCode.apply(null, bytes.subarray(j, j + CHUNK)));
+        }
+        return btoa(parts.join(''));
+      });
+      return { name, color: classColors[i], samples: base64Samples };
+    }));
+    const bundle = {
+      version: 'dataset-v1',
+      exportedAt: new Date().toISOString(),
+      classes
+    };
+    const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'klocki-dataset.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    log('success', lang === 'pl'
+      ? `Dataset pobrany (${total} próbek, ${classes.length} klas)`
+      : `Dataset downloaded (${total} samples, ${classes.length} classes)`);
+  } catch (err) {
+    log('error', 'Export error: ' + err.message);
+  }
+}
+
+async function importDataset(input) {
+  if (!input || !input.files || !input.files[0]) return;
+  const file = input.files[0];
+  log('step', lang === 'pl' ? 'Wczytywanie datasetu z pliku...' : 'Loading dataset from file...');
+  try {
+    const text = await file.text();
+    const bundle = JSON.parse(text);
+    if (bundle.version !== 'dataset-v1' || !Array.isArray(bundle.classes)) {
+      log('error', lang === 'pl' ? 'Nieprawidłowy format pliku datasetu.' : 'Invalid dataset file format.');
+      return;
+    }
+    // Decode each class
+    const newNames = [];
+    const newColors = [];
+    const newSamples = [];
+    for (const cls of bundle.classes) {
+      newNames.push(cls.name || (lang === 'pl' ? 'Klasa' : 'Class'));
+      // Accept stored color or assign next pool color
+      const usedSoFar = new Set(newColors);
+      newColors.push(cls.color && CLASS_COLORS.includes(cls.color) && !usedSoFar.has(cls.color)
+        ? cls.color
+        : CLASS_COLORS.find(c => !usedSoFar.has(c)) || CLASS_COLORS[newNames.length % CLASS_COLORS.length]);
+      const decoded = await Promise.all((cls.samples || []).map(b64 => {
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return jpegToImageData(bytes.buffer);
+      }));
+      newSamples.push(decoded);
+    }
+    // Cap at CLASS_COLORS.length classes
+    classNames    = newNames.slice(0, CLASS_COLORS.length);
+    classColors   = newColors.slice(0, CLASS_COLORS.length);
+    capturedSamples = newSamples.slice(0, CLASS_COLORS.length);
+    preparedData  = null;
+
+    // Persist to IDB
+    await Promise.all(classNames.map((_, i) => saveClassToIDB(i, true)));
+
+    // Refresh all block UIs
+    placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
+      const body = document.getElementById(b.id)?.querySelector('.bk-body');
+      if (body) body.innerHTML = renderLabelRows(b.id);
+    });
+    placedBlocks.filter(b => b.type === 'camera-input').forEach(b => updateThumbStrips(b.id));
+    updateSampleCounts();
+    evaluatePipelineState();
+    persistCanvasState();
+    refreshDatasetInfo();
+    const total = capturedSamples.flat().length;
+    log('success', lang === 'pl'
+      ? `Dataset wczytany: ${classNames.length} klas, ${total} próbek`
+      : `Dataset loaded: ${classNames.length} classes, ${total} samples`);
+  } catch (err) {
+    log('error', 'Import error: ' + err.message);
+    console.error(err);
+  }
+  input.value = ''; // reset so same file can be re-picked
+}
+
+function refreshDatasetInfo() {
+  const el = document.getElementById('dataset-info');
+  if (!el) return;
+  const total = capturedSamples.flat().length;
+  if (total === 0) { el.textContent = ''; return; }
+  const perClass = classNames.map((n, i) => `${n}: ${(capturedSamples[i] || []).length}`).join(' · ');
+  el.textContent = `${total} ${lang === 'pl' ? 'próbek' : 'samples'} — ${perClass}`;
+}
+
+function confirmClearDataset() {
+  const totalSamples = capturedSamples.flat().length;
+  const msg = lang === 'pl'
+    ? `Usunąć wszystkie próbki (${totalSamples}) z pamięci przeglądarki? Tej operacji nie można cofnąć.`
+    : `Delete all samples (${totalSamples}) from browser storage? This cannot be undone.`;
+  if (!confirm(msg)) return;
+  clearDatasetFromIDB();
+  classNames = lang === 'pl' ? ['Klasa 1', 'Klasa 2'] : ['Class 1', 'Class 2'];
+  classColors = CLASS_COLORS.slice(0, 2);
+  capturedSamples = [[], []];
+  preparedData = null;
+  placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
+    const body = document.getElementById(b.id)?.querySelector('.bk-body');
+    if (body) body.innerHTML = renderLabelRows(b.id);
+  });
+  updateClassNamesEverywhere();
+  evaluatePipelineState();
+  persistCanvasState();
+  refreshDatasetInfo();
+  log('warn', lang === 'pl' ? 'Dataset usunięty z pamięci' : 'Dataset deleted from storage');
+}
+
+async function clearDatasetFromIDB() {
+  try {
+    const db = await openDatasetDB();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(DATASET_STORE, 'readwrite');
+      tx.objectStore(DATASET_STORE).clear();
+      tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
+    });
+  } catch (err) {
+    console.warn('clearDatasetFromIDB failed:', err);
+  }
+}
+
+// ===== CANVAS STATE PERSISTENCE =====
+// Save the *layout* (block types + positions) and class names to localStorage
+// after every relevant change. Restore on DOMContentLoaded so an accidental
+// page reload doesn't wipe out the user's setup. Trained models and samples
+// are intentionally NOT persisted — they're large and live in IndexedDB
+// (Save Model block) where the user explicitly opted in.
+const CANVAS_STATE_KEY = 'ml-blocks-canvas-v1';
+let canvasStateRestoring = false;
+
+function persistCanvasState() {
+  if (canvasStateRestoring) return; // avoid clobbering during initial restore
+  try {
+    const state = {
+      blocks: placedBlocks.map(b => ({ type: b.type, x: b.x, y: b.y })),
+      classNames: classNames.slice(),
+      classColors: classColors.slice()
+    };
+    localStorage.setItem(CANVAS_STATE_KEY, JSON.stringify(state));
+  } catch (_) { /* quota / disabled storage — silent */ }
+}
+
+function restoreCanvasState() {
+  let raw = null;
+  try { raw = localStorage.getItem(CANVAS_STATE_KEY); } catch (_) { return; }
+  if (!raw) return;
+  let state;
+  try { state = JSON.parse(raw); } catch (_) { return; }
+  if (!state || !Array.isArray(state.blocks)) return;
+  canvasStateRestoring = true;
+  try {
+    if (Array.isArray(state.classNames) && state.classNames.length >= 2) {
+      classNames = state.classNames.slice();
+      if (Array.isArray(state.classColors) && state.classColors.length === classNames.length) {
+        classColors = state.classColors.slice();
+      } else {
+        // Back-fill colors for saves created before stable-color change.
+        classColors = classNames.map((_, i) => CLASS_COLORS[i % CLASS_COLORS.length]);
+      }
+      while (capturedSamples.length < classNames.length) capturedSamples.push([]);
+    }
+    state.blocks.forEach(b => {
+      if (!b || typeof b.type !== 'string') return;
+      // Legacy: 'predict' was merged into 'show-results'; map it forward.
+      let type = b.type;
+      if (type === 'predict') type = 'show-results';
+      // Skip duplicate show-results when both legacy predict AND show-results existed.
+      if (type === 'show-results' && placedBlocks.some(x => x.type === 'show-results')) return;
+      placeBlock(type, b.x || 16, b.y || 40);
+    });
+  } finally {
+    canvasStateRestoring = false;
+  }
+}
+
+// Toggle EDU/teaching mode at runtime. Persisted in localStorage so the next
+// visit remembers the setting. Annotations re-render via refreshAllAnnotations.
+function toggleEduMode() {
+  eduMode = !eduMode;
+  localStorage.setItem('ml-blocks-edu', eduMode ? '1' : '0');
+  document.body.classList.toggle('edu-mode', eduMode);
+  refreshAllAnnotations();
+  const btn = document.getElementById('btn-edu');
+  if (btn) btn.classList.toggle('active', eduMode);
+}
+
+function refreshAllAnnotations() {
+  placedBlocks.forEach(b => {
+    const ann = document.getElementById('ann-' + b.id);
+    if (ann) ann.textContent = eduMode ? (getEduAnnotation(b.type) || '') : '';
+  });
+}
+
+// ===== BLOCK PREREQUISITES =====
+// Each block type declares the pipeline state keys it needs to function.
+// The prereq strip rendered at the top of every block body shows a green/red
+// pill per requirement, so users see at a glance what's missing without
+// having to click "Run" and read the log panel.
+const BLOCK_PREREQS = {
+  'camera-input': [],
+  'label-classes': [],
+  'prepare-data': ['samples'],
+  'pretrained-model': [],
+  'train-model': ['samples', 'classes', 'prepared', 'baseModel'],
+  'save-model': ['fullModel', 'baseModel'],
+  'upload-model': [],
+  'camera-infer': ['inferModel', 'baseModel'],
+  'show-results': ['inferModel', 'baseModel', 'inferStream'],
+  'zero-shot': [], // self-contained — loads its own classifier on demand
+  'explain-ai': ['inferModel', 'baseModel', 'inferStream'],
+  'model-explorer': []
+};
+
+function evalPrereq(key) {
+  switch (key) {
+    case 'samples': return capturedSamples.some(a => a && a.length > 0);
+    case 'classes': return classNames.length >= 2 && classNames.every(n => (n || '').trim().length > 0);
+    case 'prepared': return !!preparedData;
+    case 'baseModel': return !!baseModel;
+    case 'fullModel': return !!fullModel;
+    case 'inferModel': return !!inferModel;
+    case 'inferStream': return !!inferCameraStream;
+    default: return false;
+  }
+}
+
+function renderPrereqStrip(type) {
+  const reqs = BLOCK_PREREQS[type] || [];
+  if (reqs.length === 0) return '';
+  const pills = reqs.map(key => {
+    const ok = evalPrereq(key);
+    const label = t('prereq_label_' + key) || key;
+    return `<span class="prereq-pill ${ok ? 'ok' : 'missing'}"><span class="prereq-mark">${ok ? '✓' : '○'}</span>${label}</span>`;
+  }).join('');
+  const allOk = reqs.every(k => evalPrereq(k));
+  const heading = allOk ? t('prereq_all_satisfied') : t('prereq_heading');
+  return `<div class="bk-prereq ${allOk ? 'all-ok' : ''}">
+    <div class="prereq-heading">${heading}</div>
+    <div class="prereq-pills">${pills}</div>
+  </div>`;
+}
+
+// Diff-based update: build the strip DOM ONCE per block, then toggle pill
+// classes/text on subsequent calls. Avoids parsing the same template into
+// new elements on every state change. Forced full rebuild when language
+// changes (heading + labels are translated).
+let _prereqRenderedLang = null;
+function refreshAllPrereqStrips() {
+  const langChanged = _prereqRenderedLang !== lang;
+  if (langChanged) _prereqRenderedLang = lang;
+  for (let bi = 0; bi < placedBlocks.length; bi++) {
+    const b = placedBlocks[bi];
+    const slot = document.getElementById('prereq-' + b.id);
+    if (!slot) continue;
+    if (langChanged || slot.dataset.built !== '1') {
+      slot.innerHTML = renderPrereqStrip(b.type);
+      slot.dataset.built = '1';
+      continue;
+    }
+    const reqs = BLOCK_PREREQS[b.type] || [];
+    if (reqs.length === 0) continue;
+    const wrap = slot.firstElementChild;
+    if (!wrap) continue;
+    let allOk = true;
+    const pills = wrap.querySelectorAll('.prereq-pill');
+    for (let i = 0; i < pills.length && i < reqs.length; i++) {
+      const ok = evalPrereq(reqs[i]);
+      if (!ok) allOk = false;
+      pills[i].classList.toggle('ok', ok);
+      pills[i].classList.toggle('missing', !ok);
+      const mark = pills[i].firstElementChild;
+      if (mark && mark.classList.contains('prereq-mark')) {
+        mark.textContent = ok ? '✓' : '○';
+      }
+    }
+    wrap.classList.toggle('all-ok', allOk);
+    const heading = wrap.querySelector('.prereq-heading');
+    if (heading) heading.textContent = allOk ? t('prereq_all_satisfied') : t('prereq_heading');
+  }
+}
+
+// Offer to add a missing prerequisite block to the canvas. Returns true if the
+// block already exists or was added; false if the user declined.
+function ensureBlockOnCanvas(type) {
+  if (placedBlocks.some(b => b.type === type)) return true;
+  const titles = {
+    'camera-input': lang === 'pl' ? 'Kamera: Dane' : 'Camera: Input',
+    'label-classes': lang === 'pl' ? 'Etykiety klas' : 'Label Classes',
+    'prepare-data': lang === 'pl' ? 'Augmentacja danych' : 'Prepare Data',
+    'pretrained-model': lang === 'pl' ? 'Model bazowy' : 'Pretrained Model',
+    'train-model': lang === 'pl' ? 'Trenuj model' : 'Train Model',
+    'save-model': lang === 'pl' ? 'Zapisz model' : 'Save Model',
+    'upload-model': lang === 'pl' ? 'Wczytaj model' : 'Load Model',
+    'camera-infer': lang === 'pl' ? 'Kamera: Predykcja' : 'Camera: Prediction',
+    'show-results': lang === 'pl' ? 'Pokaż wyniki' : 'Show Results'
+  };
+  const name = titles[type] || type;
+  const msg = lang === 'pl'
+    ? `Brakuje bloku "${name}" na tablicy. Dodać go teraz?`
+    : `The "${name}" block is missing on the canvas. Add it now?`;
+  if (!confirm(msg)) return false;
+  // Place to the right of existing blocks, vertical: 40 + index * 40
+  const x = 16 + (placedBlocks.length * 40);
+  const y = 40 + (placedBlocks.length * 40);
+  placeBlock(type, Math.min(x, 600), Math.min(y, 400));
+  return true;
+}
+
 // ===== BLOCK STATUS =====
 function setBlockStatus(card, status) {
   card.className = card.className.replace(/status-\w+/, '') + ` status-${status}`;
@@ -282,7 +905,6 @@ function buildBlockHTML(type, id) {
     'prepare-data': 'var(--c-prep)', 'pretrained-model': 'var(--c-model)',
     'train-model': 'var(--c-train)', 'save-model': 'var(--c-deploy)',
     'upload-model': 'var(--c-data)', 'camera-infer': 'var(--c-data)',
-    'predict': 'var(--c-deploy)',
     'show-results': 'var(--c-eval)', 'zero-shot': 'var(--c-model)',
     'explain-ai': 'var(--c-eval)', 'model-explorer': 'var(--c-eval)'
   };
@@ -290,7 +912,7 @@ function buildBlockHTML(type, id) {
     'camera-input': 'DATA', 'label-classes': 'LABEL', 'prepare-data': 'PREP',
     'pretrained-model': 'MODEL', 'train-model': 'TRAIN', 'save-model': 'DEPLOY',
     'upload-model': 'DATA', 'camera-infer': 'DATA',
-    'predict': 'PRED', 'show-results': 'EVAL', 'zero-shot': 'PRED',
+    'show-results': 'PRED', 'zero-shot': 'PRED',
     'explain-ai': 'EVAL', 'model-explorer': 'EVAL'
   };
   const titles = {
@@ -298,7 +920,7 @@ function buildBlockHTML(type, id) {
     'prepare-data': t('block_prepare_data'), 'pretrained-model': t('block_pretrained_model'),
     'train-model': t('block_train_model'), 'save-model': t('block_save_model'),
     'upload-model': t('block_upload_model'), 'camera-infer': t('block_camera_infer'),
-    'predict': t('block_predict'), 'show-results': t('block_show_results'), 'zero-shot': t('block_zero_shot'),
+    'show-results': t('block_show_results'), 'zero-shot': t('block_zero_shot'),
     'explain-ai': t('block_explain_ai'), 'model-explorer': t('block_model_explorer')
   };
   const bg = phaseColors[type] || '#64748B';
@@ -315,7 +937,6 @@ function buildBlockHTML(type, id) {
     case 'save-model': body = buildSaveModelBody(id); break;
     case 'upload-model': body = buildUploadModelBody(id); break;
     case 'camera-infer': body = buildCameraInferBody(id); break;
-    case 'predict': body = buildPredictBody(id); break;
     case 'show-results': body = buildShowResultsBody(id); break;
     case 'zero-shot': body = buildZeroShotBody(id); break;
     case 'explain-ai': body = buildExplainAIBody(id); break;
@@ -323,19 +944,24 @@ function buildBlockHTML(type, id) {
   }
 
   return `
-<div class="bk-header" style="background:${bg}" onmousedown="cardDragStart(event,'${id}')" ondblclick="toggleCollapse('${id}')">
+<div class="bk-header" style="background:${bg}" onmousedown="cardDragStart(event,'${id}')" ontouchstart="cardDragStart(event,'${id}')" ondblclick="toggleCollapse('${id}')">
   <span class="drag-handle">⠸</span>
   <span class="bk-title" data-block-title="${id}">${title}</span>
   <span class="bk-badge">${phase}</span>
   <span class="bk-status">${t('status_idle')}</span>
+  <button class="bk-close" onclick="confirmRemoveBlock('${id}')" onmousedown="event.stopPropagation()" title="${lang === 'pl' ? 'Usuń blok' : 'Remove block'}">✕</button>
 </div>
-<div class="bk-body">${body}</div>
+<div class="bk-body">
+  ${renderBlockNote(type)}
+  <div id="prereq-${id}">${renderPrereqStrip(type)}</div>
+  ${body}
+</div>
 <div class="block-annotation" id="ann-${id}"></div>`;
 }
 
 function buildCameraInputBody(id) {
   const classButtons = () => classNames.map((name, i) =>
-    `<button class="bk-btn" style="background:${CLASS_COLORS[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${id}',${i})">${name}</button>`
+    `<button class="bk-btn" style="background:${classColors[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${id}',${i})">${name}</button>`
   ).join('');
   return `
 <div class="video-wrap"><video class="bk-video" id="vid-${id}" autoplay playsinline muted></video></div>
@@ -345,7 +971,11 @@ ${makeBtn(t('btn_start_camera'), `blockStartCamera('${id}')`, 'var(--c-data)')}
 <div id="capture-btns-${id}" style="display:flex;flex-direction:column;gap:4px;margin-top:4px">${classButtons()}</div>
 <button class="bk-btn" style="margin-top:4px;background:#64748B;font-size:11px" onclick="addClass(null)">${lang === 'pl' ? 'Dodaj klas\u0119' : 'Add class'}</button>
 <div id="cam-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">—</div>
-<div id="thumbs-${id}" class="thumb-strip"></div>`;
+<div id="thumbs-${id}" class="thumb-strip"></div>
+<div style="border-top:1px dashed var(--c-border);margin-top:8px;padding-top:8px">
+  <input type="file" id="dataset-file-${id}" accept=".json" style="display:none" onchange="importDataset(this)">
+  <button class="bk-btn" style="background:#475569;font-size:11px" onclick="document.getElementById('dataset-file-${id}').click()">${t('btn_load_dataset')}</button>
+</div>`;
 }
 
 function buildLabelClassesBody(id) {
@@ -356,13 +986,19 @@ function renderLabelRows(id) {
   let rows = '';
   for (let i = 0; i < classNames.length; i++) {
     const isActive = (window.activeClass === i);
+    // Show delete-class button only when there are 2+ classes so we can't
+    // accidentally destroy the last one.
+    const canDelete = classNames.length > 1;
+    const clearTip = lang === 'pl' ? 'Wyczyść próbki' : 'Clear samples';
+    const deleteTip = lang === 'pl' ? 'Usuń klasę' : 'Delete class';
     rows += `<div class="class-row">
-<div class="class-color-dot" style="background:${CLASS_COLORS[i]}"></div>
+<div class="class-color-dot" style="background:${classColors[i]}"></div>
 <input class="class-name-input" id="cn-${id}-${i}" value="${classNames[i]}"
   oninput="classNames[${i}]=this.value;updateClassNamesEverywhere()" placeholder="${lang === 'pl' ? 'nazwa klasy...' : 'class name...'}">
 <span class="class-count" id="cc-${id}-${i}">${(capturedSamples[i] || []).length} ${t('lbl_samples')}</span>
-<button style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${CLASS_COLORS[i]};color:#fff" onclick="labelCapture(${i})">${lang === 'pl' ? 'zbierz' : 'capture'}</button>
-<button class="class-delete-btn" onclick="clearClassSamples(${i})" title="${lang === 'pl' ? 'Usuń próbki' : 'Delete samples'}">✕</button>
+<button style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${classColors[i]};color:#fff" onclick="labelCapture(${i})">${lang === 'pl' ? 'zbierz' : 'capture'}</button>
+<button class="class-delete-btn" onclick="clearClassSamples(${i})" title="${clearTip}">⌫</button>
+${canDelete ? `<button class="class-delete-btn class-delete-class-btn" onclick="deleteClass(${i})" title="${deleteTip}">🗑</button>` : ''}
 </div>
 <div id="thumbs-label-${i}-${id}" class="thumb-strip"></div>`;
   }
@@ -372,13 +1008,53 @@ function renderLabelRows(id) {
 
 function labelCapture(classIdx) {
   // Find the first camera-input block and capture for the given class
-  const camBlock = placedBlocks.find(b => b.type === 'camera-input');
+  let camBlock = placedBlocks.find(b => b.type === 'camera-input');
   if (!camBlock) {
-    log('warn', lang === 'pl' ? 'Najpierw dodaj blok Kamera: Dane!' : 'Add Camera: Input block first!');
+    if (!ensureBlockOnCanvas('camera-input')) return;
+    camBlock = placedBlocks.find(b => b.type === 'camera-input');
+    if (!camBlock) return;
+    log('info', lang === 'pl'
+      ? 'Dodano blok Kamera: Dane. Uruchom kamerę i spróbuj ponownie.'
+      : 'Camera: Input added. Start the camera and try again.');
     return;
   }
   window.activeClass = classIdx;
   blockCapture(camBlock.id, classIdx);
+}
+
+// Permanently remove a class (name + samples + color) and compact the arrays.
+// Guards: requires at least 1 class remaining. Invalidates preparedData.
+async function deleteClass(classIdx) {
+  const name = classNames[classIdx] || '';
+  const count = (capturedSamples[classIdx] || []).length;
+  const countTxt = count > 0 ? ` (${count} ${lang === 'pl' ? 'próbek' : 'samples'})` : '';
+  const msg = lang === 'pl'
+    ? `Usunąć klasę "${name}"${countTxt}? Tej operacji nie można cofnąć.`
+    : `Delete class "${name}"${countTxt}? This cannot be undone.`;
+  if (!confirm(msg)) return;
+
+  // Splice all parallel arrays
+  classNames.splice(classIdx, 1);
+  classColors.splice(classIdx, 1);
+  capturedSamples.splice(classIdx, 1);
+
+  // Stale — training with deleted class would corrupt ys tensor
+  preparedData = null;
+
+  // Remove from IDB and repack remaining keys
+  await deleteClassFromIDB(classIdx);
+
+  // Re-render all affected blocks
+  placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
+    const body = document.getElementById(b.id)?.querySelector('.bk-body');
+    if (body) body.innerHTML = renderLabelRows(b.id);
+  });
+  updateClassNamesEverywhere();
+  evaluatePipelineState();
+  persistCanvasState();
+  log('warn', lang === 'pl'
+    ? `Usunięto klasę "${name}"`
+    : `Deleted class "${name}"`);
 }
 
 function clearClassSamples(classIdx) {
@@ -387,21 +1063,13 @@ function clearClassSamples(classIdx) {
   log('info', lang === 'pl'
     ? `Usunięto próbki klasy "${classNames[classIdx]}"`
     : `Deleted samples for class "${classNames[classIdx]}"`);
-  // Refresh all label-classes blocks so counts and thumbnails update
   placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
     const body = document.getElementById(b.id)?.querySelector('.bk-body');
     if (body) body.innerHTML = renderLabelRows(b.id);
   });
   updateThumbStrips();
-}
-
-function setActiveClass(idx, labelBlockId) {
-  window.activeClass = idx;
-  // Refresh all label blocks so buttons re-render
-  placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
-    const body = document.getElementById(b.id)?.querySelector('.bk-body');
-    if (body) body.innerHTML = renderLabelRows(b.id);
-  });
+  evaluatePipelineState();
+  saveClassToIDB(classIdx, true); // immediate — saves empty array
 }
 
 function addClass(labelBlockId) {
@@ -411,8 +1079,17 @@ function addClass(labelBlockId) {
     return;
   }
   const name = lang === 'pl' ? `Klasa ${idx + 1}` : `Class ${idx + 1}`;
+  // Pick next unused color from the pool; fall back to cycling if all taken.
+  const usedColors = new Set(classColors);
+  const nextColor = CLASS_COLORS.find(c => !usedColors.has(c)) || CLASS_COLORS[idx % CLASS_COLORS.length];
   classNames.push(name);
+  classColors.push(nextColor);
   capturedSamples.push([]);
+  // If the user adds a class from the camera-input block without ever placing
+  // a label-classes block, they have no UI to rename it. Suggest adding one.
+  if (!labelBlockId && !placedBlocks.some(b => b.type === 'label-classes')) {
+    setTimeout(() => ensureBlockOnCanvas('label-classes'), 200);
+  }
   // Re-render label blocks: specific one if passed, otherwise all
   const labelBlocksToUpdate = labelBlockId
     ? [{ id: labelBlockId }]
@@ -424,6 +1101,7 @@ function addClass(labelBlockId) {
   // Update camera capture buttons (rebuild with new class)
   updateClassNamesEverywhere();
   log('info', lang === 'pl' ? `Dodano klas\u0119: ${name}` : `Added class: ${name}`);
+  evaluatePipelineState();
 }
 
 function buildPrepareDataBody(id) {
@@ -434,10 +1112,7 @@ function buildPrepareDataBody(id) {
 <div style="font-size:12px;color:var(--c-muted);line-height:1.4;padding-bottom:4px">${hint}</div>
 ${makeParam(t('param_augment'), `<select id="aug-${id}">
   <option value="none" selected>${lang === 'pl' ? 'Tylko przygotowanie' : 'Prepare only'}</option>
-  <option value="all">Flip + Rotate + Brightness</option>
-</select>`)}
-${makeParam(t('param_multiplier'), `<select id="mul-${id}">
-  <option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option>
+  <option value="all">Flip + Brightness + Zoom + Skew</option>
 </select>`)}
 <progress id="prog-${id}" value="0" max="100" style="margin-top:6px"></progress>
 <div id="prep-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">—</div>
@@ -504,12 +1179,13 @@ ${makeBtn(t('btn_stop_camera'), `stopInferCamera('${id}')`, '#64748B')}`;
 
 function buildZeroShotBody(id) {
   const note = lang === 'pl'
-    ? 'Ten model nigdy nie widzia\u0142 Twoich klas: zobaczmy co rozpoznaje samodzielnie!'
-    : 'This model has never seen your custom classes: watch what it recognizes on its own!';
+    ? 'Pe\u0142ny klasyfikator MobileNetV3 (1001 klas ImageNet). Pierwsze uruchomienie pobiera ~5 MB.'
+    : 'Full MobileNetV3 classifier (1001 ImageNet classes). First start downloads ~5 MB.';
   return `
 <div style="font-size:10px;color:var(--c-muted);line-height:1.6;padding:4px 0 6px;border-bottom:1px solid var(--c-border);margin-bottom:6px">${note}</div>
 <div class="video-wrap"><video class="bk-video" id="zsvid-${id}" autoplay playsinline muted></video></div>
 ${makeParam('FPS', `<select id="zsfps-${id}"><option value="1000">1</option><option value="200" selected>5</option><option value="100">10</option></select>`)}
+<div id="zs-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;min-height:14px"></div>
 <div id="zs-results-${id}" style="margin-top:6px"></div>
 <div style="display:flex;gap:6px;margin-top:4px">
 ${makeBtn(lang === 'pl' ? 'Uruchom' : 'Start', `startZeroShot('${id}')`, 'var(--c-model)')}
@@ -518,38 +1194,65 @@ ${makeBtn(lang === 'pl' ? 'Stop' : 'Stop', `stopZeroShot('${id}')`, '#64748B')}
 }
 
 
-function buildPredictBody(id) {
+function buildShowResultsBody(id) {
+  // Merged Predict + Show Results block. Element IDs that runInference reads
+  // (pred-bars-, pred-result-, thr-) live here. Camera frames are rendered
+  // by the Camera: Prediction block; this block is the *result* surface.
+  const waitMsg = lang === 'pl' ? 'oczekiwanie na predykcj\u0119...' : 'waiting for prediction...';
   return `
+<div id="pred-bars-${id}"></div>
+<div id="pred-result-${id}" style="font-size:14px;font-weight:700;padding:8px 10px;background:var(--c-bg);border-radius:6px;text-align:center;min-height:32px;color:var(--c-muted);font-style:italic">${waitMsg}</div>
 ${makeParam(t('param_threshold'), `<select id="thr-${id}">
   <option value="0.5">50%</option><option value="0.7" selected>70%</option>
   <option value="0.8">80%</option><option value="0.9">90%</option>
 </select>`)}
-${makeParam(t('param_fmap'), `<input type="checkbox" id="fmap-${id}">`)}
-<div id="fmaps-${id}" class="fmap-container" style="display:none;margin-top:6px"></div>
-<div id="pred-bars-${id}" style="margin-top:6px"></div>
-<div id="pred-result-${id}" style="font-size:13px;font-weight:700;padding:6px 8px;background:var(--c-bg);border-radius:6px;text-align:center;margin-top:4px;min-height:28px;color:var(--c-muted);font-style:italic">${lang === 'pl' ? 'oczekiwanie na predykcj\u0119...' : 'waiting for prediction...'}</div>`;
-}
-
-function buildShowResultsBody(id) {
-  return `
-<div class="video-wrap" id="show-wrap-${id}">
-  <video id="show-vid-${id}" autoplay playsinline muted style="width:100%;border-radius:6px;display:block"></video>
-  <canvas id="show-overlay-${id}" class="overlay" style="position:absolute;inset:0;pointer-events:none"></canvas>
-</div>
-<canvas id="hist-chart-${id}" class="chart-canvas" height="60" style="margin-top:6px"></canvas>
+<canvas id="hist-chart-${id}" class="chart-canvas" height="60"></canvas>
 ${makeBtn(t('btn_freeze_frame'), `freezeFrame('${id}')`, '#64748B')}`;
 }
 
 function buildExplainAIBody(id) {
+  const granLabel = lang === 'pl' ? 'Rozdzielczość' : 'Granularity';
+  const methLabel = lang === 'pl' ? 'Metoda' : 'Method';
+  const optOccl   = lang === 'pl' ? 'Okluzja (po krokach)' : 'Occlusion (patch-by-patch)';
+  const optSal    = lang === 'pl' ? 'Saliency (gradient)' : 'Saliency (gradient)';
+  const optFast   = lang === 'pl' ? 'Szybko (4×4)'  : 'Fast (4×4)';
+  const optNorm   = lang === 'pl' ? 'Normalna (7×7)': 'Normal (7×7)';
+  const optHi     = lang === 'pl' ? 'Dokładna (14×14)' : 'Detailed (14×14)';
+  const stopLbl   = lang === 'pl' ? 'Stop' : 'Stop';
+  const legendHi  = lang === 'pl' ? 'wspiera predykcję' : 'supports prediction';
+  const legendLo  = lang === 'pl' ? 'przeciwko predykcji' : 'against prediction';
+  const waitMsg   = lang === 'pl' ? 'Kliknij „Analizuj" aby rozpocząć' : 'Click "Analyze" to start';
   return `
 <div id="xai-wrap-${id}" style="position:relative; width:224px; height:224px; margin: 0 auto; border-radius:6px; overflow:hidden; background:#000;">
   <canvas id="xai-vid-${id}" style="width:100%; height:100%; display:block;"></canvas>
   <canvas id="xai-overlay-${id}" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
 </div>
-<input type="hidden" id="xai-patch-${id}" value="16">
-<div id="xai-result-${id}" style="font-size:13px;font-weight:700;padding:6px 8px;background:var(--c-bg);border-radius:6px;text-align:center;margin-top:6px;min-height:28px;color:var(--c-muted);font-style:italic">Wait...</div>
-<div style="margin-top:6px">
+<div class="xai-legend">
+  <span class="xai-legend-label">${legendLo}</span>
+  <div class="xai-legend-bar"></div>
+  <span class="xai-legend-label">${legendHi}</span>
+</div>
+${makeParam(methLabel, `<select id="xai-method-${id}">
+  <option value="occlusion" selected>${optOccl}</option>
+  <option value="saliency">${optSal}</option>
+</select>`)}
+${makeParam(granLabel, `<select id="xai-patch-${id}">
+  <option value="56">${optFast}</option>
+  <option value="32" selected>${optNorm}</option>
+  <option value="16">${optHi}</option>
+</select>`)}
+<progress id="xai-prog-${id}" value="0" max="100" style="display:none;margin-top:4px"></progress>
+<div id="xai-result-${id}" style="font-size:13px;font-weight:700;padding:6px 8px;background:var(--c-bg);border-radius:6px;text-align:center;margin-top:6px;min-height:28px;color:var(--c-muted);font-style:italic">${waitMsg}</div>
+<div id="xai-detail-${id}" class="xai-detail" style="display:none">
+  <div class="xai-detail-row">
+    <canvas id="xai-thumb-${id}" width="64" height="64" class="xai-thumb"></canvas>
+    <div class="xai-detail-text" id="xai-detail-text-${id}"></div>
+  </div>
+  <div class="xai-classes" id="xai-classes-${id}"></div>
+</div>
+<div style="display:flex;gap:6px;margin-top:6px">
 ${makeBtn(t('btn_run_xai'), `runXAI('${id}')`, 'var(--c-eval)')}
+${makeBtn(stopLbl, `stopXAI('${id}')`, '#64748B')}
 </div>`;
 }
 
@@ -576,12 +1279,22 @@ function placeBlock(type, x, y) {
   card.innerHTML = buildBlockHTML(type, id);
   card.style.borderColor = getPhaseColor(type);
   document.getElementById('canvas').appendChild(card);
-  placedBlocks.push({ id, type, card, x, y });
+  const record = { id, type, card, x, y };
+  placedBlocks.push(record);
+  // First-of-type wins; if you place two predict blocks the second is ignored
+  // by the inference hot path (matches previous .find() behaviour).
+  if (!blocksByType[type]) blocksByType[type] = record;
   log('info', `+ ${type} #${blockIdCounter}`);
   initBlockAfterPlace(id, type);
-  if (EDU_MODE) {
+  if (eduMode) {
     card.querySelectorAll('[onmousedown]').forEach(el => el.removeAttribute('onmousedown'));
+    card.querySelectorAll('[ontouchstart]').forEach(el => el.removeAttribute('ontouchstart'));
+    const ann = document.getElementById('ann-' + id);
+    if (ann) ann.textContent = getEduAnnotation(type) || '';
   }
+  refreshEmptyState();
+  evaluatePipelineState();
+  persistCanvasState();
   return id;
 }
 
@@ -591,7 +1304,7 @@ function getPhaseColor(type) {
     'prepare-data': 'var(--c-prep)', 'pretrained-model': 'var(--c-model)',
     'train-model': 'var(--c-train)', 'save-model': 'var(--c-deploy)',
     'upload-model': 'var(--c-data)', 'camera-infer': 'var(--c-data)',
-    'predict': 'var(--c-deploy)', 'show-results': 'var(--c-eval)',
+    'show-results': 'var(--c-eval)',
     'explain-ai': 'var(--c-eval)', 'model-explorer': 'var(--c-eval)'
   };
   return map[type] || '#64748B';
@@ -601,6 +1314,12 @@ function initBlockAfterPlace(id, type) {
   if (type === 'label-classes') {
     window.activeClass = 0;
     updateSampleCounts();
+    // Reload dataset from IDB so a freshly-placed block shows existing samples.
+    loadDatasetFromIDB();
+  }
+  if (type === 'camera-input') {
+    // Reload so thumb-strips and sample counts reflect stored data.
+    loadDatasetFromIDB();
   }
   if (type === 'upload-model') {
     const inp = document.getElementById('file-model-' + id);
@@ -617,7 +1336,7 @@ function refreshBlockText(b) {
       'prepare-data': t('block_prepare_data'), 'pretrained-model': t('block_pretrained_model'),
       'train-model': t('block_train_model'), 'save-model': t('block_save_model'),
       'upload-model': t('block_upload_model'), 'camera-infer': t('block_camera_infer'),
-      'predict': t('block_predict'), 'show-results': t('block_show_results'),
+      'show-results': t('block_show_results'),
       'explain-ai': t('block_explain_ai'), 'model-explorer': t('block_model_explorer')
     };
     title.textContent = titles[b.type] || b.type;
@@ -630,73 +1349,188 @@ function toggleCollapse(id) {
 }
 
 // ===== CARD DRAG (reposition) =====
+// Supports both mouse and single-finger touch. Pointer Events would be
+// cleaner but onmousedown is wired into block markup (educational simplicity),
+// so we add a parallel touchstart path that synthesises clientX/clientY.
 function cardDragStart(e, id) {
-  if (EDU_MODE) return;
-  if (e.button !== 0) return;
+  if (eduMode) return;
+  // Mouse events report e.button; touch events don't have it.
+  if (e.type === 'mousedown' && e.button !== 0) return;
+  const isTouch = e.type === 'touchstart';
+  const point = isTouch ? e.touches[0] : e;
+  if (isTouch) e.preventDefault(); // suppress 300 ms tap delay + scroll
   e.stopPropagation();
   draggedCard = id;
   const card = document.getElementById(id);
   const rect = card.getBoundingClientRect();
   const trash = document.getElementById('trash-zone');
-  dragOffsetX = e.clientX - rect.left;
-  dragOffsetY = e.clientY - rect.top;
+  dragOffsetX = point.clientX - rect.left;
+  dragOffsetY = point.clientY - rect.top;
   card.classList.add('dragging');
   trash.classList.add('visible');
 
+  function pointFromEvent(ev) {
+    if (ev.touches && ev.touches.length) return ev.touches[0];
+    if (ev.changedTouches && ev.changedTouches.length) return ev.changedTouches[0];
+    return ev;
+  }
+
   function onMove(ev) {
+    const p = pointFromEvent(ev);
     const canvas = document.getElementById('canvas');
     const cr = canvas.getBoundingClientRect();
-    let nx = ev.clientX - cr.left - dragOffsetX;
-    let ny = ev.clientY - cr.top - dragOffsetY;
+    let nx = p.clientX - cr.left - dragOffsetX;
+    let ny = p.clientY - cr.top - dragOffsetY;
     nx = Math.max(0, Math.min(nx, cr.width - 280));
     ny = Math.max(0, ny);
     card.style.left = nx + 'px';
     card.style.top = ny + 'px';
     // Trash detection
     const tr = trash.getBoundingClientRect();
-    const inTrash = ev.clientX >= tr.left && ev.clientX <= tr.right &&
-      ev.clientY >= tr.top && ev.clientY <= tr.bottom;
+    const inTrash = p.clientX >= tr.left && p.clientX <= tr.right &&
+      p.clientY >= tr.top && p.clientY <= tr.bottom;
     trash.classList.toggle('hot', inTrash);
+    if (ev.cancelable) ev.preventDefault();
   }
   function onUp(ev) {
+    const p = pointFromEvent(ev);
     card.classList.remove('dragging');
     trash.classList.remove('visible', 'hot');
     const tr = trash.getBoundingClientRect();
-    const inTrash = ev.clientX >= tr.left && ev.clientX <= tr.right &&
-      ev.clientY >= tr.top && ev.clientY <= tr.bottom;
-    if (inTrash && !EDU_MODE) {
+    const inTrash = p.clientX >= tr.left && p.clientX <= tr.right &&
+      p.clientY >= tr.top && p.clientY <= tr.bottom;
+    if (inTrash && !eduMode) {
       removeBlock(id);
     } else {
       const b = placedBlocks.find(b => b.id === id);
       if (b) {
         b.x = parseFloat(card.style.left);
         b.y = parseFloat(card.style.top);
+        persistCanvasState();
       }
     }
     draggedCard = null;
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onUp);
+    document.removeEventListener('touchcancel', onUp);
   }
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
+  if (isTouch) {
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
+    document.addEventListener('touchcancel', onUp);
+  } else {
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+}
+
+// User-facing wrapper that confirms before removing blocks holding user work
+// (trained model, captured samples). Plain navigation blocks delete silently.
+function confirmRemoveBlock(id) {
+  const block = placedBlocks.find(b => b.id === id);
+  if (!block) return;
+  const isTrainBlockWithModel = block.type === 'train-model' && fullModel && !modelSaved;
+  const isLabelWithSamples = block.type === 'label-classes' &&
+    capturedSamples.some(a => a && a.length > 0);
+  let needsConfirm = false;
+  let msg = '';
+  if (isTrainBlockWithModel) {
+    needsConfirm = true;
+    msg = lang === 'pl'
+      ? 'Wytrenowany model nie został jeszcze zapisany. Usunąć blok?'
+      : 'Trained model has not been saved yet. Remove block?';
+  } else if (isLabelWithSamples) {
+    needsConfirm = true;
+    msg = lang === 'pl'
+      ? 'Próbki klas zostaną zachowane (możesz dodać blok ponownie). Usunąć blok?'
+      : 'Class samples will be preserved (you can add the block again). Remove block?';
+  }
+  if (needsConfirm && !confirm(msg)) return;
+  removeBlock(id);
 }
 
 function removeBlock(id) {
+  const block = placedBlocks.find(b => b.id === id);
+  // Stop streams/intervals associated with this block before tearing it down
+  if (block) {
+    if (cameraStreams[id]) {
+      try { cameraStreams[id].getTracks().forEach(t => t.stop()); } catch (_) {}
+      delete cameraStreams[id];
+    }
+    if (zsStreams[id]) {
+      try { zsStreams[id].getTracks().forEach(t => t.stop()); } catch (_) {}
+      delete zsStreams[id];
+    }
+    if (zsIntervals[id]) {
+      clearInterval(zsIntervals[id]);
+      delete zsIntervals[id];
+    }
+    // The inference loop is global, but logically owned by camera-infer.
+    if (block.type === 'camera-infer') {
+      if (inferInterval) { clearInterval(inferInterval); inferInterval = null; }
+      if (inferCameraStream) {
+        try { inferCameraStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        inferCameraStream = null;
+      }
+      inferVideoEl = null;
+    }
+    // The zero-shot classifier is large (~5 MB GPU memory). Free it when
+    // the user removes the only zero-shot block — they can reload it.
+    if (block.type === 'zero-shot' && !placedBlocks.some(b => b.type === 'zero-shot' && b.id !== id)) {
+      if (zeroShotModel) { try { zeroShotModel.dispose(); } catch (_) {} zeroShotModel = null; }
+    }
+  }
   const card = document.getElementById(id);
   if (card) card.remove();
   placedBlocks = placedBlocks.filter(b => b.id !== id);
+  // Rebuild the by-type index. Tiny set, so cheaper than tracking deltas.
+  blocksByType = {};
+  for (const b of placedBlocks) {
+    if (!blocksByType[b.type]) blocksByType[b.type] = b;
+  }
   log('warn', `Removed block #${id}`);
+  refreshEmptyState();
+  evaluatePipelineState();
+  persistCanvasState();
 }
 
 function clearCanvas() {
+  // Stop any running camera/inference streams attached to soon-to-be-removed blocks
+  Object.keys(cameraStreams).forEach(id => {
+    try { cameraStreams[id].getTracks().forEach(t => t.stop()); } catch (_) {}
+  });
+  cameraStreams = {};
+  Object.keys(zsStreams).forEach(id => {
+    try { zsStreams[id].getTracks().forEach(t => t.stop()); } catch (_) {}
+  });
+  zsStreams = {};
+  Object.keys(zsIntervals).forEach(id => clearInterval(zsIntervals[id]));
+  zsIntervals = {};
+  if (inferInterval) { clearInterval(inferInterval); inferInterval = null; }
+  if (inferCameraStream) { try { inferCameraStream.getTracks().forEach(t => t.stop()); } catch (_) {} inferCameraStream = null; }
+  inferVideoEl = null;
+  predHistory = [];
+  frozenFrame = false;
+
   placedBlocks.forEach(b => { if (b.card) b.card.remove(); });
   placedBlocks = [];
+  blocksByType = {};
   classNames = ['Klasa 1', 'Klasa 2'];
+  classColors = CLASS_COLORS.slice(0, 2);
   capturedSamples = [[], []];
   baseModel = null;
   fullModel = null;
+  inferModel = null;
+  inferMetadata = null;
   preparedData = null;
+  modelSaved = false;
+  modelMetadata = null;
   log('warn', 'Canvas cleared');
+  evaluatePipelineState();
+  refreshEmptyState();
+  persistCanvasState();
 }
 
 // ===== SAMPLE COUNTS =====
@@ -721,8 +1555,14 @@ function updateClassNamesEverywhere() {
     const container = document.getElementById('capture-btns-' + b.id);
     if (!container) return;
     container.innerHTML = classNames.map((name, i) =>
-      `<button class="bk-btn" style="background:${CLASS_COLORS[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${b.id}',${i})">${name}</button>`
+      `<button class="bk-btn" style="background:${classColors[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${b.id}',${i})">${name}</button>`
     ).join('');
+  });
+  persistCanvasState();
+  // Update class name in IDB metadata without re-encoding all JPEG samples.
+  // We re-use saveClassToIDB's debounce timer so rapid typing doesn't thrash.
+  classNames.forEach((_, i) => {
+    if (capturedSamples[i] && capturedSamples[i].length > 0) saveClassToIDB(i);
   });
 }
 
@@ -795,14 +1635,18 @@ function blockCapture(id, cls) {
   if (!capturedSamples[cls]) capturedSamples[cls] = [];
   let captured = 0;
   const statusEl = document.getElementById('cam-status-' + id);
-  setBlockStatus(document.getElementById(id), 'running');
+  const cardEl = document.getElementById(id);
+  setBlockStatus(cardEl, 'running');
   function grab() {
     if (captured >= spc) {
       log('success', t('log_capture', spc, classNames[cls]));
       if (statusEl) statusEl.textContent = `${classNames[cls]}: ${capturedSamples[cls].length} ${t('lbl_samples')}`;
       updateSampleCounts();
       updateThumbStrips(id);
-      setBlockStatus(document.getElementById(id), 'done');
+      setBlockStatus(cardEl, 'done');
+      evaluatePipelineState();
+      saveClassToIDB(cls); // persist new samples to IDB (debounced)
+      refreshDatasetInfo();
       return;
     }
     // Draw current video frame
@@ -823,7 +1667,7 @@ function renderThumbsIntoStrip(strip, cls) {
     const cv = document.createElement('canvas');
     cv.width = imgData.width; cv.height = imgData.height;
     cv.getContext('2d').putImageData(imgData, 0, 0);
-    cv.style.borderTop = `3px solid ${CLASS_COLORS[cls]}`;
+    cv.style.borderTop = `3px solid ${classColors[cls]}`;
     strip.appendChild(cv);
   });
 }
@@ -839,7 +1683,7 @@ function updateThumbStrips(cameraId) {
         const cv = document.createElement('canvas');
         cv.width = imgData.width; cv.height = imgData.height;
         cv.getContext('2d').putImageData(imgData, 0, 0);
-        cv.style.borderTop = `3px solid ${CLASS_COLORS[cls % CLASS_COLORS.length]}`;
+        cv.style.borderTop = `3px solid ${classColors[cls % CLASS_COLORS.length]}`;
         camStrip.appendChild(cv);
       });
     }
@@ -890,6 +1734,48 @@ for (let row=0;row<h;row++) {
   }
 }
   }
+
+  // Zoom + skew (affine transform). Each applied independently with 50%
+  // probability when augType === 'all'. Uses bilinear sampling. Out-of-source
+  // pixels are filled with the edge value (less artifact-prone than black).
+  if (augType === 'all') {
+const doZoom = Math.random() > 0.5;
+const doSkew = Math.random() > 0.5;
+if (doZoom || doSkew) {
+  const zoom  = doZoom ? (0.85 + Math.random() * 0.30) : 1.0;
+  const sX    = doSkew ? (Math.random() - 0.5) * 0.30 : 0;
+  const sY    = doSkew ? (Math.random() - 0.5) * 0.30 : 0;
+  const cx = w / 2, cy = h / 2;
+  const out = new Uint8ClampedArray(buf.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = x - cx, dy = y - cy;
+      let sx = dx / zoom - sX * dy + cx;
+      let sy = dy / zoom - sY * dx + cy;
+      if (sx < 0) sx = 0; else if (sx > w - 1) sx = w - 1;
+      if (sy < 0) sy = 0; else if (sy > h - 1) sy = h - 1;
+      const x0 = sx | 0, y0 = sy | 0;
+      const x1 = x0 + 1 < w ? x0 + 1 : x0;
+      const y1 = y0 + 1 < h ? y0 + 1 : y0;
+      const fx = sx - x0, fy = sy - y0;
+      const w00 = (1 - fx) * (1 - fy);
+      const w10 = fx * (1 - fy);
+      const w01 = (1 - fx) * fy;
+      const w11 = fx * fy;
+      const i00 = (y0 * w + x0) * 4;
+      const i10 = (y0 * w + x1) * 4;
+      const i01 = (y1 * w + x0) * 4;
+      const i11 = (y1 * w + x1) * 4;
+      const di = (y * w + x) * 4;
+      out[di]     = buf[i00]     * w00 + buf[i10]     * w10 + buf[i01]     * w01 + buf[i11]     * w11;
+      out[di + 1] = buf[i00 + 1] * w00 + buf[i10 + 1] * w10 + buf[i01 + 1] * w01 + buf[i11 + 1] * w11;
+      out[di + 2] = buf[i00 + 2] * w00 + buf[i10 + 2] * w10 + buf[i01 + 2] * w01 + buf[i11 + 2] * w11;
+      out[di + 3] = 255;
+    }
+  }
+  buf.set(out);
+}
+  }
 }
 
 result.push({ data: buf, width: w, height: h });
@@ -900,8 +1786,11 @@ if (added % 10 === 0) {
   self.postMessage({ type: 'progress', pct: Math.round((result.length/target)*100) });
 }
   }
-  
-  self.postMessage({ type: 'done', result, counts: samples.length });
+  // Transfer all buffers — avoids structured-clone copy of what can be tens
+  // of MB for larger datasets. The worker is done after this message anyway.
+  const buffers = [];
+  for (const r of result) buffers.push(r.data.buffer);
+  self.postMessage({ type: 'done', result, counts: samples.length }, buffers);
 };
 `;
 
@@ -913,8 +1802,8 @@ async function runPrepare(id) {
   setBlockStatus(document.getElementById(id), 'running');
   log('step', t('log_prep_start'));
 
-  const augType = document.getElementById('aug-' + id)?.value || 'all';
-  const multiplier = parseInt(document.getElementById('mul-' + id)?.value || '2');
+  const augType = document.getElementById('aug-' + id)?.value || 'none';
+  const multiplier = augType === 'none' ? 1 : 2;
   const prog = document.getElementById('prog-' + id);
   const status = document.getElementById('prep-status-' + id);
 
@@ -960,6 +1849,7 @@ async function runPrepare(id) {
         log('success', t('log_prep_done', n));
         if (status) status.textContent = t('log_prep_done', n);
         setBlockStatus(document.getElementById(id), 'done');
+        evaluatePipelineState();
         worker.terminate();
         URL.revokeObjectURL(workerURL);
         resolve();
@@ -988,6 +1878,7 @@ async function runLoadBaseModel(id) {
     if (mstat) mstat.textContent = 'MobileNetV3-Small loaded ✓';
     log('success', t('log_model_loaded'));
     setBlockStatus(document.getElementById(id), 'done');
+    evaluatePipelineState();
   } catch (err) {
     log('error', t('log_model_err') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
@@ -1012,40 +1903,134 @@ function drawChart(canvasId) {
   ctx.fillStyle = '#F8FAFC';
   ctx.fillRect(0, 0, W, H);
 
-  function drawLine(data, color) {
+  // Layout: leave room for axis labels
+  const PAD_L = 26, PAD_R = 8, PAD_T = 14, PAD_B = 14;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  // Axis frame
+  ctx.strokeStyle = '#CBD5E1';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD_L, PAD_T);
+  ctx.lineTo(PAD_L, H - PAD_B);
+  ctx.lineTo(W - PAD_R, H - PAD_B);
+  ctx.stroke();
+
+  // Y-axis ticks: accuracy uses fixed 0..1, drawn on left axis.
+  ctx.font = '9px Inter';
+  ctx.fillStyle = '#94A3B8';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  [0, 0.5, 1].forEach(v => {
+    const y = PAD_T + innerH - v * innerH;
+    ctx.fillText(v.toFixed(1), PAD_L - 4, y);
+    ctx.strokeStyle = '#E2E8F0';
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, y); ctx.lineTo(W - PAD_R, y);
+    ctx.stroke();
+  });
+
+  // X-axis ticks: epoch numbers (sparse: first, last, midpoint).
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const nEpochs = Math.max(lossHistory.length, accHistory.length);
+  if (nEpochs >= 1) {
+    const positions = nEpochs <= 4
+      ? lossHistory.map((_, i) => i)
+      : [0, Math.floor((nEpochs - 1) / 2), nEpochs - 1];
+    positions.forEach(i => {
+      const x = nEpochs === 1 ? PAD_L + innerW / 2 : PAD_L + (i / (nEpochs - 1)) * innerW;
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillText(String(i + 1), x, H - PAD_B + 2);
+    });
+  }
+
+  // Loss is unbounded — scale to its own min/max so the curve fills the chart.
+  const lossMax = lossHistory.length ? Math.max(...lossHistory) : 1;
+  const lossMin = lossHistory.length ? Math.min(...lossHistory) : 0;
+  const lossRange = (lossMax - lossMin) || 1;
+
+  function drawLine(data, color, scaleFn) {
     if (data.length < 2) return;
-    const max = Math.max(...data, 1);
-    const min = Math.min(...data, 0);
-    const range = max - min || 1;
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     data.forEach((v, i) => {
-      const x = (i / (data.length - 1)) * (W - 20) + 10;
-      const y = H - 10 - ((v - min) / range) * (H - 20);
+      const x = PAD_L + (i / (data.length - 1)) * innerW;
+      const y = PAD_T + innerH - scaleFn(v) * innerH;
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     ctx.stroke();
-    // Label last point
-    const lv = data[data.length - 1];
-    const lx = W - 12;
-    const ly = H - 10 - ((lv - min) / range) * (H - 20);
-    ctx.fillStyle = color;
-    ctx.font = '9px Inter';
-    ctx.fillText(lv.toFixed ? lv.toFixed(3) : lv, lx - 28, Math.max(12, ly - 3));
   }
-  drawLine(lossHistory, '#DC2626');
-  drawLine(accHistory, '#059669');
+  // Accuracy: bounded 0..1, drawn against left axis ticks directly.
+  drawLine(accHistory, '#059669', v => v);
+  // Loss: scale into [0..1] for plotting only (right-side y label shows real value).
+  drawLine(lossHistory, '#DC2626', v => (v - lossMin) / lossRange);
 
-  // Legend
-  ctx.font = '9px Inter';
-  ctx.fillStyle = '#DC2626'; ctx.fillText('loss', 10, 10);
-  ctx.fillStyle = '#059669'; ctx.fillText('acc', 40, 10);
+  // Legend + final values, top of chart
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = '10px Inter';
+  const lastLoss = lossHistory[lossHistory.length - 1];
+  const lastAcc = accHistory[accHistory.length - 1];
+  ctx.fillStyle = '#DC2626';
+  ctx.fillText('loss' + (lastLoss != null ? ` ${lastLoss.toFixed(3)}` : ''), PAD_L + 4, 1);
+  ctx.fillStyle = '#059669';
+  ctx.fillText('acc' + (lastAcc != null ? ` ${(lastAcc * 100).toFixed(1)}%` : ''), PAD_L + 80, 1);
+}
+
+// Train pre-flight validation. Returns true if training should proceed.
+function validateTrainingData() {
+  const counts = capturedSamples.map(arr => (arr || []).length);
+  const classesWithSamples = counts.filter(n => n > 0).length;
+  if (classesWithSamples < 2) {
+    const msg = lang === 'pl'
+      ? `Trening wymaga co najmniej 2 klas z próbkami (masz ${classesWithSamples}). Zbierz próbki dla dwóch lub więcej klas.`
+      : `Training needs at least 2 classes with samples (you have ${classesWithSamples}). Collect samples for two or more classes.`;
+    alert(msg);
+    log('warn', msg);
+    return false;
+  }
+  const MIN_PER_CLASS = 5;
+  const tooFew = counts
+    .map((n, i) => ({ n, name: classNames[i] }))
+    .filter(c => c.n > 0 && c.n < MIN_PER_CLASS);
+  if (tooFew.length > 0) {
+    const list = tooFew.map(c => `"${c.name}" (${c.n})`).join(', ');
+    const msg = lang === 'pl'
+      ? `Niektóre klasy mają mniej niż ${MIN_PER_CLASS} próbek: ${list}. Modele potrzebują kilku przykładów na klasę. Kontynuować mimo to?`
+      : `Some classes have fewer than ${MIN_PER_CLASS} samples: ${list}. Models need several examples per class. Continue anyway?`;
+    if (!confirm(msg)) return false;
+  }
+  const nonZero = counts.filter(n => n > 0);
+  const max = Math.max(...nonZero);
+  const min = Math.min(...nonZero);
+  if (max >= 10 * min && max >= 20) {
+    const msg = lang === 'pl'
+      ? `Bardzo nierówny rozkład klas (od ${min} do ${max} próbek). Model nauczy się rozpoznawać klasę większościową. Kontynuować?`
+      : `Class imbalance is large (${min}–${max} samples). The model will favour the majority class. Continue?`;
+    if (!confirm(msg)) return false;
+  }
+  return true;
 }
 
 async function runTraining(id) {
-  if (!preparedData) { log('warn', t('log_no_data')); return; }
-  if (!baseModel) { log('warn', t('log_no_model_base')); return; }
+  if (!preparedData) {
+    log('warn', t('log_no_data'));
+    if (!placedBlocks.some(b => b.type === 'prepare-data')) {
+      ensureBlockOnCanvas('prepare-data');
+    }
+    return;
+  }
+  if (!baseModel) {
+    log('warn', t('log_no_model_base'));
+    if (!placedBlocks.some(b => b.type === 'pretrained-model')) {
+      ensureBlockOnCanvas('pretrained-model');
+    }
+    return;
+  }
+  if (!validateTrainingData()) return;
 
   trainingCancelled = false;
   lossHistory = []; accHistory = [];
@@ -1068,31 +2053,36 @@ async function runTraining(id) {
     // Always resize to 224×224 — MobileNetV3-Small requires that input size
     // regardless of the resolution the user chose when capturing samples.
     log('info', lang === 'pl' ? `Ekstrakcja cech z ${rawXs.length} próbek...` : `Extracting features from ${rawXs.length} samples...`);
+    // BATCHED feature extraction — one baseModel.predict() per BATCH samples
+    // instead of per-sample. ~4-8x faster on GPU. Yield to UI between batches.
+    // Worker output uses plain {data,width,height} objects; wrap with
+    // ImageData (no buffer copy) so tf.browser.fromPixels accepts them.
+    const BATCH = 8;
     const allFeats = [];
-    const reuseCanvas = document.createElement('canvas');
-    const reuseCtx = reuseCanvas.getContext('2d');
-    for (let i = 0; i < rawXs.length; i++) {
+    for (let bs = 0; bs < rawXs.length; bs += BATCH) {
       if (trainingCancelled) throw new Error('cancelled');
-      const imgData = rawXs[i];
-      const feat = tf.tidy(() => {
-        if (reuseCanvas.width !== imgData.width || reuseCanvas.height !== imgData.height) {
-          reuseCanvas.width = imgData.width;
-          reuseCanvas.height = imgData.height;
+      const end = Math.min(bs + BATCH, rawXs.length);
+      const batchTensor = tf.tidy(() => {
+        const items = [];
+        for (let i = bs; i < end; i++) {
+          const d = rawXs[i];
+          const im = d instanceof ImageData
+            ? d
+            : new ImageData(d.data, d.width, d.height);
+          let t = tf.browser.fromPixels(im).toFloat().div(255);
+          if (im.width !== 224 || im.height !== 224) {
+            t = t.resizeBilinear([224, 224]);
+          }
+          items.push(t);
         }
-        reuseCtx.putImageData(
-          new ImageData(new Uint8ClampedArray(imgData.data), imgData.width, imgData.height), 0, 0
-        );
-        return baseModel.predict(
-          tf.browser.fromPixels(reuseCanvas).resizeBilinear([224, 224]).toFloat().div(255).expandDims(0)
-        );
+        return tf.stack(items);
       });
-      allFeats.push(feat);
-      if (i % 5 === 0) {
-        if (info) info.textContent = lang === 'pl'
-          ? `Ekstrakcja cech: ${i + 1}/${rawXs.length}`
-          : `Feature extraction: ${i + 1}/${rawXs.length}`;
-        await tf.nextFrame();
-      }
+      allFeats.push(baseModel.predict(batchTensor));
+      batchTensor.dispose();
+      if (info) info.textContent = lang === 'pl'
+        ? `Ekstrakcja cech: ${end}/${rawXs.length}`
+        : `Feature extraction: ${end}/${rawXs.length}`;
+      await tf.nextFrame();
     }
     featsTensor = tf.concat(allFeats, 0);
     allFeats.forEach(f => f.dispose());
@@ -1164,6 +2154,9 @@ async function runTraining(id) {
     log('info', lang === 'pl' ? 'Model gotowy...' : 'Model ready...');
     log('success', t('log_train_done', finalAcc));
     setBlockStatus(document.getElementById(id), 'done');
+    modelSaved = false; // freshly trained, not yet saved
+    evaluatePipelineState();
+    notifyModelTrained();
   } catch (err) {
     if (err.message === 'cancelled') {
       log('warn', t('log_train_cancel'));
@@ -1199,6 +2192,8 @@ async function runSaveIDB(id) {
     localStorage.setItem('ml-blocks-meta-' + name, JSON.stringify(modelMetadata));
     log('success', t('log_save_idb'));
     setBlockStatus(document.getElementById(id), 'done');
+    modelSaved = true;
+    evaluatePipelineState();
     const el = document.getElementById('save-info-' + id);
     if (el) el.textContent = t('log_save_idb');
   } catch (err) {
@@ -1237,6 +2232,8 @@ async function runDownload(id) {
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     log('success', (lang === 'pl' ? 'Model pobrany ✓ (' : 'Model downloaded ✓ (') + fname + ')');
+    modelSaved = true;
+    evaluatePipelineState();
   } catch (err) {
     log('error', 'Download error: ' + err.message);
   }
@@ -1296,6 +2293,8 @@ async function tryLoadModelFiles(id) {
     }
     setBlockStatus(document.getElementById(id), 'done');
     log('success', t('log_upload_done', classNames.join(', ')));
+    modelSaved = true; // loaded from disk → already exists somewhere
+    evaluatePipelineState();
   } catch (err) {
     log('error', 'Upload error: ' + err.message);
     setBlockStatus(document.getElementById(id), 'error');
@@ -1332,6 +2331,8 @@ async function runLoadIDB(id) {
     processLoadedMeta(id, meta);
     setBlockStatus(document.getElementById(id), 'done');
     log('success', t('log_upload_done', meta.classLabels ? meta.classLabels.join(', ') : '—'));
+    modelSaved = true;
+    evaluatePipelineState();
   } catch (err) {
     log('error', 'IDB load error: ' + err.message);
     setBlockStatus(document.getElementById(id), 'error');
@@ -1386,14 +2387,17 @@ function processLoadedMeta(id, meta) {
 // ===== INFERENCE CAMERA =====
 let inferCameraStream = null;
 let inferVideoEl = null;
-let predHistoryId = null;
 let predHistory = [];
 let frozenFrame = false;
 
-// ===== ZERO-SHOT INFERENCE (BASE MODEL) =====
+// ===== ZERO-SHOT INFERENCE (FULL CLASSIFIER) =====
+// Uses MobileNetV3-Small's original 1001-class ImageNet softmax head — a real
+// classifier, not feature-vector activations. Loaded lazily on first start so
+// users who never open the block don't pay the download cost.
 let zsStreams = {}; // id -> MediaStream
 let zsIntervals = {}; // id -> setInterval handle
-let featureMapModel = null;
+let zeroShotModel = null;
+let zeroShotModelLoading = null;
 
 // Compact ImageNet top-1000 label list (first 100 for brevity — app loads full list lazily)
 const IMAGENET_LABELS_URL = 'https://storage.googleapis.com/download.tensorflow.org/data/ImageNetLabels.txt';
@@ -1414,29 +2418,53 @@ async function loadImagenetLabels() {
   }
 }
 
+async function loadZeroShotModel(statusEl) {
+  if (zeroShotModel) return zeroShotModel;
+  if (zeroShotModelLoading) return zeroShotModelLoading;
+  log('step', lang === 'pl'
+    ? '\u0141adowanie pe\u0142nego klasyfikatora MobileNetV3 (1001 klas)...'
+    : 'Loading full MobileNetV3 classifier (1001 classes)...');
+  zeroShotModelLoading = tf.loadGraphModel(CLASSIFIER_MODEL_URL, {
+    onProgress: (frac) => {
+      if (statusEl) statusEl.textContent = Math.round(frac * 100) + '%';
+    }
+  }).then(m => {
+    zeroShotModel = m;
+    zeroShotModelLoading = null;
+    log('success', lang === 'pl'
+      ? 'Klasyfikator zero-shot za\u0142adowany \u2713'
+      : 'Zero-shot classifier loaded \u2713');
+    return m;
+  }).catch(err => {
+    zeroShotModelLoading = null;
+    throw err;
+  });
+  return zeroShotModelLoading;
+}
+
 async function startZeroShot(id) {
-  if (!baseModel) {
-    log('warn', lang === 'pl'
-      ? 'Najpierw za\u0142aduj Model bazowy (blok treningu)!'
-      : 'Load the Pretrained Model block first!');
-    return;
-  }
+  const statusEl = document.getElementById('zs-status-' + id);
   if (zsStreams[id]) zsStreams[id].getTracks().forEach(t => t.stop());
   try {
+    setBlockStatus(document.getElementById(id), 'running');
+    if (!zeroShotModel) {
+      if (statusEl) statusEl.textContent = lang === 'pl' ? 'Pobieranie modelu...' : 'Downloading model...';
+      await loadZeroShotModel(statusEl);
+    }
+    if (statusEl) statusEl.textContent = '';
+    loadImagenetLabels();
     const stream = await getCameraStream();
     zsStreams[id] = stream;
     const vid = document.getElementById('zsvid-' + id);
     if (vid) { vid.srcObject = stream; vid.play().catch(() => {}); }
-    setBlockStatus(document.getElementById(id), 'running');
-    // Ensure labels are loaded
-    loadImagenetLabels();
     const fpsEl = document.getElementById('zsfps-' + id);
-    const interval = fpsEl ? parseInt(fpsEl.value) : 100;
+    const interval = fpsEl ? parseInt(fpsEl.value) : 200;
     if (zsIntervals[id]) clearInterval(zsIntervals[id]);
     zsIntervals[id] = setInterval(() => runZeroShot(id), interval);
     log('success', lang === 'pl' ? 'Zero-shot uruchomiony' : 'Zero-shot started');
   } catch (err) {
-    log('error', (lang === 'pl' ? 'B\u0142\u0105d kamery: ' : 'Camera error: ') + err.message);
+    if (statusEl) statusEl.textContent = err.message || '';
+    log('error', (lang === 'pl' ? 'B\u0142\u0105d zero-shot: ' : 'Zero-shot error: ') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   }
 }
@@ -1449,7 +2477,7 @@ function stopZeroShot(id) {
 }
 
 async function runZeroShot(id) {
-  if (!baseModel) return;
+  if (!zeroShotModel) return;
   const vid = document.getElementById('zsvid-' + id);
   if (!vid || !vid.srcObject) return;
   const labels = imagenetLabels;
@@ -1460,25 +2488,39 @@ async function runZeroShot(id) {
         .toFloat().div(255)
         .expandDims(0)
     );
-
-    // Base model outputs features (not class probs). For top-K labels we need a full classification model.
-    // We'll reuse a simple argmax on the feature vector as a proxy — or better, signal we need full mobilenet.
-    // Since baseModel is the feature extractor, we show top-5 neuron activations mapped to imagenet labels.
-    const features = await baseModel.predict(tensor).data();
+    // The Kaggle classification model outputs raw logits, not probabilities.
+    // Apply softmax to convert to a proper 0-1 probability distribution.
+    const logitsTensor = zeroShotModel.predict(tensor);
+    const probsTensor = tf.softmax(logitsTensor);
+    const probs = await probsTensor.data();
+    logitsTensor.dispose();
+    probsTensor.dispose();
     tensor.dispose();
-    // Get top 5 indices by activation value
-    const indexed = Array.from(features).map((v, i) => ({ v, i }));
-    indexed.sort((a, b) => b.v - a.v);
-    const top5 = indexed.slice(0, 5);
-    const max = top5[0].v || 1;
+    // Partial top-5 selection — single linear pass instead of allocating
+    // 1001 wrapper objects + full sort every frame.
+    const K = 5;
+    const topV = new Float32Array(K).fill(-Infinity);
+    const topI = new Int32Array(K);
+    for (let i = 0; i < probs.length; i++) {
+      const v = probs[i];
+      if (v > topV[K - 1]) {
+        let j = K - 1;
+        while (j > 0 && topV[j - 1] < v) {
+          topV[j] = topV[j - 1]; topI[j] = topI[j - 1]; j--;
+        }
+        topV[j] = v; topI[j] = i;
+      }
+    }
+    const top5 = [];
+    for (let k = 0; k < K; k++) top5.push({ v: topV[k], i: topI[k] });
     const resultsEl = document.getElementById('zs-results-' + id);
     if (resultsEl && labels) {
       resultsEl.innerHTML = top5.map(({ v, i }) => {
-        const label = labels[i] || `feat_${i}`;
-        const pct = Math.max(0, (v / max * 100)).toFixed(1);
+        const label = labels[i] || `class_${i}`;
+        const pct = Math.min(100, v * 100).toFixed(1);
         return `<div style="margin-bottom:3px">
 <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:1px">
-  <span style="font-weight:600;color:var(--c-model);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${label}</span>
+  <span style="font-weight:600;color:var(--c-model);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">${label}</span>
   <span style="color:var(--c-muted)">${pct}%</span>
 </div>
 <div style="background:#E2E8F0;border-radius:3px;height:5px">
@@ -1486,7 +2528,7 @@ async function runZeroShot(id) {
 </div></div>`;
       }).join('');
     }
-  } catch (e) { /* silent */ }
+  } catch (e) { /* silent — frame may not be ready yet */ }
 }
 
 async function startInferCamera(id) {
@@ -1494,10 +2536,8 @@ async function startInferCamera(id) {
     if (inferCameraStream) inferCameraStream.getTracks().forEach(t => t.stop());
     inferCameraStream = await getCameraStream();
     const vid = document.getElementById('vid-' + id);
-    const showVid = document.querySelector('[id^="show-vid-"]');
     if (vid) { vid.srcObject = inferCameraStream; vid.play().catch(() => {}); }
-    if (showVid) { showVid.srcObject = inferCameraStream; showVid.play().catch(() => {}); }
-    inferVideoEl = vid || showVid;
+    inferVideoEl = vid;
     setBlockStatus(document.getElementById(id), 'running');
     log('success', t('log_camera_start') + ' (inference)');
     // Start inference loop
@@ -1505,6 +2545,7 @@ async function startInferCamera(id) {
     const interval = fpsEl ? parseInt(fpsEl.value) : 100;
     if (inferInterval) clearInterval(inferInterval);
     inferInterval = setInterval(() => runInference(id), interval);
+    evaluatePipelineState();
   } catch (err) {
     log('error', t('log_camera_err') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
@@ -1516,13 +2557,100 @@ function stopInferCamera(id) {
   if (inferCameraStream) { inferCameraStream.getTracks().forEach(t => t.stop()); inferCameraStream = null; }
   setBlockStatus(document.getElementById(id), 'idle');
   log('info', 'Inference camera stopped');
+  evaluatePipelineState();
+}
+
+// Build the predict-block bar DOM ONCE per session, then mutate widths/text
+// per frame. Massive saving over innerHTML-rebuild: no parser, no GC churn,
+// no layout reflow on every prediction.
+function ensurePredictBarsDOM(predictBlock, classCount, threshold) {
+  const cached = _predUI.get(predictBlock);
+  if (cached && cached.rows.length === classCount) return cached;
+  const barsEl = document.getElementById('pred-bars-' + predictBlock.id);
+  if (!barsEl) return null;
+
+  const thrPct = (threshold * 100).toFixed(1);
+  const thrLabel = lang === 'pl' ? 'próg' : 'threshold';
+
+  // Threshold marker line + per-class rows
+  const frag = document.createDocumentFragment();
+  const thrEl = document.createElement('div');
+  thrEl.className = 'pred-thr-label';
+  thrEl.style.setProperty('--thr', thrPct + '%');
+  const thrSpan = document.createElement('span');
+  thrSpan.textContent = `${thrLabel} ${thrPct}%`;
+  thrEl.appendChild(thrSpan);
+  frag.appendChild(thrEl);
+
+  const rows = [];
+  for (let i = 0; i < classCount; i++) {
+    const row = document.createElement('div');
+    row.className = 'pred-row';
+    row.style.setProperty('--thr', thrPct + '%');
+
+    const lbl = document.createElement('div');
+    lbl.className = 'pred-label';
+    const name = document.createElement('span');
+    name.style.fontWeight = '600';
+    name.style.color = classColors[i];
+    name.textContent = classNames[i];
+    const pct = document.createElement('span');
+    pct.style.color = 'var(--c-muted)';
+    pct.textContent = '0.0%';
+    lbl.appendChild(name);
+    lbl.appendChild(pct);
+
+    const track = document.createElement('div');
+    track.className = 'pred-track';
+    const fill = document.createElement('div');
+    fill.className = 'pred-fill';
+    fill.style.background = classColors[i];
+    fill.style.width = '0%';
+    track.appendChild(fill);
+
+    row.appendChild(lbl);
+    row.appendChild(track);
+    frag.appendChild(row);
+
+    rows.push({ row, name, pct, fill });
+  }
+  barsEl.replaceChildren(frag);
+  const ui = { rows, thrEl, thrSpan, thrPct, classCount };
+  _predUI.set(predictBlock, ui);
+  return ui;
+}
+
+function updatePredictBars(ui, predictions, threshold) {
+  if (!ui) return;
+  const newThrPct = (threshold * 100).toFixed(1);
+  if (newThrPct !== ui.thrPct) {
+    ui.thrPct = newThrPct;
+    ui.thrEl.style.setProperty('--thr', newThrPct + '%');
+    ui.thrSpan.textContent = `${lang === 'pl' ? 'próg' : 'threshold'} ${newThrPct}%`;
+    for (const r of ui.rows) r.row.style.setProperty('--thr', newThrPct + '%');
+  }
+  for (let i = 0; i < ui.rows.length; i++) {
+    const p = predictions[i];
+    const pctTxt = (p * 100).toFixed(1);
+    const r = ui.rows[i];
+    r.fill.style.width = pctTxt + '%';
+    r.fill.classList.toggle('below', p < threshold);
+    r.pct.textContent = pctTxt + '%';
+    // Class names can change (rename) — keep label in sync cheaply.
+    if (r.name.textContent !== classNames[i]) {
+      r.name.textContent = classNames[i];
+      r.name.style.color = classColors[i];
+      r.fill.style.background = classColors[i];
+    }
+  }
 }
 
 async function runInference(camId) {
   if (!inferModel) return;
   if (frozenFrame) return;
-  const vid = inferVideoEl || document.querySelector('video[id^="vid-"]');
+  const vid = inferVideoEl;
   if (!vid || !vid.srcObject) return;
+  if (!baseModel) return; // user is between block placements; silent
 
   try {
     const inputSize = (inferMetadata && inferMetadata.inputSize) || 224;
@@ -1533,113 +2661,36 @@ async function runInference(camId) {
         .expandDims(0)
     );
 
-    // Two-step prediction: baseModel (frozen GraphModel) extracts features,
-    // inferModel (trained classifier head) maps them to class probabilities.
-    // baseModel is mandatory — the classifier was trained on its 576-dim output,
-    // not on raw pixels, so passing raw pixels would produce garbage results.
-    if (!baseModel) {
-      log('error', lang === 'pl' ? 'Brak modelu bazowego! Załaduj blok "Model bazowy" najpierw.' : 'Base model not loaded — add and run the Pretrained Model block first.');
-      tensor.dispose();
-      return;
-    }
-    const features = await baseModel.predict(tensor);
+    // Two-step prediction: baseModel (frozen GraphModel) -> features ->
+    // inferModel (classifier head) -> class probabilities. baseModel is
+    // synchronous; no need to await.
+    const features = baseModel.predict(tensor);
     const predTensor = inferModel.predict(features);
     const predictions = await predTensor.data();
     predTensor.dispose();
     features.dispose();
 
-    // Feature Map Visualization for inference block
-    const fmPredictBlock = placedBlocks.find(b => b.type === 'predict');
-    if (fmPredictBlock) {
-      const fmapCheckbox = document.getElementById('fmap-' + fmPredictBlock.id);
-      const fmapsContainer = document.getElementById('fmaps-' + fmPredictBlock.id);
-
-      if (fmapCheckbox && fmapCheckbox.checked) {
-        if (fmapsContainer) fmapsContainer.style.display = 'flex';
-
-        // Find the base model inside the functional model
-        // inferModel combines MobileNet and sequential classifier.
-        // It's a functional model, we need to locate the MobileNet layer or 
-        // rely on baseModel if it's currently loaded
-        if (baseModel) {
-          if (!featureMapModel) {
-            try {
-              const layer = baseModel.getLayer('conv_pw_1_relu');
-              featureMapModel = tf.model({ inputs: baseModel.inputs, outputs: layer.output });
-            } catch (e) {
-              console.warn("Could not extract feature map layer");
-            }
-          }
-
-          if (featureMapModel) {
-            const fmapTensor = featureMapModel.predict(tensor);
-            const numChannels = 16;
-
-            tf.tidy(() => {
-              const channels = tf.split(fmapTensor.squeeze(0), fmapTensor.shape[3], 2);
-
-              if (fmapsContainer) {
-                if (fmapsContainer.children.length < numChannels) {
-                  fmapsContainer.innerHTML = '';
-                  for (let i = 0; i < numChannels; i++) {
-                    const cv = document.createElement('canvas');
-                    cv.className = 'fm-canvas';
-                    fmapsContainer.appendChild(cv);
-                  }
-                }
-
-                for (let i = 0; i < numChannels; i++) {
-                  if (i < channels.length) {
-                    const ch = channels[i];
-                    const min = ch.min();
-                    const max = ch.max();
-                    const normalized = ch.sub(min).div(max.sub(min).add(1e-5));
-
-                    const cv = fmapsContainer.children[i];
-                    tf.browser.toPixels(normalized, cv);
-                  }
-                }
-              }
-            });
-            fmapTensor.dispose();
-          }
-        }
-      } else {
-        if (fmapsContainer) fmapsContainer.style.display = 'none';
-      }
-    }
-
     tensor.dispose();
 
-    const best = Array.from(predictions);
-    const maxIdx = best.indexOf(Math.max(...best));
-    const confidence = best[maxIdx];
+    // argmax + confidence in one pass — avoids spread + indexOf.
+    let maxIdx = 0;
+    for (let i = 1; i < predictions.length; i++) {
+      if (predictions[i] > predictions[maxIdx]) maxIdx = i;
+    }
+    const confidence = predictions[maxIdx];
 
-    // Update predict block — per-class confidence bars + top result
-    const predictBlock = placedBlocks.find(b => b.type === 'predict');
+    // Update merged show-results block — patch DOM nodes built once.
+    const predictBlock = blocksByType['show-results'];
     if (predictBlock) {
       const thresh = parseFloat(document.getElementById('thr-' + predictBlock.id)?.value || '0.7');
+      const ui = ensurePredictBarsDOM(predictBlock, predictions.length, thresh);
+      updatePredictBars(ui, predictions, thresh);
       const result = document.getElementById('pred-result-' + predictBlock.id);
-      const barsEl = document.getElementById('pred-bars-' + predictBlock.id);
-      // Render per-class confidence bars
-      if (barsEl) {
-        barsEl.innerHTML = Array.from(predictions).map((p, i) => {
-          const pct = (p * 100).toFixed(1);
-          return `<div style="margin-bottom:4px">
-<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">
-  <span style="font-weight:600;color:${CLASS_COLORS[i]}">${classNames[i]}</span>
-  <span style="color:var(--c-muted)">${pct}%</span>
-</div>
-<div style="background:#E2E8F0;border-radius:3px;height:6px">
-  <div style="background:${CLASS_COLORS[i]};width:${pct}%;height:6px;border-radius:3px;transition:width .2s"></div>
-</div></div>`;
-        }).join('');
-      }
       if (result) {
         if (confidence >= thresh) {
           result.textContent = `${classNames[maxIdx]} \u2014 ${(confidence * 100).toFixed(1)}%`;
-          result.style.color = CLASS_COLORS[maxIdx];
-          result.style.borderLeft = `4px solid ${CLASS_COLORS[maxIdx]}`;
+          result.style.color = classColors[maxIdx];
+          result.style.borderLeft = `4px solid ${classColors[maxIdx]}`;
           result.style.fontStyle = '';
         } else {
           result.textContent = lang === 'pl' ? 'poni\u017cej progu pewno\u015bci' : 'below confidence threshold';
@@ -1648,20 +2699,24 @@ async function runInference(camId) {
           result.style.fontStyle = 'italic';
         }
       }
-      // Raw array logged at bottom of function
     }
 
-    // Update show-results overlay
-    const showBlock = placedBlocks.find(b => b.type === 'show-results');
-    if (showBlock) {
-      drawOverlay(showBlock.id, classNames[maxIdx], confidence, maxIdx);
+    // Track recent predictions for the small history chart.
+    if (blocksByType['show-results']) {
       predHistory.push({ idx: maxIdx, conf: confidence });
       if (predHistory.length > 30) predHistory.shift();
-      drawHistChart(showBlock.id);
+      drawHistChart(blocksByType['show-results'].id);
     }
 
-    const raw = Array.from(predictions).map(v => v.toFixed(4));
-    log('data', `[${raw.join(', ')}]`);
+    // Rate-limited probability log: only when class changes or 1s elapsed.
+    const now = performance.now();
+    if (maxIdx !== _lastLoggedClass || now - _lastLogTime > 1000) {
+      _lastLoggedClass = maxIdx;
+      _lastLogTime = now;
+      const raw = new Array(predictions.length);
+      for (let i = 0; i < predictions.length; i++) raw[i] = predictions[i].toFixed(3);
+      log('data', `[${raw.join(', ')}]`);
+    }
 
   } catch (err) {
     // silent
@@ -1669,7 +2724,24 @@ async function runInference(camId) {
 }
 
 // ===== XAI / HEATMAP GENERATOR =====
+// Method: occlusion sensitivity. For every patch in a grid, replace the patch
+// pixels with a BLURRED version of the same patch (not solid grey — grey
+// introduces synthetic edges the model never saw during training). Compare
+// the predicted class probability to the baseline; the drop is positive
+// evidence ("this region supports the answer"), the rise is negative evidence
+// ("this region was a distractor"). Visualised on a diverging red/blue map.
+
+let xaiCancelled = false;
+let xaiRunning = false;
+
+function stopXAI(id) {
+  if (!xaiRunning) return;
+  xaiCancelled = true;
+  log('warn', lang === 'pl' ? 'Zatrzymywanie analizy XAI...' : 'Stopping XAI analysis...');
+}
+
 async function runXAI(id) {
+  if (xaiRunning) return; // single-flight
   if (!inferModel) {
     log('warn', lang === 'pl' ? 'Najpierw załaduj lub wytrenuj model!' : 'Load or train a model first!');
     return;
@@ -1690,29 +2762,46 @@ async function runXAI(id) {
     return;
   }
 
+  const detailEl = document.getElementById('xai-detail-' + id);
+  const detailText = document.getElementById('xai-detail-text-' + id);
+  const thumbCv = document.getElementById('xai-thumb-' + id);
+  const progEl = document.getElementById('xai-prog-' + id);
+  if (detailEl) detailEl.style.display = 'none';
+  if (progEl) { progEl.style.display = 'block'; progEl.value = 0; }
+
   const canvas = document.getElementById('xai-vid-' + id);
   const overlay = document.getElementById('xai-overlay-' + id);
   if (!canvas || !overlay) return;
 
   const inputSize = (inferMetadata && inferMetadata.inputSize) || 224;
+  const block = document.getElementById(id);
+  setBlockStatus(block, 'running');
+  xaiRunning = true;
+  xaiCancelled = false;
 
+  try {
   // ── 1. Capture frame using EXACTLY the same preprocessing as inference ──
-  // runInference squishes the full video frame to inputSize×inputSize without any
-  // cropping (tf.browser.fromPixels(vid).resizeBilinear([inputSize, inputSize])).
-  // blockCapture() does the same: ctx.drawImage(vid, 0, 0, res, res).
-  // A center-crop would analyse different pixels than the model actually saw,
-  // making the heatmap misleading. Squish the full frame here too.
   canvas.width = inputSize;
   canvas.height = inputSize;
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(vid, 0, 0, inputSize, inputSize); // full-frame squish, matching inference
+  ctx.drawImage(vid, 0, 0, inputSize, inputSize);
   const frameImageData = ctx.getImageData(0, 0, inputSize, inputSize);
 
+  // ── 1b. Pre-compute a heavily-blurred copy of the frame for occlusion.
+  // Replacing a patch with its blurred counterpart removes information without
+  // adding synthetic edges (solid grey introduces artifacts the model never
+  // saw during training). One blur op on the whole canvas is far cheaper than
+  // synthesising blurred pixels per patch.
+  const blurCanvas = document.createElement('canvas');
+  blurCanvas.width = inputSize;
+  blurCanvas.height = inputSize;
+  const bctx = blurCanvas.getContext('2d');
+  bctx.filter = 'blur(12px)';
+  bctx.drawImage(canvas, 0, 0);
+  bctx.filter = 'none';
+  const blurredData = bctx.getImageData(0, 0, inputSize, inputSize).data;
+
   // ── 2. Size the overlay to the container's physical pixel dimensions ──
-  // The canvas above is drawn at inputSize×inputSize model pixels (shown in a
-  // fixed CSS container). The overlay must cover that same visual area exactly.
-  // Using devicePixelRatio makes the heatmap crisp on HiDPI/Retina screens
-  // instead of upscaling a 224-pixel canvas to fill 448 physical pixels.
   const wrap = canvas.parentElement;
   const displayW = wrap.clientWidth || inputSize;
   const displayH = wrap.clientHeight || inputSize;
@@ -1724,20 +2813,37 @@ async function runXAI(id) {
   const scaleX = overlay.width / inputSize;
   const scaleY = overlay.height / inputSize;
 
-  // ── 3. Base prediction on the captured frame ──
-  // Explicit tensor disposal instead of tf.tidy returning a plain JS object,
-  // which was technically correct but fragile and misleading.
-  let baseClass, baseConf;
+  // ── 3. Baseline prediction on the unmodified frame ──
+  let baseClass, baseConf, basePreds;
   {
     const tInput = tf.browser.fromPixels(frameImageData).toFloat().div(255).expandDims(0);
     const features = baseModel.predict(tInput);
     const predTensor = inferModel.predict(features);
-    const preds = await predTensor.data();
+    basePreds = await predTensor.data();
     tInput.dispose();
     features.dispose();
     predTensor.dispose();
-    baseClass = Array.from(preds).reduce((best, v, i) => v > preds[best] ? i : best, 0);
-    baseConf = preds[baseClass];
+    baseClass = Array.from(basePreds).reduce((best, v, i) => v > basePreds[best] ? i : best, 0);
+    baseConf = basePreds[baseClass];
+  }
+
+  // ── 3b. Method branch: saliency vs occlusion ──
+  // Saliency uses |grad of class score w.r.t. input pixels| — one forward +
+  // one backward pass through both models. Much faster than occlusion when it
+  // works, but TFJS GraphModels imported from Kaggle don't always support
+  // backprop through every op. On failure we fall through to occlusion.
+  const methodEl = document.getElementById('xai-method-' + id);
+  const method = methodEl ? methodEl.value : 'occlusion';
+  if (method === 'saliency') {
+    const ok = await runXAISaliency({
+      id, canvas, overlay, frameImageData, inputSize,
+      scaleX, scaleY, baseClass, baseConf, basePreds,
+      resultEl, detailEl, detailText, thumbCv, progEl, block
+    });
+    if (ok) return; // finally clause cleans up xaiRunning, etc.
+    log('warn', lang === 'pl'
+      ? 'Saliency niedostępny dla tego modelu — przełączam na okluzję'
+      : 'Saliency unavailable for this model — falling back to occlusion');
   }
 
   const patchSizeEl = document.getElementById('xai-patch-' + id);
@@ -1746,111 +2852,305 @@ async function runXAI(id) {
 
   const gridW = Math.ceil(inputSize / STRIDE);
   const gridH = Math.ceil(inputSize / STRIDE);
+  // Signed importance: + = patch supports prediction, - = distractor.
   const heatmap = new Float32Array(gridW * gridH);
+  // Full per-patch prediction vector for the counterfactual narrative.
+  const patchPreds = new Array(gridW * gridH);
 
-  await new Promise(r => setTimeout(r, 50)); // let "Analyzing..." render
+  await new Promise(r => setTimeout(r, 30));
 
-  // ── 4. Occlusion sensitivity ──
-  // Reuse a single pixel buffer — reset to original on each iteration instead
-  // of allocating a fresh Uint8ClampedArray (49+ × 200KB = wasteful).
-  const occBuf = new Uint8ClampedArray(frameImageData.data.length);
+  // ── 4. Occlusion loop, BATCHED per row ──
+  // Building a tensor with `gridW` occluded variants and running ONE predict()
+  // per row is ~10x faster than the previous one-predict-per-patch loop.
   for (let y = 0; y < gridH; y++) {
+    if (xaiCancelled) throw new Error('cancelled');
+    const rowImageDatas = [];
     for (let x = 0; x < gridW; x++) {
-      // Reset to original frame, then grey-out only this patch
-      occBuf.set(frameImageData.data);
+      const buf = new Uint8ClampedArray(frameImageData.data);
+      // Replace patch pixels with their blurred counterparts
       for (let py = 0; py < PATCH_SIZE; py++) {
         for (let px = 0; px < PATCH_SIZE; px++) {
           const ix = x * STRIDE + px;
           const iy = y * STRIDE + py;
           if (ix < inputSize && iy < inputSize) {
             const i4 = (iy * inputSize + ix) * 4;
-            occBuf[i4] = occBuf[i4 + 1] = occBuf[i4 + 2] = 128;
+            buf[i4]     = blurredData[i4];
+            buf[i4 + 1] = blurredData[i4 + 1];
+            buf[i4 + 2] = blurredData[i4 + 2];
           }
         }
       }
+      rowImageDatas.push(new ImageData(buf, inputSize, inputSize));
+    }
 
-      // tf.browser.fromPixels reads the ImageData synchronously — occBuf is safe to reuse next iter
-      const imgOcc = new ImageData(occBuf, inputSize, inputSize);
-      const tOcc = tf.browser.fromPixels(imgOcc).toFloat().div(255).expandDims(0);
-      const featOcc = baseModel.predict(tOcc);
-      const predOcc = inferModel.predict(featOcc);
-      const predsOcc = await predOcc.data();
-      tOcc.dispose();
-      featOcc.dispose();
-      predOcc.dispose();
+    const batchTensor = tf.tidy(() => tf.stack(
+      rowImageDatas.map(im => tf.browser.fromPixels(im).toFloat().div(255))
+    ));
+    const featBatch = baseModel.predict(batchTensor);
+    const predBatch = inferModel.predict(featBatch);
+    const predsArr = await predBatch.array();
+    batchTensor.dispose();
+    featBatch.dispose();
+    predBatch.dispose();
 
-      heatmap[y * gridW + x] = Math.max(0, baseConf - predsOcc[baseClass]);
+    for (let x = 0; x < gridW; x++) {
+      const idx = y * gridW + x;
+      patchPreds[idx] = predsArr[x];
+      heatmap[idx] = baseConf - predsArr[x][baseClass];
+    }
 
-      if (x % 4 === 0) await new Promise(r => setTimeout(r, 0));
+    if (progEl) progEl.value = Math.round(((y + 1) / gridH) * 100);
+    renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE,
+      overlay.width / inputSize, overlay.height / inputSize);
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  // ── 5. Final render + counterfactual narrative ──
+  renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY);
+
+  // Find the most-supportive patch (largest positive importance)
+  let bestIdx = 0;
+  for (let i = 1; i < heatmap.length; i++) {
+    if (heatmap[i] > heatmap[bestIdx]) bestIdx = i;
+  }
+  const bestX = (bestIdx % gridW) * STRIDE;
+  const bestY = Math.floor(bestIdx / gridW) * STRIDE;
+  const bestDrop = heatmap[bestIdx];
+  const counterPreds = patchPreds[bestIdx] || basePreds;
+  let counterClass = 0;
+  for (let i = 1; i < counterPreds.length; i++) {
+    if (counterPreds[i] > counterPreds[counterClass]) counterClass = i;
+  }
+
+  if (resultEl) {
+    const lbl = classNames[baseClass];
+    const pct = (baseConf * 100).toFixed(1);
+    resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">${lbl} ${pct}%</span>`;
+  }
+
+  if (thumbCv && bestDrop > 0.001) {
+    thumbCv.width = 64; thumbCv.height = 64;
+    const tctx = thumbCv.getContext('2d');
+    tctx.imageSmoothingEnabled = true;
+    tctx.drawImage(canvas, bestX, bestY, PATCH_SIZE, PATCH_SIZE, 0, 0, 64, 64);
+  }
+  if (detailEl && detailText && bestDrop > 0.001) {
+    const dropPct = (bestDrop * 100).toFixed(1);
+    const counterLbl = classNames[counterClass];
+    const baseLbl = classNames[baseClass];
+    let txt;
+    if (counterClass !== baseClass) {
+      txt = lang === 'pl'
+        ? `Najwazniejszy obszar: ukrycie go zmniejsza pewnosc "${baseLbl}" o ${dropPct} pp i model wybralby "${counterLbl}".`
+        : `Most important region: hiding it drops "${baseLbl}" confidence by ${dropPct} pp; the model would predict "${counterLbl}" instead.`;
+    } else {
+      txt = lang === 'pl'
+        ? `Najwazniejszy obszar: ukrycie go zmniejsza pewnosc "${baseLbl}" o ${dropPct} pp.`
+        : `Most important region: hiding it drops "${baseLbl}" confidence by ${dropPct} pp.`;
+    }
+    detailText.textContent = txt;
+    detailEl.style.display = 'block';
+    // Per-class delta breakdown for the most-important patch.
+    // Shows: baseline % (grey track), occluded % (color fill), and the
+    // signed change in percentage points. Lets students see exactly which
+    // class the evidence shifts to when the hot region is hidden.
+    const classesEl = document.getElementById('xai-classes-' + id);
+    if (classesEl && counterPreds && counterPreds.length === basePreds.length) {
+      const rows = [];
+      for (let i = 0; i < basePreds.length; i++) {
+        const b = basePreds[i];
+        const o = counterPreds[i];
+        const deltaPP = (o - b) * 100;
+        const dir = deltaPP > 0.05 ? '+' : deltaPP < -0.05 ? '-' : '0';
+        const arrow = deltaPP > 0.05 ? '&uarr;' : deltaPP < -0.05 ? '&darr;' : '&middot;';
+        const color = deltaPP > 0.05 ? '#16A34A' : deltaPP < -0.05 ? '#DC2626' : '#94A3B8';
+        rows.push(`<div class="xai-class-row">
+  <span class="xai-class-dot" style="background:${classColors[i]}"></span>
+  <span class="xai-class-name" title="${classNames[i]}">${classNames[i]}</span>
+  <span class="xai-class-track">
+    <span class="xai-bar-base" style="width:${(b*100).toFixed(1)}%"></span>
+    <span class="xai-bar-occ" style="width:${(o*100).toFixed(1)}%;background:${classColors[i]}"></span>
+  </span>
+  <span class="xai-class-delta" style="color:${color}">${arrow}&nbsp;${Math.abs(deltaPP).toFixed(1)}pp</span>
+</div>`);
+      }
+      classesEl.innerHTML = rows.join('');
     }
   }
 
-  // ── 5. Render heatmap onto overlay ──
-  // Patches are drawn at display-scaled coordinates so the heatmap cells align
-  // precisely over the image pixels they represent, at any DPR or container size.
-  // Canvas blur smooths the hard patch edges without extra computation.
-  const maxImportance = Math.max(...heatmap, 1e-6);
+  log('eval', `XAI: "${classNames[baseClass]}" ${(baseConf * 100).toFixed(1)}% top patch drop=${(bestDrop * 100).toFixed(1)}pp${counterClass !== baseClass ? ' -> ' + classNames[counterClass] : ''}`);
+  setBlockStatus(block, 'done');
+  } catch (err) {
+    if (err.message === 'cancelled') {
+      log('warn', 'XAI cancelled');
+      if (resultEl) resultEl.textContent = lang === 'pl' ? 'Przerwano' : 'Cancelled';
+      setBlockStatus(block, 'idle');
+    } else {
+      log('error', 'XAI error: ' + err.message);
+      console.error(err);
+      setBlockStatus(block, 'error');
+    }
+  } finally {
+    xaiRunning = false;
+    xaiCancelled = false;
+    if (progEl) progEl.style.display = 'none';
+  }
+}
+
+// Diverging colormap renderer. Positive heatmap values (occlusion drops the
+// predicted class confidence) -> red. Negative values (occlusion raises it,
+// so that region was a distractor) -> blue. Magnitude controls alpha. No
+// vignette so the underlying image stays readable.
+function renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY) {
   const octx = overlay.getContext('2d');
   octx.clearRect(0, 0, overlay.width, overlay.height);
 
-  // Dark vignette makes hot regions pop
-  octx.fillStyle = 'rgba(0,0,0,0.55)';
+  let maxAbs = 1e-6;
+  for (let i = 0; i < heatmap.length; i++) {
+    const a = Math.abs(heatmap[i]);
+    if (a > maxAbs) maxAbs = a;
+  }
+
+  // Dark vignette behind the colors — dims the image uniformly so the
+  // red/blue regions stand out clearly even on bright video frames.
+  octx.fillStyle = 'rgba(0,0,0,0.45)';
   octx.fillRect(0, 0, overlay.width, overlay.height);
 
-  // Blur proportional to patch display size for a smooth gradient look
-  const blurPx = Math.round(PATCH_SIZE * scaleX * 0.45);
+  // Moderate blur smooths patch edges without washing out the signal.
+  const blurPx = Math.round(STRIDE * scaleX * 0.22);
   octx.filter = blurPx > 0 ? `blur(${blurPx}px)` : 'none';
 
   for (let y = 0; y < gridH; y++) {
     for (let x = 0; x < gridW; x++) {
-      const norm = heatmap[y * gridW + x] / maxImportance;
-      if (norm > 0.1) {
-        const hue = Math.round((1 - norm) * 50); // 50 (amber) → 0 (red)
-        const alpha = 0.35 + norm * 0.65;
-        octx.fillStyle = `hsla(${hue},100%,50%,${alpha})`;
-        // Full PATCH_SIZE (no gap) — gaps create false structure; blur handles the edge
-        octx.fillRect(
-          x * STRIDE * scaleX,
-          y * STRIDE * scaleY,
-          PATCH_SIZE * scaleX,
-          PATCH_SIZE * scaleY
-        );
-      }
+      const v = heatmap[y * gridW + x] / maxAbs;
+      const mag = Math.abs(v);
+      if (mag < 0.07) continue; // show more patches, suppress only near-zero
+      // Alpha scales from 0.50 at the cutoff to 1.0 at full magnitude —
+      // high-importance regions are fully opaque and unmissable.
+      const alpha = 0.50 + mag * 0.50;
+      octx.fillStyle = v > 0
+        ? `rgba(255,40,40,${alpha.toFixed(3)})`   // red — supports prediction
+        : `rgba(30,100,255,${alpha.toFixed(3)})`; // blue — distractor
+      octx.fillRect(
+        x * STRIDE * scaleX,
+        y * STRIDE * scaleY,
+        STRIDE * scaleX,
+        STRIDE * scaleY
+      );
     }
   }
   octx.filter = 'none';
-
-  // ── 6. Show result ──
-  if (resultEl) {
-    const lbl = classNames[baseClass];
-    const pct = (baseConf * 100).toFixed(1);
-    resultEl.innerHTML = `<span style="color:${CLASS_COLORS[baseClass]}">${lbl} \u2014 ${pct}%</span>`;
-    log('eval', lang === 'pl' ? `XAI: "${lbl}" (${pct}%)` : `XAI: "${lbl}" (${pct}%)`);
-  }
 }
 
-function drawOverlay(id, label, conf, classIdx) {
-  const wrap = document.getElementById('show-wrap-' + id);
-  const overlay = document.getElementById('show-overlay-' + id);
-  if (!overlay || !wrap) return;
-  overlay.width = wrap.clientWidth || 256;
-  overlay.height = wrap.clientHeight || 120;
-  const ctx = overlay.getContext('2d');
-  ctx.clearRect(0, 0, overlay.width, overlay.height);
-  if (!overlay.width || !overlay.height) return;
-  const color = CLASS_COLORS[classIdx] || '#059669';
-  // Background bar at bottom of video
-  ctx.fillStyle = color + 'CC';
-  ctx.fillRect(0, overlay.height - 38, overlay.width, 38);
-  // Label text
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 13px Inter, sans-serif';
-  ctx.fillText(`${label}  ${(conf * 100).toFixed(1)}%`, 10, overlay.height - 22);
-  // Confidence bar
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.fillRect(10, overlay.height - 14, overlay.width - 20, 6);
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(10, overlay.height - 14, (overlay.width - 20) * conf, 6);
+// Gradient-based saliency: |dy/dx| where y = predicted class score and x = input
+// pixels. One forward + one backward pass. Returns true if rendering succeeded,
+// false if the model doesn't support backprop (caller falls back to occlusion).
+async function runXAISaliency(p) {
+  const {
+    canvas, overlay, frameImageData, inputSize, baseClass, baseConf, basePreds,
+    resultEl, detailEl, detailText, thumbCv, progEl, block
+  } = p;
+  if (progEl) progEl.value = 30;
+
+  // Compute |gradient of class score w.r.t. input| via tf.grad. The score is
+  // probs[baseClass] — taking just the predicted class, so the saliency
+  // answers "which input pixels most affect *this specific class's* output?".
+  let saliency2D = null;
+  try {
+    saliency2D = tf.tidy(() => {
+      const inputT = tf.browser.fromPixels(frameImageData).toFloat().div(255).expandDims(0);
+      const gradFn = tf.grad((inp) => {
+        const features = baseModel.predict(inp);
+        const probs = inferModel.predict(features);
+        // gather the scalar class score; .sum() to make it a 0-D scalar
+        return probs.gather([baseClass], 1).sum();
+      });
+      const grads = gradFn(inputT);
+      // Aggregate across RGB channels, magnitude, drop batch dim
+      return grads.abs().max(-1).squeeze();
+    });
+    if (progEl) progEl.value = 70;
+    const arr = await saliency2D.array(); // [inputSize, inputSize]
+    saliency2D.dispose();
+    saliency2D = null;
+
+    // Find max for normalization + argmax for the most-important pixel
+    let max = 1e-9;
+    let argY = 0, argX = 0;
+    for (let y = 0; y < inputSize; y++) {
+      for (let x = 0; x < inputSize; x++) {
+        const v = arr[y][x];
+        if (v > max) { max = v; argY = y; argX = x; }
+      }
+    }
+
+    // Render saliency on overlay.
+    // Alpha uses a power curve (^0.35) so mid-range gradients are visible,
+    // not just the handful of pixels at the absolute maximum.
+    // Same dark vignette base as the occlusion heatmap so colors pop.
+    const off = document.createElement('canvas');
+    off.width = inputSize;
+    off.height = inputSize;
+    const offCtx = off.getContext('2d');
+    const imgData = offCtx.createImageData(inputSize, inputSize);
+    for (let y = 0; y < inputSize; y++) {
+      for (let x = 0; x < inputSize; x++) {
+        const v = Math.min(1, arr[y][x] / max);
+        if (v < 0.04) continue; // skip noise floor
+        const alpha = Math.pow(v, 0.35); // gamma boost — weak gradients visible
+        const i = (y * inputSize + x) * 4;
+        imgData.data[i]     = 255;
+        imgData.data[i + 1] = 40;
+        imgData.data[i + 2] = 40;
+        imgData.data[i + 3] = Math.round(alpha * 255);
+      }
+    }
+    offCtx.putImageData(imgData, 0, 0);
+    const octx = overlay.getContext('2d');
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    // Dark base matches the occlusion heatmap style — dims the video so
+    // the bright red saliency regions are immediately obvious.
+    octx.fillStyle = 'rgba(0,0,0,0.45)';
+    octx.fillRect(0, 0, overlay.width, overlay.height);
+    octx.imageSmoothingEnabled = true;
+    octx.filter = 'blur(8px)';
+    octx.drawImage(off, 0, 0, overlay.width, overlay.height);
+    octx.filter = 'none';
+
+    // Headline result + thumbnail of the most-important region
+    if (resultEl) {
+      const lbl = classNames[baseClass];
+      const pct = (baseConf * 100).toFixed(1);
+      resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">${lbl} ${pct}%</span>`;
+    }
+    if (thumbCv) {
+      const half = 32; // 64×64 thumb centred on hottest pixel
+      const sx = Math.max(0, Math.min(inputSize - half * 2, argX - half));
+      const sy = Math.max(0, Math.min(inputSize - half * 2, argY - half));
+      thumbCv.width = 64; thumbCv.height = 64;
+      const tctx = thumbCv.getContext('2d');
+      tctx.imageSmoothingEnabled = true;
+      tctx.drawImage(canvas, sx, sy, half * 2, half * 2, 0, 0, 64, 64);
+    }
+    if (detailEl && detailText) {
+      const lbl = classNames[baseClass];
+      detailText.textContent = lang === 'pl'
+        ? `Saliency: piksele zmieniające najmocniej pewność „${lbl}". Czerwone obszary = wrażliwe na drobne zmiany jasności/koloru.`
+        : `Saliency: pixels that most affect the "${lbl}" score. Red regions = sensitive to small changes in brightness/colour.`;
+      detailEl.style.display = 'block';
+      // Saliency is a single-pass method — no per-class deltas. Hide the row.
+      const classesEl = document.getElementById('xai-classes-' + p.id);
+      if (classesEl) classesEl.innerHTML = '';
+    }
+    if (progEl) progEl.value = 100;
+    log('eval', `XAI saliency: "${classNames[baseClass]}" ${(baseConf * 100).toFixed(1)}% argmax=(${argX},${argY})`);
+    setBlockStatus(block, 'done');
+    return true;
+  } catch (err) {
+    if (saliency2D) try { saliency2D.dispose(); } catch (_) {}
+    console.warn('Saliency failed:', err);
+    return false;
+  }
 }
 
 function drawHistChart(id) {
@@ -1865,7 +3165,7 @@ function drawHistChart(id) {
   ctx.fillRect(0, 0, W, H);
   const barW = W / 30;
   predHistory.forEach((p, i) => {
-    ctx.fillStyle = CLASS_COLORS[p.idx] || '#059669';
+    ctx.fillStyle = classColors[p.idx] || '#059669';
     const bh = p.conf * (H - 4);
     ctx.fillRect(i * barW, H - bh - 2, barW - 2, bh);
   });
@@ -1885,12 +3185,88 @@ function setFlowPhase(phase) {
 function clearFlowPhase() {
   document.querySelectorAll('.flow-pill').forEach(pill => pill.classList.remove('active'));
 }
+
+// Show a transient "trained — now save" toast and pulse the Save Model block.
+function notifyModelTrained() {
+  // Pulse: highlight every save-model block briefly. If none on canvas, suggest adding one.
+  const saveBlocks = placedBlocks.filter(b => b.type === 'save-model');
+  saveBlocks.forEach(b => {
+    if (b.card) {
+      b.card.classList.add('save-prompt');
+      setTimeout(() => b.card.classList.remove('save-prompt'), 6000);
+    }
+  });
+  showToast(lang === 'pl'
+    ? '✅ Model gotowy — zapisz go, zanim zamkniesz kartę!'
+    : '✅ Model trained — save it before closing the tab!', 'success');
+  if (saveBlocks.length === 0) {
+    setTimeout(() => {
+      ensureBlockOnCanvas('save-model');
+    }, 800);
+  }
+}
+
+// Lightweight bottom-right toast notifications. Multiple stack vertically.
+function showToast(text, kind) {
+  let stack = document.getElementById('toast-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'toast-stack';
+    document.body.appendChild(stack);
+  }
+  const el = document.createElement('div');
+  el.className = 'toast toast-' + (kind || 'info');
+  el.textContent = text;
+  stack.appendChild(el);
+  // Trigger entrance transition
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 400);
+  }, 5500);
+}
+
+// Warn before unload if a fresh model has not been saved.
+window.addEventListener('beforeunload', (e) => {
+  if (fullModel && !modelSaved) {
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+  }
+});
+
+// Pipeline-wide readiness evaluation. Sets the .done class on each phase pill
+// based on global pipeline state. Called from every mutation path so the
+// flowbar always reflects what the user has accomplished.
+let modelSaved = false;
+function evaluatePipelineState() {
+  const hasData = capturedSamples.some(a => a && a.length > 0);
+  const hasLabels = classNames.length >= 2 && classNames.every(n => (n || '').trim().length > 0);
+  const phaseStates = {
+    data: hasData,
+    label: hasLabels && hasData,
+    prep: !!preparedData,
+    model: !!baseModel,
+    train: !!fullModel,
+    deploy: modelSaved,
+    infer: !!inferModel
+  };
+  // Cached NodeList — set in DOMContentLoaded, reused on every state change.
+  const pills = _flowPillEls || (_flowPillEls = document.querySelectorAll('.flow-pill'));
+  for (let i = 0; i < pills.length; i++) {
+    const pill = pills[i];
+    pill.classList.toggle('done', !!phaseStates[pill.dataset.phase]);
+  }
+  // Notify other UI that needs to re-render on state change
+  if (typeof refreshAllPrereqStrips === 'function') refreshAllPrereqStrips();
+  if (typeof refreshEmptyState === 'function') refreshEmptyState();
+}
 const BLOCK_PHASE_MAP = {
   'camera-input': 'data', 'label-classes': 'label',
   'prepare-data': 'prep', 'pretrained-model': 'model',
   'train-model': 'train', 'save-model': 'deploy',
   'upload-model': 'data', 'camera-infer': 'data',
-  'predict': 'deploy', 'show-results': 'deploy'
+  'show-results': 'infer'
 };
 
 // ===== PIPELINE RUNNER =====
@@ -1916,21 +3292,9 @@ async function runPipeline() {
         break;
     }
     // Edu mode annotations
-    if (EDU_MODE) {
+    if (eduMode) {
       const ann = document.getElementById('ann-' + id);
-      const annotations = {
-        'camera-input': '📷 Zbieramy dane treningowe — zdjęcia dla każdej klasy',
-        'label-classes': '🏷️ Etykiety identyfikują każdą kategorię obrazów',
-        'prepare-data': '⚙️ Zdjęcia są przeskalowane i augmentowane w Web Worker',
-        'pretrained-model': '🧠 MobileNet widział 1.2M zdjęć — "transfer learning"',
-        'train-model': '🚀 model.fit() dostosowuje wagi do naszych klas',
-        'save-model': '💾 Wagi modelu zapisywane w IndexedDB przeglądarki',
-        'upload-model': '📤 Wczytujemy wagi modelu z pliku .json + .bin',
-        'camera-infer': '📷 Kamera streamuje klatki do predykcji',
-        'predict': '🎯 model.predict() zwraca prawdopodobieństwa klas',
-        'show-results': '📊 Wynik z najwyższym prawdopodobieństwem = predykcja'
-      };
-      if (ann && annotations[b.type]) ann.textContent = annotations[b.type];
+      if (ann) ann.textContent = getEduAnnotation(b.type) || '';
     }
     await tf.nextFrame();
   }
@@ -1969,17 +3333,28 @@ function renderGuideSteps() {
 }
 
 // ===== QUICK START — Pre-populate canvas =====
-function quickStart() {
+function quickStartTraining() {
   const types = ['camera-input', 'label-classes', 'prepare-data', 'pretrained-model', 'train-model', 'save-model'];
   types.forEach((type, i) => placeBlock(type, 16 + i * 296, 40));
   log('step', lang === 'pl' ? 'Szybki start: bloki treningowe dodane!' : 'Quick start: training blocks placed!');
 }
 
-// ===== EDU MODE =====
-if (EDU_MODE) {
-  document.body.classList.add('edu-mode');
-  document.body.style.fontSize = '18px';
+function quickStartInference() {
+  const types = ['upload-model', 'camera-infer', 'show-results'];
+  types.forEach((type, i) => placeBlock(type, 16 + i * 296, 40));
+  log('step', lang === 'pl' ? 'Szybki start: bloki predykcji dodane!' : 'Quick start: inference blocks placed!');
 }
+
+// Toggle the empty-state placeholder when the canvas has zero blocks.
+function refreshEmptyState() {
+  const el = document.getElementById('empty-state');
+  if (!el) return;
+  el.classList.toggle('hidden', placedBlocks.length > 0);
+}
+
+// ===== EDU MODE =====
+// (CSS class applied on DOMContentLoaded — document.body may not exist yet
+//  if this script runs before <body>.)
 
 // ===== INIT =====
 window.activeClass = 0;
@@ -1987,6 +3362,16 @@ window.activeClass = 0;
 document.addEventListener('DOMContentLoaded', () => {
   applyLang();
   renderGuideSteps();
+  if (eduMode) {
+    document.body.classList.add('edu-mode');
+    document.getElementById('btn-edu')?.classList.add('active');
+  }
+  // Restore previously-saved canvas layout (block types/positions + class
+  // names). Done before evaluatePipelineState so prereq strips render once
+  // with the correct context.
+  restoreCanvasState();
+  evaluatePipelineState();
+  if (typeof refreshEmptyState === 'function') refreshEmptyState();
 
   // Canvas scroll sync
   const canvas = document.getElementById('canvas');
@@ -1995,8 +3380,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }, { passive: false });
 
   // Quick start if EDU mode
-  if (EDU_MODE) {
-    setTimeout(quickStart, 300);
+  if (eduMode) {
+    setTimeout(quickStartTraining, 300);
   }
 
   log('step', lang === 'pl' ? 'KlockiAI gotowy — przeciągnij bloki na tablicę!' : 'KlockiAI ready — drag blocks onto the canvas!');
