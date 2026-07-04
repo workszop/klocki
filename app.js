@@ -126,7 +126,7 @@ const STRINGS = {
     btn_clear_dataset: '🗑 Usuń z pamięci',
     btn_load_dataset: '📂 Wczytaj dataset',
     empty_title: 'Pusty obszar roboczy',
-    empty_subtitle: 'Przeciągnij blok z lewej strony albo użyj szablonu',
+    empty_subtitle: 'Kliknij lub przeciągnij blok z lewej strony albo użyj szablonu',
     empty_qs_train: '🎓 Szybki start: Trening',
     empty_qs_infer: '🔮 Szybki start: Predykcja',
     empty_hint: 'Szablony dodają wszystkie potrzebne bloki w odpowiedniej kolejności.',
@@ -206,7 +206,7 @@ const STRINGS = {
     btn_clear_dataset: '🗑 Delete from storage',
     btn_load_dataset: '📂 Load dataset',
     empty_title: 'Empty workspace',
-    empty_subtitle: 'Drag a block from the left, or use a template',
+    empty_subtitle: 'Click or drag a block from the left, or use a template',
     empty_qs_train: '🎓 Quick start: Training',
     empty_qs_infer: '🔮 Quick start: Inference',
     empty_hint: 'Templates add every block you need, in the right order.',
@@ -356,6 +356,20 @@ function clearLog() { document.getElementById('log-entries').innerHTML = ''; }
 function paletteDragStart(e) {
   draggedPaletteType = e.currentTarget.dataset.type;
   e.dataTransfer.effectAllowed = 'copy';
+}
+
+// Click-to-add: place the palette block on the canvas without dragging. Drops it
+// into the currently-visible area of the canvas, staggered so blocks don't stack
+// exactly on top of each other. (Drag-and-drop doesn't fire a click, so the two
+// input methods don't collide.)
+function paletteAddBlock(el) {
+  const type = el && el.dataset ? el.dataset.type : null;
+  if (!type) return;
+  const canvas = document.getElementById('canvas');
+  const sx = canvas ? canvas.scrollLeft : 0;
+  const sy = canvas ? canvas.scrollTop : 0;
+  const n = placedBlocks.length;
+  placeBlock(type, sx + 24 + (n % 6) * 26, sy + 24 + (n % 6) * 26);
 }
 function canvasDragOver(e) {
   e.preventDefault();
@@ -1158,7 +1172,8 @@ ${canDelete ? `<button class="class-delete-btn class-delete-class-btn" onclick="
 </div>
 <div id="thumbs-label-${i}-${id}" class="thumb-strip"></div>`;
   }
-  rows += `<button class="bk-btn" style="margin-top:6px;background:#64748B;font-size:11px" onclick="addClass('${id}')">${lang === 'pl' ? 'Dodaj klas\u0119' : 'Add class'}</button>`;
+  // Class adding lives in the Camera/Data block; the Labels block only shows and
+  // renames the existing classes.
   return `<div id="classes-${id}">${rows}</div>`;
 }
 
@@ -4481,6 +4496,11 @@ document.addEventListener('DOMContentLoaded', () => {
   restoreCanvasState();
   evaluatePipelineState();
   if (typeof refreshEmptyState === 'function') refreshEmptyState();
+
+  // Palette blocks can be added by a plain click (in addition to drag-and-drop).
+  document.querySelectorAll('.palette-block').forEach(el => {
+    el.addEventListener('click', () => paletteAddBlock(el));
+  });
 
   // Quick start if EDU mode — but ONLY when the canvas is empty. restoreCanvasState()
   // above may have already rebuilt a saved pipeline; adding another one on every
