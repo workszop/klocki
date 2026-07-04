@@ -306,12 +306,15 @@
         </div>
         <div>
             <div class="logo-text">MobileNet V3 Small</div>
-            <div class="logo-sub">Architecture Explorer &amp; Live Inference</div>
+            <div class="logo-sub" data-i18n="sub">Architecture Explorer &amp; Live Inference</div>
         </div>
     </div>
-    <div id="status-pill" class="status-pill">
-        <div id="status-dot" class="status-dot"></div>
-        <span id="status-text">Not loaded</span>
+    <div style="display:flex;align-items:center;gap:10px">
+        <button id="exp-lang" onclick="toggleExpLang()" style="background:#334155;color:#e2e8f0;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">EN</button>
+        <div id="status-pill" class="status-pill">
+            <div id="status-dot" class="status-dot"></div>
+            <span id="status-text" data-i18n="st_notloaded">Not loaded</span>
+        </div>
     </div>
 </div>
 <!-- MAIN LAYOUT -->
@@ -320,14 +323,14 @@
     <div class="left-panel">
         <!-- Load model -->
         <div class="panel-section">
-            <div class="panel-title">Model</div>
+            <div class="panel-title" data-i18n="p_model">Model</div>
             <button class="btn btn-primary" id="load-btn" onclick="loadModel()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                     <polyline points="7 10 12 15 17 10"/>
                     <line x1="12" x2="12" y1="15" y2="3"/>
                 </svg>
-                Load MobileNet V3 Small
+                <span data-i18n="btn_load">Load MobileNet V3 Small</span>
             </button>
             <div class="progress-wrap" id="progress-wrap">
                 <div class="progress-bar" id="progress-bar"></div>
@@ -336,7 +339,7 @@
         </div>
         <!-- Upload image -->
         <div class="panel-section">
-            <div class="panel-title">Image Input</div>
+            <div class="panel-title" data-i18n="p_image">Image Input</div>
             <div class="upload-area" id="upload-area">
                 <input type="file" accept="image/*" id="image-input" onchange="handleImageUpload(event)">
                 <div class="upload-icon">
@@ -345,60 +348,60 @@
                         <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
                     </svg>
                 </div>
-                <div class="upload-text">Drop image or click to browse</div>
-                <div class="upload-hint">PNG, JPG, WebP supported</div>
+                <div class="upload-text" data-i18n="up_text">Drop image or click to browse</div>
+                <div class="upload-hint" data-i18n="up_hint">PNG, JPG, WebP supported</div>
             </div>
             <img id="preview-img" src="" alt="preview">
             <button class="btn btn-secondary" id="classify-btn" onclick="classify()" disabled style="margin-top:12px">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                 </svg>
-                Run Inference
+                <span data-i18n="btn_run">Run Inference</span>
             </button>
             <button class="btn btn-secondary" id="demo-btn" onclick="loadDemoImage()" disabled>
-                Use Sample Image
+                <span data-i18n="btn_demo">Use Sample Image</span>
             </button>
         </div>
         <!-- Model stats -->
         <div class="panel-section">
-            <div class="panel-title">Model Stats</div>
+            <div class="panel-title" data-i18n="p_stats">Model Stats</div>
             <div class="stat-grid">
                 <div class="stat-card">
                     <div class="stat-value" id="stat-params">—</div>
-                    <div class="stat-label">Parameters</div>
+                    <div class="stat-label" data-i18n="s_params">Parameters</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="stat-layers">—</div>
-                    <div class="stat-label">Layers</div>
+                    <div class="stat-label" data-i18n="s_layers">Layers</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="stat-input">—</div>
-                    <div class="stat-label">Input Size</div>
+                    <div class="stat-label" data-i18n="s_input">Input Size</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="stat-classes">1000</div>
-                    <div class="stat-label">Classes</div>
+                    <div class="stat-label" data-i18n="s_classes">Classes</div>
                 </div>
             </div>
         </div>
         <!-- Predictions -->
         <div class="panel-section">
-            <div class="panel-title">Predictions</div>
+            <div class="panel-title" data-i18n="p_pred">Predictions</div>
             <div id="predictions">
-                <div style="font-size:12px;color:#aaa">Run inference to see results</div>
+                <div style="font-size:12px;color:#aaa" data-i18n="pred_empty">Run inference to see results</div>
             </div>
         </div>
         <!-- Inference time -->
         <div class="panel-section">
-            <div class="panel-title">Performance</div>
+            <div class="panel-title" data-i18n="p_perf">Performance</div>
             <div class="stat-grid">
                 <div class="stat-card">
                     <div class="stat-value" id="stat-time">—</div>
-                    <div class="stat-label">Inference (ms)</div>
+                    <div class="stat-label" data-i18n="s_time">Inference (ms)</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="stat-backend">—</div>
-                    <div class="stat-label">Backend</div>
+                    <div class="stat-label" data-i18n="s_backend">Backend</div>
                 </div>
             </div>
         </div>
@@ -407,15 +410,15 @@
     <div class="right-panel">
         <!-- Tabs -->
         <div class="tabs">
-            <div class="tab active" onclick="switchTab('architecture', this)">Architecture</div>
-            <div class="tab" onclick="switchTab('features', this)">Feature Maps</div>
-            <div class="tab" onclick="switchTab('about', this)">About</div>
+            <div class="tab active" onclick="switchTab('architecture', this)" data-i18n="tab_arch">Architecture</div>
+            <div class="tab" onclick="switchTab('features', this)" data-i18n="tab_feat">Feature Maps</div>
+            <div class="tab" onclick="switchTab('about', this)" data-i18n="tab_about">About</div>
         </div>
         <!-- ARCHITECTURE TAB -->
         <div id="tab-architecture" class="tab-content active">
             <div class="model-info">
                 <h3>MobileNet V3 Small</h3>
-                <p>Optimized for mobile/edge inference using Neural Architecture Search (NAS) + NetAdapt. Features hard-swish activation, squeeze-and-excitation modules, and depthwise separable convolutions.</p>
+                <p data-i18n="mi_desc">Optimized for mobile/edge inference using Neural Architecture Search (NAS) + NetAdapt. Features hard-swish activation, squeeze-and-excitation modules, and depthwise separable convolutions.</p>
                 <div class="model-info-stats">
                     <div><strong>2.5M</strong>Parameters</div>
                     <div><strong>~6MB</strong>Download</div>
@@ -424,8 +427,8 @@
                 </div>
             </div>
             <div class="section-header">
-                <h2>Layer Architecture</h2>
-                <p>Click any layer to see details. Showing the complete MobileNet V3 Small block structure.</p>
+                <h2 data-i18n="h_layers">Layer Architecture</h2>
+                <p data-i18n="h_layers_sub">Click any layer to see details. Showing the complete MobileNet V3 Small block structure.</p>
             </div>
             <div class="arch-container">
                 <div class="arch-flow" id="arch-flow">
@@ -441,8 +444,8 @@
         <!-- FEATURE MAPS TAB -->
         <div id="tab-features" class="tab-content">
             <div class="section-header">
-                <h2>Feature Map Visualization</h2>
-                <p>A <strong>schematic</strong> of how spatial detail collapses as depth increases, plus the model's <strong>real</strong> 1024-dim embedding at the bottom. The per-stage grids are illustrative (the graph model doesn't expose named intermediate tensors); the final embedding is a genuine forward pass. Load a model and run inference to populate.</p>
+                <h2 data-i18n="h_feat">Feature Map Visualization</h2>
+                <p data-i18n="h_feat_sub">A <strong>schematic</strong> of how spatial detail collapses as depth increases, plus the model's <strong>real</strong> 1024-dim embedding at the bottom. The per-stage grids are illustrative (the graph model doesn't expose named intermediate tensors); the final embedding is a genuine forward pass. Load a model and run inference to populate.</p>
             </div>
             <div id="fmap-container">
                 <div class="empty-state">
@@ -458,7 +461,7 @@
         <!-- ABOUT TAB -->
         <div id="tab-about" class="tab-content">
             <div class="section-header">
-                <h2>About MobileNet V3</h2>
+                <h2 data-i18n="h_about">About MobileNet V3</h2>
                 <p>A deep dive into the design decisions behind this efficient architecture.</p>
             </div>
             <div style="display:grid;gap:20px">
@@ -547,6 +550,62 @@ function escapeHtmlX(s) {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 // =====================================================================
+// i18n — shares the 'ml-blocks-lang' key with the main KlockiAI app.
+// =====================================================================
+const STRINGS_EXP = {
+    en: {
+        sub: 'Architecture Explorer & Live Inference',
+        p_model: 'Model', p_image: 'Image Input', p_stats: 'Model Stats', p_pred: 'Predictions', p_perf: 'Performance',
+        btn_load: 'Load MobileNet V3 Small', btn_run: 'Run Inference', btn_demo: 'Use Sample Image',
+        up_text: 'Drop image or click to browse', up_hint: 'PNG, JPG, WebP supported',
+        s_params: 'Parameters', s_layers: 'Layers', s_input: 'Input Size', s_classes: 'Classes', s_time: 'Inference (ms)', s_backend: 'Backend',
+        pred_empty: 'Run inference to see results',
+        tab_arch: 'Architecture', tab_feat: 'Feature Maps', tab_about: 'About',
+        mi_desc: 'Optimized for mobile/edge inference using Neural Architecture Search (NAS) + NetAdapt. Features hard-swish activation, squeeze-and-excitation modules, and depthwise separable convolutions.',
+        h_layers: 'Layer Architecture', h_layers_sub: 'Click any layer to see details. Showing the complete MobileNet V3 Small block structure.',
+        h_feat: 'Feature Map Visualization',
+        h_about: 'About MobileNet V3',
+        st_notloaded: 'Not loaded', st_loading: 'Downloading model…', st_ready: 'Model ready', st_ready2: 'Ready — start the camera', st_fail: 'Load failed',
+        dl_weights: 'Downloading weights (~6 MB), please wait…', dl_ready: 'Model ready!'
+    },
+    pl: {
+        sub: 'Eksplorator architektury i predykcja na żywo',
+        p_model: 'Model', p_image: 'Obraz wejściowy', p_stats: 'Statystyki modelu', p_pred: 'Predykcje', p_perf: 'Wydajność',
+        btn_load: 'Załaduj MobileNet V3 Small', btn_run: 'Uruchom predykcję', btn_demo: 'Użyj przykładowego obrazu',
+        up_text: 'Upuść obraz lub kliknij, aby wybrać', up_hint: 'Obsługa PNG, JPG, WebP',
+        s_params: 'Parametry', s_layers: 'Warstwy', s_input: 'Rozmiar wejścia', s_classes: 'Klasy', s_time: 'Predykcja (ms)', s_backend: 'Backend',
+        pred_empty: 'Uruchom predykcję, aby zobaczyć wyniki',
+        tab_arch: 'Architektura', tab_feat: 'Mapy cech', tab_about: 'O modelu',
+        mi_desc: 'Zoptymalizowany do inferencji na urządzeniach mobilnych dzięki Neural Architecture Search (NAS) + NetAdapt. Wykorzystuje hard-swish, moduły squeeze-and-excitation i separowalne konwolucje głębokościowe.',
+        h_layers: 'Architektura warstw', h_layers_sub: 'Kliknij warstwę, aby zobaczyć szczegóły. Pokazano pełną strukturę bloków MobileNet V3 Small.',
+        h_feat: 'Wizualizacja map cech',
+        h_about: 'O modelu MobileNet V3',
+        st_notloaded: 'Nie załadowano', st_loading: 'Pobieranie modelu…', st_ready: 'Model gotowy', st_ready2: 'Gotowe — uruchom kamerę', st_fail: 'Błąd ładowania',
+        dl_weights: 'Pobieranie wag (~6 MB), proszę czekać…', dl_ready: 'Model gotowy!'
+    }
+};
+let expLang = (localStorage.getItem('ml-blocks-lang') === 'pl') ? 'pl' : 'en';
+function expT(key) { return (STRINGS_EXP[expLang] && STRINGS_EXP[expLang][key]) || STRINGS_EXP.en[key] || key; }
+// Translate a hardcoded English runtime string by reverse-lookup of its key.
+function dynT(enText) {
+    for (const k in STRINGS_EXP.en) if (STRINGS_EXP.en[k] === enText) return expT(k);
+    return enText;
+}
+function applyExpLang() {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const k = el.getAttribute('data-i18n');
+        if (STRINGS_EXP[expLang] && STRINGS_EXP[expLang][k] != null) el.innerHTML = expT(k);
+    });
+    const btn = document.getElementById('exp-lang');
+    if (btn) btn.textContent = expLang === 'pl' ? 'EN' : 'PL';
+    document.documentElement.lang = expLang;
+}
+function toggleExpLang() {
+    expLang = expLang === 'pl' ? 'en' : 'pl';
+    localStorage.setItem('ml-blocks-lang', expLang);
+    applyExpLang();
+}
+// =====================================================================
 // State
 // =====================================================================
 // The real pretrained MobileNet V3-Small used by KlockiAI, loaded as two TF.js
@@ -616,7 +675,7 @@ async function loadModel() {
     const progressBar  = document.getElementById('progress-bar');
     const progressLabel = document.getElementById('progress-label');
     progressWrap.classList.add('visible');
-    progressLabel.textContent = 'Downloading weights (~6 MB), please wait…';
+    progressLabel.textContent = dynT('Downloading weights (~6 MB), please wait…');
     try {
         // Load both real V3-Small graph models + the ImageNet label list.
         const [classifier, feature, labelsText] = await Promise.all([
@@ -636,7 +695,7 @@ async function loadModel() {
         });
         progressBar.style.width = '100%';
         progressBar.classList.add('done');
-        progressLabel.textContent = 'Model ready!';
+        progressLabel.textContent = dynT('Model ready!');
         const backend = tf.getBackend();
         document.getElementById('stat-backend').textContent = backend.toUpperCase();
         document.getElementById('stat-params').textContent = '2.5M';
@@ -659,7 +718,7 @@ async function loadModel() {
 }
 function setStatus(state, text) {
     document.getElementById('status-dot').className = 'status-dot ' + state;
-    document.getElementById('status-text').textContent = text;
+    document.getElementById('status-text').textContent = dynT(text);
 }
 // =====================================================================
 // Image handling
@@ -891,6 +950,7 @@ function switchTab(name, el) {
 // =====================================================================
 renderArchitecture();
 selectLayer(ARCH[0]);
+applyExpLang();
 </script>
 </body>
 </html>
