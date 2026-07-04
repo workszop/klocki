@@ -4456,24 +4456,39 @@ function updatePipelineOrder() {
 // them out cleanly. The canvas scrolls horizontally to fit them all.
 function tidyUpCanvas() {
   if (!placedBlocks.length) return;
-  const sorted = pipelineSorted();
-  const COL_W = 300, START_X = 16, START_Y = 24, ROW_GAP = 40;
-  const place = (blocks, y) => {
+  const canvas = document.getElementById('canvas');
+  const COL_W = 300, START_X = 16, START_Y = 24, ROW_GAP = 28, GROUP_GAP = 56;
+  // How many columns fit in the visible canvas — wrap so a long pipeline never
+  // forces horizontal scrolling.
+  const avail = (canvas ? canvas.clientWidth : 1200) - START_X;
+  const cols = Math.max(1, Math.floor(avail / COL_W));
+
+  // Lay a group into a grid starting at startY, returning the bottom Y. Rows
+  // alternate direction (boustrophedon) so the connector lines snake down
+  // cleanly instead of jumping back across the whole canvas on each wrap.
+  const layoutGrid = (blocks, startY) => {
+    let y = startY, rowMaxH = 0, bottom = startY;
     blocks.forEach((b, i) => {
-      b.x = START_X + i * COL_W;
+      const rowIdx = Math.floor(i / cols);
+      const posInRow = i % cols;
+      if (posInRow === 0 && i > 0) { y += rowMaxH + ROW_GAP; rowMaxH = 0; }
+      const col = (rowIdx % 2 === 0) ? posInRow : (cols - 1 - posInRow);
+      b.x = START_X + col * COL_W;
       b.y = y;
       const card = document.getElementById(b.id);
+      const hh = card ? card.offsetHeight : 200;
       if (card) { card.style.left = b.x + 'px'; card.style.top = b.y + 'px'; }
+      rowMaxH = Math.max(rowMaxH, hh);
+      bottom = Math.max(bottom, y + hh);
     });
+    return bottom;
   };
-  // Row 1: the training pipeline. Row 2: the prediction pipeline, placed below
-  // the tallest training block so the two flows don't overlap.
+
+  const sorted = pipelineSorted();
   const train = sorted.filter(b => pipelineGroup(b.type) === 0);
   const infer = sorted.filter(b => pipelineGroup(b.type) === 1);
-  place(train, START_Y);
-  let maxH = 0;
-  train.forEach(b => { const c = document.getElementById(b.id); if (c) maxH = Math.max(maxH, c.offsetHeight); });
-  place(infer, train.length ? START_Y + maxH + ROW_GAP : START_Y);
+  const trainBottom = layoutGrid(train, START_Y);
+  layoutGrid(infer, train.length ? trainBottom + GROUP_GAP : START_Y);
   persistCanvasState();
   updatePipelineOrder();
   showToast(lang === 'pl' ? 'Uporządkowano bloki' : 'Blocks tidied up', 'info', { duration: 2500 });
@@ -4505,12 +4520,23 @@ function drawPipelineConnectors(sorted) {
     const a = document.getElementById(sorted[i].id);
     const b = document.getElementById(sorted[i + 1].id);
     if (!a || !b) continue;
-    const x1 = a.offsetLeft + a.offsetWidth;
-    const y1 = a.offsetTop + HEADER_MID;
-    const x2 = b.offsetLeft;
-    const y2 = b.offsetTop + HEADER_MID;
-    const mx = (x1 + x2) / 2;
-    paths += `<path class="pipe-path" d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}"/>`;
+    const aL = a.offsetLeft, aT = a.offsetTop, aW = a.offsetWidth, aH = a.offsetHeight;
+    const bL = b.offsetLeft, bT = b.offsetTop, bW = b.offsetWidth, bH = b.offsetHeight;
+    let x1, y1, x2, y2, path;
+    if (Math.abs(aT - bT) < 40) {
+      // Same row: connect nearest horizontal edges (handles left→right AND the
+      // right→left rows produced by the snake layout).
+      if (bL >= aL) { x1 = aL + aW; x2 = bL; } else { x1 = aL; x2 = bL + bW; }
+      y1 = aT + HEADER_MID; y2 = bT + HEADER_MID;
+      const mx = (x1 + x2) / 2;
+      path = `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+    } else {
+      // Wrapped to the next row: connect bottom-centre → top-centre.
+      x1 = aL + aW / 2; y1 = aT + aH; x2 = bL + bW / 2; y2 = bT;
+      const my = (y1 + y2) / 2;
+      path = `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`;
+    }
+    paths += `<path class="pipe-path" d="${path}"/>`;
     paths += `<circle class="pipe-dot" cx="${x2}" cy="${y2}" r="3"/>`;
   }
   svg.innerHTML = paths;
