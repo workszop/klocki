@@ -79,6 +79,7 @@ const STRINGS = {
     block_upload_model: 'Wczytaj model', block_camera_infer: 'Kamera: Predykcja',
     block_predict: 'Predykcja', block_show_results: 'Pokaż wyniki',
     block_zero_shot: 'Model bazowy / Predykcja', block_explain_ai: 'Explainable AI', block_model_explorer: 'Eksplorator modelu',
+    block_evaluate: 'Ocena modelu', block_deploy_export: 'Eksport aplikacji',
     log_title: 'Pipeline Log',
     guide_title: 'Przewodnik — KlockiAI', guide_subtitle: 'Jak zbudować swój pierwszy model AI w przeglądarce',
     guide_close: 'OK', guide_dontshow: 'Nie pokazuj ponownie',
@@ -158,6 +159,7 @@ const STRINGS = {
     block_upload_model: 'Load Model', block_camera_infer: 'Camera: Prediction',
     block_predict: 'Predict', block_show_results: 'Show Results',
     block_zero_shot: 'Base Model / Predict', block_explain_ai: 'Explainable AI', block_model_explorer: 'Model Explorer',
+    block_evaluate: 'Evaluate Model', block_deploy_export: 'Export App',
     log_title: 'Pipeline Log',
     guide_title: 'Guide — KlockiAI', guide_subtitle: 'How to build your first AI model in the browser',
     guide_close: 'OK', guide_dontshow: 'Do not show again',
@@ -409,7 +411,9 @@ const EDU_ANNOTATIONS = {
   'show-results':     { pl: '🎯 model.predict() — paski pewności + klasa o najwyższym prawdopodobieństwie', en: '🎯 model.predict() — confidence bars + class with the highest probability' },
   'zero-shot':        { pl: '🌍 1001 klas ImageNet — to, co MobileNet już zna',      en: '🌍 1001 ImageNet classes — what MobileNet already knows' },
   'explain-ai':       { pl: '🔍 Sprawdzamy które fragmenty obrazu wpływają na decyzję', en: '🔍 Find which image regions drove the decision' },
-  'model-explorer':   { pl: '🔬 Architektura warstwa po warstwie',                   en: '🔬 Architecture layer by layer' }
+  'model-explorer':   { pl: '🔬 Architektura warstwa po warstwie',                   en: '🔬 Architecture layer by layer' },
+  'evaluate':         { pl: '📊 Test na niewidzianych danych — czy model naprawdę się nauczył?', en: '📊 Test on unseen data — did the model really learn?' },
+  'deploy-export':    { pl: '🚀 Eksportuj działającą aplikację z modelem w środku',   en: '🚀 Export a working app with the model baked in' }
 };
 function getEduAnnotation(type) {
   const a = EDU_ANNOTATIONS[type];
@@ -922,7 +926,9 @@ const BLOCK_PREREQS = {
   'show-results': ['inferModel', 'baseModel', 'inferStream'],
   'zero-shot': [], // self-contained — loads its own classifier on demand
   'explain-ai': ['inferModel', 'baseModel', 'inferStream'],
-  'model-explorer': []
+  'model-explorer': [],
+  'evaluate': ['baseModel', 'samples', 'classes'], // trains+tests its own split
+  'deploy-export': ['fullModel', 'baseModel']
 };
 
 function evalPrereq(key) {
@@ -1044,14 +1050,14 @@ function buildBlockHTML(type, id) {
     'train-model': 'var(--c-train)', 'save-model': 'var(--c-deploy)',
     'upload-model': 'var(--c-data)', 'camera-infer': 'var(--c-data)',
     'show-results': 'var(--c-eval)', 'zero-shot': 'var(--c-model)',
-    'explain-ai': 'var(--c-eval)', 'model-explorer': 'var(--c-eval)'
+    'explain-ai': 'var(--c-eval)', 'model-explorer': 'var(--c-eval)', 'evaluate': 'var(--c-eval)', 'deploy-export': 'var(--c-deploy)'
   };
   const phases = {
     'camera-input': 'DATA', 'label-classes': 'LABEL', 'prepare-data': 'PREP',
     'pretrained-model': 'MODEL', 'train-model': 'TRAIN', 'save-model': 'DEPLOY',
     'upload-model': 'DATA', 'camera-infer': 'DATA',
     'show-results': 'PRED', 'zero-shot': 'PRED',
-    'explain-ai': 'EVAL', 'model-explorer': 'EVAL'
+    'explain-ai': 'EVAL', 'model-explorer': 'EVAL', 'evaluate': 'EVAL', 'deploy-export': 'DEPLOY'
   };
   const titles = {
     'camera-input': t('block_camera_input'), 'label-classes': t('block_label_classes'),
@@ -1059,7 +1065,7 @@ function buildBlockHTML(type, id) {
     'train-model': t('block_train_model'), 'save-model': t('block_save_model'),
     'upload-model': t('block_upload_model'), 'camera-infer': t('block_camera_infer'),
     'show-results': t('block_show_results'), 'zero-shot': t('block_zero_shot'),
-    'explain-ai': t('block_explain_ai'), 'model-explorer': t('block_model_explorer')
+    'explain-ai': t('block_explain_ai'), 'model-explorer': t('block_model_explorer'), 'evaluate': t('block_evaluate'), 'deploy-export': t('block_deploy_export')
   };
   const bg = phaseColors[type] || '#64748B';
   const phase = phases[type] || '';
@@ -1095,6 +1101,8 @@ function renderBlockBody(type, id) {
     case 'zero-shot': body = buildZeroShotBody(id); break;
     case 'explain-ai': body = buildExplainAIBody(id); break;
     case 'model-explorer': body = buildModelExplorerBody(id); break;
+    case 'evaluate': body = buildEvaluateBody(id); break;
+    case 'deploy-export': body = buildDeployExportBody(id); break;
   }
   return `
   ${renderBlockNote(type)}
@@ -1112,6 +1120,8 @@ ${makeParam(t('param_resolution'), `<select id="res-${id}"><option value="224">2
 ${makeParam(t('param_samples'), `<input type="number" id="spc-${id}" value="10" min="1" max="100" style="width:60px">`)}
 ${makeBtn(t('btn_start_camera'), `blockStartCamera('${id}')`, 'var(--c-data)')}
 <div id="capture-btns-${id}" style="display:flex;flex-direction:column;gap:4px;margin-top:4px">${classButtons()}</div>
+<input type="file" id="cam-photo-up-${id}" accept="image/*" multiple style="display:none" onchange="uploadPhotosToClass(window.activeClass||0, this)">
+<button class="bk-btn" style="margin-top:4px;background:#475569;font-size:11px" onclick="document.getElementById('cam-photo-up-${id}').click()" title="${lang === 'pl' ? 'Wgraj zdj\u0119cia do aktywnej klasy' : 'Upload photos to the active class'}">${lang === 'pl' ? '\ud83d\udcc1 Wgraj zdj\u0119cia' : '\ud83d\udcc1 Upload photos'}</button>
 <button class="bk-btn" style="margin-top:4px;background:#64748B;font-size:11px" onclick="addClass(null)">${lang === 'pl' ? 'Dodaj klas\u0119' : 'Add class'}</button>
 <div id="cam-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">—</div>
 <div id="thumbs-${id}" class="thumb-strip"></div>
@@ -1134,12 +1144,15 @@ function renderLabelRows(id) {
     const canDelete = classNames.length > 1;
     const clearTip = lang === 'pl' ? 'Wyczyść próbki' : 'Clear samples';
     const deleteTip = lang === 'pl' ? 'Usuń klasę' : 'Delete class';
+    const uploadTip = lang === 'pl' ? 'Wgraj zdjęcia' : 'Upload photos';
     rows += `<div class="class-row">
 <div class="class-color-dot" style="background:${classColors[i]}"></div>
 <input class="class-name-input" id="cn-${id}-${i}" value="${escapeHtml(classNames[i])}"
   oninput="classNames[${i}]=this.value;updateClassNamesEverywhere()" placeholder="${lang === 'pl' ? 'nazwa klasy...' : 'class name...'}">
 <span class="class-count" id="cc-${id}-${i}">${(capturedSamples[i] || []).length} ${t('lbl_samples')}</span>
 <button style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${classColors[i]};color:#fff" onclick="labelCapture(${i})">${lang === 'pl' ? 'zbierz' : 'capture'}</button>
+<input type="file" id="photo-up-${id}-${i}" accept="image/*" multiple style="display:none" onchange="uploadPhotosToClass(${i}, this)">
+<button class="class-delete-btn" onclick="document.getElementById('photo-up-${id}-${i}').click()" title="${uploadTip}">📁</button>
 <button class="class-delete-btn" onclick="clearClassSamples(${i})" title="${clearTip}">⌫</button>
 ${canDelete ? `<button class="class-delete-btn class-delete-class-btn" onclick="deleteClass(${i})" title="${deleteTip}">🗑</button>` : ''}
 </div>
@@ -1147,6 +1160,49 @@ ${canDelete ? `<button class="class-delete-btn class-delete-class-btn" onclick="
   }
   rows += `<button class="bk-btn" style="margin-top:6px;background:#64748B;font-size:11px" onclick="addClass('${id}')">${lang === 'pl' ? 'Dodaj klas\u0119' : 'Add class'}</button>`;
   return `<div id="classes-${id}">${rows}</div>`;
+}
+
+// Feature: import photos from disk as training samples (no webcam needed).
+// Each image is cover-cropped to a centered square and resized to 224×224 to
+// match the model input, then pushed to the class like a camera capture.
+async function uploadPhotosToClass(classIdx, input) {
+  if (!input || !input.files || !input.files.length) return;
+  if (classIdx == null || classIdx < 0 || classIdx >= classNames.length) classIdx = 0;
+  const files = Array.from(input.files).filter(f => f.type.startsWith('image/'));
+  input.value = ''; // allow re-picking the same files
+  if (!files.length) return;
+  const SIZE = 224;
+  let added = 0;
+  for (const f of files) {
+    try {
+      const bmp = await createImageBitmap(f);
+      const cv = document.createElement('canvas');
+      cv.width = SIZE; cv.height = SIZE;
+      const ctx = cv.getContext('2d');
+      const s = Math.min(bmp.width, bmp.height);           // center cover-crop
+      const sx = (bmp.width - s) / 2, sy = (bmp.height - s) / 2;
+      ctx.drawImage(bmp, sx, sy, s, s, 0, 0, SIZE, SIZE);
+      if (!capturedSamples[classIdx]) capturedSamples[classIdx] = [];
+      capturedSamples[classIdx].push(ctx.getImageData(0, 0, SIZE, SIZE));
+      if (bmp.close) bmp.close();
+      added++;
+    } catch (e) {
+      console.warn('Photo decode failed:', e);
+    }
+  }
+  if (added) {
+    preparedData = null;              // dataset changed → snapshot stale
+    saveClassToIDB(classIdx);
+    refreshLabelAndCameraBlocks();
+    updateSampleCounts();
+    evaluatePipelineState();
+    refreshDatasetInfo();
+    const name = classNames[classIdx];
+    log('success', lang === 'pl' ? `Wgrano ${added} zdjęć do „${name}"` : `Uploaded ${added} photos to "${name}"`);
+    showToast(lang === 'pl' ? `Wgrano ${added} zdjęć do „${name}"` : `Uploaded ${added} photos to "${name}"`, 'success', { duration: 3000 });
+  } else {
+    showToast(lang === 'pl' ? 'Nie udało się wczytać zdjęć.' : 'Could not read the images.', 'warn', { duration: 3000 });
+  }
 }
 
 function labelCapture(classIdx) {
@@ -1293,10 +1349,12 @@ function buildPrepareDataBody(id) {
     : 'Resize captured images to model input size. Optionally augment to increase sample count.';
   return `
 <div style="font-size:12px;color:var(--c-muted);line-height:1.4;padding-bottom:4px">${hint}</div>
-${makeParam(t('param_augment'), `<select id="aug-${id}">
+${makeParam(t('param_augment'), `<select id="aug-${id}" onchange="previewAugmentation('${id}')">
   <option value="none" selected>${lang === 'pl' ? 'Tylko przygotowanie' : 'Prepare only'}</option>
   <option value="all">Flip + Brightness + Zoom + Skew</option>
 </select>`)}
+<button class="bk-btn" style="background:#64748B;font-size:11px;margin-top:4px" onclick="previewAugmentation('${id}')">${lang === 'pl' ? '👁 Podgląd augmentacji' : '👁 Preview augmentation'}</button>
+<div id="aug-preview-${id}" class="aug-preview"></div>
 <progress id="prog-${id}" value="0" max="100" style="margin-top:6px"></progress>
 <div id="prep-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">—</div>
 ${makeBtn(lang === 'pl' ? 'Przygotuj dane' : 'Prepare data', `runPrepare('${id}')`, 'var(--c-prep)')}`;
@@ -1322,6 +1380,7 @@ ${makeParam(t('param_batch'), `<select id="bs-${id}">
 </select>`)}
 <canvas class="chart-canvas" id="chart-${id}" height="80"></canvas>
 <div id="train-info-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">—</div>
+<div id="train-interp-${id}" class="train-interp"></div>
 <div style="display:flex;gap:6px;margin-top:4px">
 ${makeBtn(t('btn_train'), `runTraining('${id}')`, 'var(--c-train)')}
 ${makeBtn(t('btn_stop_train'), `stopTraining('${id}')`, '#64748B')}
@@ -1448,6 +1507,27 @@ function buildModelExplorerBody(id) {
     + makeBtn(btnLabel, "window.open('model-explorer.html','_blank')", 'var(--c-eval)');
 }
 
+function buildEvaluateBody(id) {
+  const hint = lang === 'pl'
+    ? 'Odkłada 20% próbek jako zbiór testowy, trenuje na 80% i sprawdza na niewidzianych danych — pokazuje, czy model naprawdę się nauczył.'
+    : 'Holds out 20% of samples as a test set, trains on 80%, and checks the unseen data — reveals whether the model truly learned.';
+  return `
+<div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:4px">${hint}</div>
+${makeBtn(lang === 'pl' ? '▶ Oceń model' : '▶ Evaluate model', `runEvaluate('${id}')`, 'var(--c-eval)')}
+<div id="eval-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">—</div>
+<div id="eval-results-${id}" class="eval-results"></div>`;
+}
+
+function buildDeployExportBody(id) {
+  const hint = lang === 'pl'
+    ? 'Eksportuj samodzielną stronę HTML z Twoim modelem w środku — działa offline, klasyfikuje z kamery. Podziel się nią z innymi!'
+    : 'Export a self-contained HTML page with your model baked in — works offline, classifies from the camera. Share it with anyone!';
+  return `
+<div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:4px">${hint}</div>
+${makeBtn(lang === 'pl' ? '🚀 Eksportuj aplikację' : '🚀 Export app', `runDeployExport('${id}')`, 'var(--c-deploy)')}
+<div id="deploy-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">—</div>`;
+}
+
 
 // ============================================================
 
@@ -1489,7 +1569,7 @@ function getPhaseColor(type) {
     'train-model': 'var(--c-train)', 'save-model': 'var(--c-deploy)',
     'upload-model': 'var(--c-data)', 'camera-infer': 'var(--c-data)',
     'show-results': 'var(--c-eval)',
-    'explain-ai': 'var(--c-eval)', 'model-explorer': 'var(--c-eval)'
+    'explain-ai': 'var(--c-eval)', 'model-explorer': 'var(--c-eval)', 'evaluate': 'var(--c-eval)', 'deploy-export': 'var(--c-deploy)'
   };
   return map[type] || '#64748B';
 }
@@ -1521,7 +1601,8 @@ function refreshBlockText(b) {
       'train-model': t('block_train_model'), 'save-model': t('block_save_model'),
       'upload-model': t('block_upload_model'), 'camera-infer': t('block_camera_infer'),
       'show-results': t('block_show_results'),
-      'explain-ai': t('block_explain_ai'), 'model-explorer': t('block_model_explorer')
+      'explain-ai': t('block_explain_ai'), 'model-explorer': t('block_model_explorer'),
+      'zero-shot': t('block_zero_shot'), 'evaluate': t('block_evaluate'), 'deploy-export': t('block_deploy_export')
     };
     title.textContent = titles[b.type] || b.type;
   }
@@ -2001,6 +2082,101 @@ if (added % 10 === 0) {
 };
 `;
 
+// ===== AUGMENTATION PREVIEW =====
+// Apply the same transforms the worker uses (brightness jitter, and for 'all'
+// horizontal flip + zoom + skew) to one ImageData, returning a new ImageData.
+// Kept in sync with WORKER_CODE so the preview reflects real augmentation.
+function augmentImageDataPreview(src, augType) {
+  const w = src.width, h = src.height;
+  let buf = new Uint8ClampedArray(src.data);
+  // Brightness jitter
+  const bj = 0.7 + Math.random() * 0.6;
+  for (let i = 0; i < buf.length; i += 4) {
+    buf[i] = Math.min(255, buf[i] * bj);
+    buf[i + 1] = Math.min(255, buf[i + 1] * bj);
+    buf[i + 2] = Math.min(255, buf[i + 2] * bj);
+  }
+  if (augType === 'all') {
+    if (Math.random() > 0.5) { // horizontal flip
+      for (let row = 0; row < h; row++) {
+        for (let col = 0; col < Math.floor(w / 2); col++) {
+          const a = (row * w + col) * 4, b2 = (row * w + (w - 1 - col)) * 4;
+          for (let c = 0; c < 4; c++) { const tmp = buf[a + c]; buf[a + c] = buf[b2 + c]; buf[b2 + c] = tmp; }
+        }
+      }
+    }
+    const doZoom = Math.random() > 0.5, doSkew = Math.random() > 0.5;
+    if (doZoom || doSkew) {
+      const zoom = doZoom ? (0.85 + Math.random() * 0.30) : 1.0;
+      const sX = doSkew ? (Math.random() - 0.5) * 0.30 : 0;
+      const sY = doSkew ? (Math.random() - 0.5) * 0.30 : 0;
+      const cx = w / 2, cy = h / 2;
+      const out = new Uint8ClampedArray(buf.length);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const dx = x - cx, dy = y - cy;
+        let sx = dx / zoom - sX * dy + cx;
+        let sy = dy / zoom - sY * dx + cy;
+        if (sx < 0) sx = 0; else if (sx > w - 1) sx = w - 1;
+        if (sy < 0) sy = 0; else if (sy > h - 1) sy = h - 1;
+        const x0 = sx | 0, y0 = sy | 0;
+        const x1 = x0 + 1 < w ? x0 + 1 : x0, y1 = y0 + 1 < h ? y0 + 1 : y0;
+        const fx = sx - x0, fy = sy - y0;
+        const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
+        const i00 = (y0 * w + x0) * 4, i10 = (y0 * w + x1) * 4, i01 = (y1 * w + x0) * 4, i11 = (y1 * w + x1) * 4, di = (y * w + x) * 4;
+        out[di] = buf[i00] * w00 + buf[i10] * w10 + buf[i01] * w01 + buf[i11] * w11;
+        out[di + 1] = buf[i00 + 1] * w00 + buf[i10 + 1] * w10 + buf[i01 + 1] * w01 + buf[i11 + 1] * w11;
+        out[di + 2] = buf[i00 + 2] * w00 + buf[i10 + 2] * w10 + buf[i01 + 2] * w01 + buf[i11 + 2] * w11;
+        out[di + 3] = 255;
+      }
+      buf = out;
+    }
+  }
+  return new ImageData(buf, w, h);
+}
+
+// Render an original sample plus a few augmented variants so students can see
+// exactly what augmentation does to their data before committing to it.
+function previewAugmentation(id) {
+  const box = document.getElementById('aug-preview-' + id);
+  if (!box) return;
+  const augType = document.getElementById('aug-' + id)?.value || 'none';
+  // First sample of the first class that has any.
+  let sample = null;
+  for (const arr of capturedSamples) { if (arr && arr.length) { sample = arr[0]; break; } }
+  if (!sample) {
+    box.innerHTML = `<div class="aug-preview-empty">${lang === 'pl' ? 'Najpierw zbierz kilka próbek.' : 'Collect a few samples first.'}</div>`;
+    return;
+  }
+  const drawInto = (imgData, label) => {
+    const cv = document.createElement('canvas');
+    cv.width = imgData.width; cv.height = imgData.height;
+    cv.getContext('2d').putImageData(imgData, 0, 0);
+    const wrap = document.createElement('div');
+    wrap.className = 'aug-preview-item';
+    const shown = document.createElement('canvas');
+    shown.width = 56; shown.height = 56;
+    shown.getContext('2d').drawImage(cv, 0, 0, 56, 56);
+    const cap = document.createElement('div');
+    cap.className = 'aug-preview-cap';
+    cap.textContent = label;
+    wrap.appendChild(shown); wrap.appendChild(cap);
+    return wrap;
+  };
+  box.innerHTML = '';
+  box.appendChild(drawInto(sample, lang === 'pl' ? 'oryginał' : 'original'));
+  if (augType === 'none') {
+    const note = document.createElement('div');
+    note.className = 'aug-preview-empty';
+    note.textContent = lang === 'pl'
+      ? 'Augmentacja wyłączona — tylko oryginały.'
+      : 'Augmentation off — originals only.';
+    box.appendChild(note);
+    return;
+  }
+  const N = 4;
+  for (let i = 0; i < N; i++) box.appendChild(drawInto(augmentImageDataPreview(sample, augType), '#' + (i + 1)));
+}
+
 // ===== PREPARE DATA =====
 async function runPrepare(id) {
   const totalSamples = capturedSamples.reduce((s, a) => s + a.length, 0);
@@ -2132,6 +2308,33 @@ async function runLoadBaseModel(id) {
 
 // ===== TRAINING =====
 let lossHistory = [], accHistory = [];
+
+// Narrate the training curve in plain language so students can read the chart.
+// Reacts to the loss trend and warns about the classic "100% accuracy on very
+// few samples = memorising, not learning" overfitting trap.
+function updateTrainInterpretation(id, epoch, acc) {
+  const el = document.getElementById('train-interp-' + id);
+  if (!el) return;
+  const totalSamples = capturedSamples.reduce((s, a) => s + (a ? a.length : 0), 0);
+  let msg = '', tone = 'ok';
+  const n = lossHistory.length;
+  const fallingFast = n >= 3 && lossHistory[n - 1] < lossHistory[Math.max(0, n - 3)] - 0.02;
+  const flat = n >= 4 && Math.abs(lossHistory[n - 1] - lossHistory[n - 4]) < 0.01;
+  if (acc >= 0.999 && totalSamples < 20) {
+    tone = 'warn';
+    msg = lang === 'pl'
+      ? '⚠️ 100% dokładności przy małej liczbie próbek — model może zapamiętywać, a nie uczyć się. Dodaj więcej zdjęć.'
+      : '⚠️ 100% accuracy on few samples — the model may be memorising, not learning. Add more images.';
+  } else if (fallingFast) {
+    msg = lang === 'pl' ? '📉 Strata spada — model się uczy!' : '📉 Loss is dropping — the model is learning!';
+  } else if (flat) {
+    msg = lang === 'pl' ? '➡️ Strata się wypłaszcza — bliski końca nauki.' : '➡️ Loss is flattening out — learning is levelling off.';
+  } else {
+    msg = lang === 'pl' ? `Uczenie w toku — dokładność ${(acc * 100).toFixed(0)}%.` : `Learning in progress — accuracy ${(acc * 100).toFixed(0)}%.`;
+  }
+  el.textContent = msg;
+  el.className = 'train-interp train-interp-' + tone;
+}
 
 function drawChart(canvasId) {
   const cv = document.getElementById(canvasId);
@@ -2384,6 +2587,7 @@ async function runTraining(id) {
           const remaining = Math.round((epochs - epoch - 1) * perEpoch);
           const acc = logs.acc || logs.accuracy || 0;
           if (info) info.textContent = `Epoch ${epoch + 1}/${epochs} | ETA: ${remaining}s`;
+          updateTrainInterpretation(id, epoch, acc);
           log('data', t('log_train_epoch', epoch + 1, logs.loss, acc));
           await tf.nextFrame();
         }
@@ -2450,6 +2654,231 @@ function stopTraining(id) {
   log('warn', lang === 'pl' ? 'Zatrzymywanie po bieżącej epoce...' : 'Stopping after current epoch...');
 }
 
+// ===== MODEL EVALUATION (train/test split) =====
+// Extract MobileNet bottleneck features for a list of ImageData samples.
+// Returns a [N, featSize] tensor (caller disposes). Batched like runTraining.
+async function extractFeatures(samples) {
+  const BATCH = 8;
+  const feats = [];
+  for (let bs = 0; bs < samples.length; bs += BATCH) {
+    const end = Math.min(bs + BATCH, samples.length);
+    const batchTensor = tf.tidy(() => {
+      const items = [];
+      for (let i = bs; i < end; i++) {
+        const d = samples[i];
+        const im = d instanceof ImageData ? d : new ImageData(d.data, d.width, d.height);
+        let tt = tf.browser.fromPixels(im).toFloat().div(255);
+        if (im.width !== 224 || im.height !== 224) tt = tt.resizeBilinear([224, 224]);
+        items.push(tt);
+      }
+      return tf.stack(items);
+    });
+    try { feats.push(baseModel.predict(batchTensor)); }
+    finally { batchTensor.dispose(); }
+    await tf.nextFrame();
+  }
+  const out = tf.concat(feats, 0);
+  feats.forEach(f => f.dispose());
+  return out;
+}
+
+let evaluateInProgress = false;
+async function runEvaluate(id) {
+  if (!baseModel) {
+    log('warn', t('log_no_model_base'));
+    if (!placedBlocks.some(b => b.type === 'pretrained-model')) ensureBlockOnCanvas('pretrained-model');
+    return;
+  }
+  const numClasses = classNames.length;
+  const counts = capturedSamples.map(a => (a || []).length);
+  const usable = counts.filter(n => n >= 3).length;
+  if (usable < 2) {
+    showToast(lang === 'pl'
+      ? 'Ocena wymaga min. 2 klas z co najmniej 3 próbkami (aby odłożyć zbiór testowy).'
+      : 'Evaluation needs at least 2 classes with 3+ samples each (to hold out a test set).', 'warn');
+    return;
+  }
+  if (evaluateInProgress) return;
+  evaluateInProgress = true;
+
+  const statusEl = document.getElementById('eval-status-' + id);
+  const resEl = document.getElementById('eval-results-' + id);
+  const setStatus = (s) => { if (statusEl) statusEl.textContent = s; };
+  setBlockStatus(document.getElementById(id), 'running');
+  if (resEl) resEl.innerHTML = '';
+
+  // Stratified 80/20 split. Keep the ImageData refs for the test set so we can
+  // show the actual misclassified thumbnails.
+  const trainSamples = [], trainLabels = [], testSamples = [], testLabels = [];
+  for (let c = 0; c < numClasses; c++) {
+    const arr = (capturedSamples[c] || []).slice();
+    if (arr.length < 2) continue;
+    // Deterministic-ish shuffle (index-based) so results are stable per run.
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(((i * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    const nTest = Math.max(1, Math.round(arr.length * 0.2));
+    arr.forEach((s, i) => {
+      if (i < nTest) { testSamples.push(s); testLabels.push(c); }
+      else { trainSamples.push(s); trainLabels.push(c); }
+    });
+  }
+
+  let trainFeat = null, testFeat = null, ysTensor = null, classifier = null, trainProbT = null, testProbT = null;
+  try {
+    setStatus(lang === 'pl' ? 'Ekstrakcja cech...' : 'Extracting features...');
+    trainFeat = await extractFeatures(trainSamples);
+    testFeat = await extractFeatures(testSamples);
+    const featSize = trainFeat.shape[1];
+
+    const idxT = tf.tensor1d(trainLabels, 'int32');
+    ysTensor = tf.oneHot(idxT, numClasses);
+    idxT.dispose();
+
+    setStatus(lang === 'pl' ? 'Trening na 80%...' : 'Training on 80%...');
+    classifier = tf.sequential({
+      layers: [
+        tf.layers.dense({ inputShape: [featSize], units: 128, activation: 'relu' }),
+        tf.layers.dropout({ rate: 0.3 }),
+        tf.layers.dense({ units: numClasses, activation: 'softmax' })
+      ]
+    });
+    classifier.compile({ optimizer: tf.train.adam(0.001), loss: 'categoricalCrossentropy', metrics: ['accuracy'] });
+    await classifier.fit(trainFeat, ysTensor, { epochs: 20, batchSize: 16, shuffle: true });
+
+    setStatus(lang === 'pl' ? 'Test na 20%...' : 'Testing on 20%...');
+    // Predictions on both sets.
+    trainProbT = classifier.predict(trainFeat);
+    testProbT = classifier.predict(testFeat);
+    const trainProbs = await trainProbT.data();
+    const testProbs = await testProbT.data();
+
+    const argmaxRow = (probs, row, K) => {
+      let m = 0; for (let k = 1; k < K; k++) if (probs[row * K + k] > probs[row * K + m]) m = k; return m;
+    };
+    // Train accuracy (for the "training accuracy lies" comparison).
+    let trainCorrect = 0;
+    for (let i = 0; i < trainLabels.length; i++) if (argmaxRow(trainProbs, i, numClasses) === trainLabels[i]) trainCorrect++;
+    const trainAcc = trainLabels.length ? trainCorrect / trainLabels.length : 0;
+
+    // Test confusion matrix + misclassified list.
+    const confusion = Array.from({ length: numClasses }, () => new Array(numClasses).fill(0));
+    const misclassified = [];
+    let testCorrect = 0;
+    for (let i = 0; i < testLabels.length; i++) {
+      const pred = argmaxRow(testProbs, i, numClasses);
+      const truth = testLabels[i];
+      confusion[truth][pred]++;
+      if (pred === truth) testCorrect++;
+      else misclassified.push({ sample: testSamples[i], truth, pred, conf: testProbs[i * numClasses + pred] });
+    }
+    const testAcc = testLabels.length ? testCorrect / testLabels.length : 0;
+
+    renderEvaluation(id, { confusion, trainAcc, testAcc, testTotal: testLabels.length, trainTotal: trainLabels.length, misclassified, numClasses });
+    setStatus('');
+    setBlockStatus(document.getElementById(id), 'done');
+    log('success', lang === 'pl'
+      ? `Ocena: trening ${(trainAcc * 100).toFixed(0)}% vs test ${(testAcc * 100).toFixed(0)}%`
+      : `Evaluation: train ${(trainAcc * 100).toFixed(0)}% vs test ${(testAcc * 100).toFixed(0)}%`);
+  } catch (err) {
+    log('error', 'Evaluation error: ' + err.message);
+    console.error(err);
+    setStatus((lang === 'pl' ? 'Błąd: ' : 'Error: ') + err.message);
+    setBlockStatus(document.getElementById(id), 'error');
+  } finally {
+    if (trainFeat) trainFeat.dispose();
+    if (testFeat) testFeat.dispose();
+    if (ysTensor) ysTensor.dispose();
+    if (trainProbT) trainProbT.dispose();
+    if (testProbT) testProbT.dispose();
+    if (classifier) { try { classifier.dispose(); } catch (_) {} }
+    evaluateInProgress = false;
+  }
+}
+
+// Render the evaluation results: headline train-vs-test accuracy (with an
+// overfit note when they diverge), a confusion matrix, and thumbnails of the
+// actual misclassified test images labelled true → predicted.
+function renderEvaluation(id, r) {
+  const el = document.getElementById('eval-results-' + id);
+  if (!el) return;
+  const pct = (x) => (x * 100).toFixed(0) + '%';
+  const gap = r.trainAcc - r.testAcc;
+  let verdict, verdictClass;
+  if (gap >= 0.25 && r.trainAcc > 0.8) {
+    verdictClass = 'warn';
+    verdict = lang === 'pl'
+      ? '⚠️ Duża różnica trening/test — model zapamiętuje dane zamiast się uczyć (przeuczenie). Dodaj więcej różnorodnych zdjęć.'
+      : '⚠️ Big train/test gap — the model is memorising, not generalising (overfitting). Add more varied images.';
+  } else if (r.testAcc >= 0.8) {
+    verdictClass = 'ok';
+    verdict = lang === 'pl' ? '✅ Model dobrze generalizuje na niewidziane dane.' : '✅ The model generalises well to unseen data.';
+  } else {
+    verdictClass = '';
+    verdict = lang === 'pl' ? 'Model ma trudności — spróbuj więcej próbek lub augmentacji.' : 'The model is struggling — try more samples or augmentation.';
+  }
+
+  // Confusion matrix table.
+  const maxCell = Math.max(1, ...r.confusion.flat());
+  let head = '<th></th>' + classNames.slice(0, r.numClasses).map((n, i) =>
+    `<th title="${escapeHtml(n)}"><span class="eval-dot" style="background:${classColors[i]}"></span></th>`).join('');
+  let rows = '';
+  for (let tr = 0; tr < r.numClasses; tr++) {
+    let cells = `<th class="eval-rowhead" title="${escapeHtml(classNames[tr])}"><span class="eval-dot" style="background:${classColors[tr]}"></span>${escapeHtml((classNames[tr] || '').slice(0, 8))}</th>`;
+    for (let pc = 0; pc < r.numClasses; pc++) {
+      const v = r.confusion[tr][pc];
+      const isDiag = tr === pc;
+      const intensity = v / maxCell;
+      const bg = isDiag
+        ? `rgba(5,150,105,${0.15 + intensity * 0.6})`
+        : (v > 0 ? `rgba(220,38,38,${0.15 + intensity * 0.6})` : 'transparent');
+      cells += `<td style="background:${bg}">${v || ''}</td>`;
+    }
+    rows += `<tr>${cells}</tr>`;
+  }
+  const matrix = `<table class="eval-matrix"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+
+  // Misclassified thumbnails (up to 8).
+  let missHtml = '';
+  const shown = r.misclassified.slice(0, 8);
+  if (shown.length) {
+    missHtml = `<div class="eval-miss-title">${lang === 'pl' ? 'Błędy modelu:' : 'Model mistakes:'}</div><div class="eval-miss-grid" id="eval-miss-${id}"></div>`;
+  } else if (r.testTotal > 0) {
+    missHtml = `<div class="eval-miss-title">${lang === 'pl' ? 'Brak błędów na zbiorze testowym 🎉' : 'No mistakes on the test set 🎉'}</div>`;
+  }
+
+  el.innerHTML = `
+    <div class="eval-scores">
+      <div class="eval-score"><div class="eval-score-val">${pct(r.trainAcc)}</div><div class="eval-score-lbl">${lang === 'pl' ? 'trening (80%)' : 'train (80%)'}</div></div>
+      <div class="eval-score eval-score-test"><div class="eval-score-val">${pct(r.testAcc)}</div><div class="eval-score-lbl">${lang === 'pl' ? 'test (20%)' : 'test (20%)'}</div></div>
+    </div>
+    <div class="eval-verdict eval-verdict-${verdictClass}">${verdict}</div>
+    <div class="eval-matrix-title">${lang === 'pl' ? 'Macierz pomyłek (wiersz = prawda, kolumna = predykcja)' : 'Confusion matrix (row = truth, column = prediction)'}</div>
+    ${matrix}
+    ${missHtml}`;
+
+  // Draw the misclassified thumbnails into canvases (can't put ImageData in HTML).
+  const grid = document.getElementById('eval-miss-' + id);
+  if (grid) {
+    shown.forEach(m => {
+      const cv = document.createElement('canvas');
+      cv.width = m.sample.width; cv.height = m.sample.height;
+      cv.getContext('2d').putImageData(m.sample, 0, 0);
+      const disp = document.createElement('canvas');
+      disp.width = 48; disp.height = 48; disp.className = 'eval-miss-canvas';
+      disp.getContext('2d').drawImage(cv, 0, 0, 48, 48);
+      const wrap = document.createElement('div');
+      wrap.className = 'eval-miss-item';
+      const cap = document.createElement('div');
+      cap.className = 'eval-miss-cap';
+      cap.innerHTML = `<span style="color:${classColors[m.truth]}">${escapeHtml((classNames[m.truth] || '').slice(0, 6))}</span>→<span style="color:${classColors[m.pred]}">${escapeHtml((classNames[m.pred] || '').slice(0, 6))}</span>`;
+      wrap.appendChild(disp); wrap.appendChild(cap);
+      grid.appendChild(wrap);
+    });
+  }
+}
+
 // ===== SAVE MODEL =====
 async function runSaveIDB(id) {
   if (!fullModel) { log('warn', t('lbl_no_model')); return; }
@@ -2508,6 +2937,128 @@ async function runDownload(id) {
   } catch (err) {
     log('error', 'Download error: ' + err.message);
   }
+}
+
+// ===== DEPLOY: EXPORT SELF-CONTAINED CLASSIFIER APP =====
+async function runDeployExport(id) {
+  if (!fullModel || !baseModel) {
+    showToast(lang === 'pl' ? 'Najpierw wytrenuj model.' : 'Train a model first.', 'warn');
+    return;
+  }
+  const statusEl = document.getElementById('deploy-status-' + id);
+  const setStatus = (s) => { if (statusEl) statusEl.textContent = s; };
+  setBlockStatus(document.getElementById(id), 'running');
+  setStatus(lang === 'pl' ? 'Pakowanie modelu (~6 MB)...' : 'Packaging model (~6 MB)...');
+  try {
+    fullModel.userDefinedMetadata = modelMetadata;
+    const [classifierArt, baseArt] = await Promise.all([captureArtifacts(fullModel), captureArtifacts(baseModel)]);
+    const meta = modelMetadata || {};
+    const labels = (meta.classLabels && meta.classLabels.length) ? meta.classLabels : classNames.slice();
+    const html = buildStandaloneAppHTML({
+      classifier: classifierArt,
+      base: baseArt,
+      labels,
+      colors: classColors.slice(0, labels.length),
+      inputSize: meta.inputSize || 224,
+      lang
+    });
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'klocki-classifier.html';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus(lang === 'pl' ? 'Wyeksportowano ✓' : 'Exported ✓');
+    setBlockStatus(document.getElementById(id), 'done');
+    log('success', lang === 'pl' ? 'Aplikacja wyeksportowana: klocki-classifier.html' : 'App exported: klocki-classifier.html');
+    showToast(lang === 'pl' ? 'Aplikacja wyeksportowana 🚀' : 'App exported 🚀', 'success', { duration: 3500 });
+  } catch (err) {
+    log('error', 'Export error: ' + err.message);
+    console.error(err);
+    setStatus((lang === 'pl' ? 'Błąd: ' : 'Error: ') + err.message);
+    setBlockStatus(document.getElementById(id), 'error');
+  }
+}
+
+// Build a fully self-contained classifier web app: TF.js from CDN + both models
+// embedded as base64 + a camera UI. `<` in the embedded JSON is escaped so a
+// class name can't break out of the <script> block.
+function buildStandaloneAppHTML(bundle) {
+  const isPl = bundle.lang === 'pl';
+  const dataJson = JSON.stringify(bundle).replace(/</g, '\\u003c');
+  const title = isPl ? 'Klasyfikator KlockiAI' : 'KlockiAI Classifier';
+  const startLbl = isPl ? '▶ Uruchom kamerę' : '▶ Start camera';
+  const madeWith = isPl ? 'Zrobione w KlockiAI' : 'Made with KlockiAI';
+  const loadingLbl = isPl ? 'Ładowanie modelu…' : 'Loading model…';
+  return `<!DOCTYPE html>
+<html lang="${isPl ? 'pl' : 'en'}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(title)}</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"><\/script>
+<style>
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+  h1{font-size:20px;margin:0 0 4px} .sub{color:#94a3b8;font-size:12px;margin-bottom:16px}
+  #stage{position:relative;width:100%;max-width:360px;aspect-ratio:1;border-radius:16px;overflow:hidden;background:#1e293b;border:2px solid #334155}
+  video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+  button{margin-top:16px;background:#22c55e;color:#052e16;border:none;padding:12px 22px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  #bars{width:100%;max-width:360px;margin-top:16px;display:flex;flex-direction:column;gap:8px}
+  .bar-row{font-size:13px}
+  .bar-head{display:flex;justify-content:space-between;margin-bottom:3px}
+  .bar-track{height:10px;background:#1e293b;border-radius:5px;overflow:hidden}
+  .bar-fill{height:100%;border-radius:5px;transition:width .12s}
+  #result{font-size:22px;font-weight:800;margin-top:14px;min-height:28px}
+  .foot{margin-top:20px;color:#475569;font-size:11px}
+  .foot a{color:#64748b}
+</style>
+</head>
+<body>
+<h1>${escapeHtml(title)}</h1>
+<div class="sub" id="status">${loadingLbl}</div>
+<div id="stage"><video id="vid" autoplay playsinline muted></video></div>
+<div id="result"></div>
+<div id="bars"></div>
+<button id="btn" disabled>${startLbl}</button>
+<div class="foot">${madeWith}</div>
+<script>
+const BUNDLE = ${dataJson};
+const LABELS = BUNDLE.labels, COLORS = BUNDLE.colors, SIZE = BUNDLE.inputSize || 224;
+function b64ToBuf(b64){const bin=atob(b64),n=bin.length,bytes=new Uint8Array(n);for(let i=0;i<n;i++)bytes[i]=bin.charCodeAt(i);return bytes.buffer;}
+let baseModel=null, headModel=null, stream=null, loopTimer=null;
+async function load(){
+  headModel = await tf.loadLayersModel({load:async()=>({modelTopology:BUNDLE.classifier.modelTopology,weightSpecs:BUNDLE.classifier.weightSpecs,weightData:b64ToBuf(BUNDLE.classifier.weightData),format:BUNDLE.classifier.format})});
+  baseModel = await tf.loadGraphModel({load:async()=>({modelTopology:BUNDLE.base.modelTopology,weightSpecs:BUNDLE.base.weightSpecs,weightData:b64ToBuf(BUNDLE.base.weightData),format:BUNDLE.base.format})});
+  document.getElementById('status').textContent='${isPl ? 'Gotowe — uruchom kamerę' : 'Ready — start the camera'}';
+  const b=document.getElementById('btn'); b.disabled=false;
+  // Build bar rows.
+  const bars=document.getElementById('bars');
+  bars.innerHTML=LABELS.map((n,i)=>'<div class="bar-row"><div class="bar-head"><span>'+esc(n)+'</span><span id="pct'+i+'">0%</span></div><div class="bar-track"><div class="bar-fill" id="fill'+i+'" style="width:0%;background:'+(COLORS[i]||'#22c55e')+'"></div></div></div>').join('');
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function start(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+  }catch(e){ try{ stream=await navigator.mediaDevices.getUserMedia({video:true}); }catch(e2){ document.getElementById('status').textContent='${isPl ? 'Brak dostępu do kamery' : 'No camera access'}'; return; } }
+  const vid=document.getElementById('vid'); vid.srcObject=stream; await vid.play();
+  document.getElementById('btn').style.display='none';
+  loopTimer=setInterval(predict,120);
+}
+async function predict(){
+  const vid=document.getElementById('vid'); if(!vid.srcObject) return;
+  let probs;
+  const t=tf.tidy(()=>tf.browser.fromPixels(vid).resizeBilinear([SIZE,SIZE]).toFloat().div(255).expandDims(0));
+  try{ const f=baseModel.predict(t); const p=headModel.predict(f); probs=await p.data(); f.dispose(); p.dispose(); } finally { t.dispose(); }
+  let max=0; for(let i=1;i<probs.length;i++) if(probs[i]>probs[max]) max=i;
+  for(let i=0;i<LABELS.length;i++){ const pc=Math.round((probs[i]||0)*100); document.getElementById('pct'+i).textContent=pc+'%'; document.getElementById('fill'+i).style.width=pc+'%'; }
+  const r=document.getElementById('result'); r.textContent=esc(LABELS[max])+' '+Math.round(probs[max]*100)+'%'; r.style.color=COLORS[max]||'#e2e8f0';
+}
+document.getElementById('btn').addEventListener('click',start);
+load().catch(e=>{document.getElementById('status').textContent='Error: '+e.message;});
+<\/script>
+</body>
+</html>`;
 }
 
 // ===== UPLOAD MODEL =====
@@ -3513,9 +4064,39 @@ function clearFlowPhase() {
   document.querySelectorAll('.flow-pill').forEach(pill => pill.classList.remove('active'));
 }
 
-// Show a transient "trained — now save" toast and pulse the Save Model block.
+// One-click "save to browser" — usable from the post-train toast without the
+// user having to find the Save Model block. Reuses a placed block's name field
+// if present, otherwise a sensible default.
+async function quickSaveModel() {
+  if (!fullModel || !baseModel) {
+    showToast(lang === 'pl' ? 'Brak wytrenowanego modelu do zapisania.' : 'No trained model to save.', 'warn', { duration: 3000 });
+    return;
+  }
+  const saveBlock = placedBlocks.find(b => b.type === 'save-model');
+  let name = 'model-1';
+  if (saveBlock) {
+    const el = document.getElementById('model-name-' + saveBlock.id);
+    if (el && el.value.trim()) name = el.value.trim();
+  }
+  try {
+    fullModel.userDefinedMetadata = modelMetadata;
+    await fullModel.save('indexeddb://ml-blocks-' + name);
+    await baseModel.save('indexeddb://ml-blocks-base-' + name);
+    localStorage.setItem('ml-blocks-meta-' + name, JSON.stringify(modelMetadata));
+    modelSaved = true;
+    if (saveBlock && saveBlock.card) setBlockStatus(saveBlock.card, 'done');
+    evaluatePipelineState();
+    log('success', t('log_save_idb'));
+    showToast(lang === 'pl' ? `Zapisano jako „${name}"` : `Saved as "${name}"`, 'success', { duration: 3000 });
+  } catch (err) {
+    log('error', 'Save error: ' + err.message);
+    showToast((lang === 'pl' ? 'Błąd zapisu: ' : 'Save error: ') + err.message, 'error');
+  }
+}
+
+// Show a "trained — now save" toast with a one-click Save action, and pulse the
+// Save Model block if present.
 function notifyModelTrained() {
-  // Pulse: highlight every save-model block briefly. If none on canvas, suggest adding one.
   const saveBlocks = placedBlocks.filter(b => b.type === 'save-model');
   saveBlocks.forEach(b => {
     if (b.card) {
@@ -3523,14 +4104,15 @@ function notifyModelTrained() {
       setTimeout(() => b.card.classList.remove('save-prompt'), 6000);
     }
   });
-  showToast(lang === 'pl'
-    ? '✅ Model gotowy — zapisz go, zanim zamkniesz kartę!'
-    : '✅ Model trained — save it before closing the tab!', 'success');
-  if (saveBlocks.length === 0) {
-    setTimeout(() => {
-      ensureBlockOnCanvas('save-model');
-    }, 800);
-  }
+  showToast(
+    lang === 'pl' ? '✅ Model gotowy — zapisz go, zanim zamkniesz kartę!' : '✅ Model trained — save it before closing the tab!',
+    'success',
+    {
+      duration: 9000,
+      actionLabel: lang === 'pl' ? '💾 Zapisz teraz' : '💾 Save now',
+      onAction: quickSaveModel
+    }
+  );
 }
 
 // Lightweight bottom-right toast notifications. Multiple stack vertically.
@@ -3648,7 +4230,7 @@ const BLOCK_PHASE_MAP = {
   'prepare-data': 'prep', 'pretrained-model': 'model',
   'train-model': 'train', 'save-model': 'deploy',
   'upload-model': 'data', 'camera-infer': 'data',
-  'show-results': 'infer'
+  'show-results': 'infer', 'evaluate': 'infer', 'deploy-export': 'deploy'
 };
 
 // ===== PIPELINE RUNNER =====

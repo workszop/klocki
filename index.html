@@ -94,6 +94,14 @@
           <div class="block-dot" style="background:var(--c-model)"></div>
           <span data-i18n="block_zero_shot">Model bazowy / Predykcja</span>
         </div>
+        <div class="palette-block" draggable="true" data-type="evaluate" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-eval)"></div>
+          <span data-i18n="block_evaluate">Ocena modelu</span>
+        </div>
+        <div class="palette-block" draggable="true" data-type="deploy-export" ondragstart="paletteDragStart(event)">
+          <div class="block-dot" style="background:var(--c-deploy)"></div>
+          <span data-i18n="block_deploy_export">Eksport aplikacji</span>
+        </div>
         <div class="palette-block" draggable="true" data-type="explain-ai" ondragstart="paletteDragStart(event)">
           <div class="block-dot" style="background:var(--c-eval)"></div>
           <span data-i18n="block_explain_ai">Explainable AI</span>
