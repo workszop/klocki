@@ -10,6 +10,21 @@ const MODEL_URL = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/
 // without any training" — produces actual ImageNet probabilities.
 const CLASSIFIER_MODEL_URL = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-classification/versions/1/model.json?tfjs-format=file';
 
+// ===== HTML ESCAPING =====
+// Class names and model metadata are user-controlled and also arrive from
+// imported dataset/model files that persist to IndexedDB/localStorage. Any of
+// these strings interpolated into innerHTML is a stored-XSS sink, so escape at
+// every such boundary. Escapes the five HTML-significant characters, covering
+// both element-text and double-quoted-attribute contexts.
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ===== BUNDLE HELPERS =====
 // Chunked encoding — avoids O(n²) string concat for multi-MB weight buffers.
 function arrayBufferToBase64(buffer) {
@@ -245,6 +260,15 @@ let modelMetadata = null;
 let inferModel = null;
 let inferMetadata = null;
 let inferInterval = null;
+// Single-flight guards — these long-running async actions share global state
+// (preparedData, fullModel, baseModel, the chart histories), so overlapping
+// invocations corrupt each other. Each guard is set on entry and cleared in a
+// finally block.
+let trainingInProgress = false;
+let pipelineRunning = false;
+let prepareInProgress = false;
+let baseModelLoading = false;
+let modelFileLoading = false;
 // Educational mode: shows annotation tooltips above each block, disables drag
 // repositioning, and pre-populates a training pipeline. Toggleable from the
 // topbar; URL param ?edu=1 also enables it (for embedding in iframes).
@@ -266,10 +290,43 @@ function applyLang() {
     if (val) el.textContent = val;
   });
   document.getElementById('btn-lang').textContent = lang === 'pl' ? 'EN' : 'PL';
-  // Re-render dynamic block content
+  // Re-render dynamic block content. Titles refresh cheaply for every block;
+  // the block BODY (buttons, param labels, hints) is baked at build time from
+  // t(), so it must be rebuilt to switch language — otherwise the canvas shows
+  // a mix of both languages until some unrelated action re-renders it.
   placedBlocks.forEach(b => {
-    if (b.card) refreshBlockText(b);
+    if (!b.card) return;
+    refreshBlockText(b);
+    // Skip blocks with live runtime state (streaming camera, running inference,
+    // in-flight training) — rebuilding their innerHTML would orphan the <video>,
+    // interval target, or training chart. They self-heal on stop/restart.
+    if (isBlockBusy(b)) return;
+    const body = b.card.querySelector('.bk-body');
+    if (body) {
+      body.innerHTML = renderBlockBody(b.type, b.id);
+      initBlockAfterPlace(b.id, b.type);
+      if (eduMode) {
+        b.card.querySelectorAll('[onmousedown]').forEach(el => el.removeAttribute('onmousedown'));
+        b.card.querySelectorAll('[ontouchstart]').forEach(el => el.removeAttribute('ontouchstart'));
+      }
+    }
   });
+  refreshAllPrereqStrips();
+  refreshAllAnnotations();
+  evaluatePipelineState();
+}
+
+// A block is "busy" when it holds live runtime state that a full innerHTML
+// rebuild would destroy. Used to protect such blocks from the language rebuild.
+function isBlockBusy(b) {
+  switch (b.type) {
+    case 'camera-input': return !!cameraStreams[b.id];
+    case 'camera-infer':
+    case 'show-results': return !!inferInterval;
+    case 'zero-shot': return !!zsIntervals[b.id];
+    case 'train-model': return trainingInProgress;
+    default: return false;
+  }
 }
 function toggleLang() {
   lang = lang === 'pl' ? 'en' : 'pl';
@@ -387,77 +444,116 @@ function openDatasetDB() {
 
 // Encode one ImageData as a JPEG ArrayBuffer.
 function imageDataToJPEG(imgData, quality) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     const cv = document.createElement('canvas');
     cv.width = imgData.width; cv.height = imgData.height;
     cv.getContext('2d').putImageData(imgData, 0, 0);
     cv.toBlob(blob => {
-      blob.arrayBuffer().then(resolve);
+      // toBlob yields null if the canvas is tainted or encoding fails — reject
+      // so callers surface an error instead of awaiting a promise that never
+      // settles.
+      if (!blob) { reject(new Error('JPEG encoding failed')); return; }
+      blob.arrayBuffer().then(resolve, reject);
     }, 'image/jpeg', quality || 0.82);
   });
 }
 
-// Decode a JPEG ArrayBuffer back to ImageData.
+// Decode a JPEG ArrayBuffer back to ImageData. Rejects on a corrupt/undecodable
+// buffer (e.g. an imported dataset file with garbage sample data) — without a
+// reject path a single bad sample would hang import/load forever.
 function jpegToImageData(buf, width, height) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     const blob = new Blob([buf], { type: 'image/jpeg' });
     createImageBitmap(blob).then(bmp => {
       const cv = document.createElement('canvas');
       cv.width = width || bmp.width; cv.height = height || bmp.height;
       cv.getContext('2d').drawImage(bmp, 0, 0);
       resolve(cv.getContext('2d').getImageData(0, 0, cv.width, cv.height));
-    });
+    }, reject);
+  });
+}
+
+// Cancel every pending debounced save. Must be called before any operation that
+// repacks or clears class indices (delete class, clear dataset, import) —
+// otherwise a timer scheduled under an old index fires afterwards and writes a
+// phantom record at a now-invalid key.
+function cancelAllPendingSaves() {
+  Object.values(_saveDebounceTimers).forEach(clearTimeout);
+  _saveDebounceTimers = {};
+}
+
+// Actually encode + persist one class. Returns a promise that resolves when the
+// IDB write commits, so callers that need durability (import, delete) can await.
+async function writeClassToIDB(classIdx) {
+  const db = await openDatasetDB();
+  const samples = capturedSamples[classIdx] || [];
+  const jpegData = await Promise.all(samples.map(imgData => imageDataToJPEG(imgData)));
+  const record = { name: classNames[classIdx], color: classColors[classIdx], jpegData };
+  await new Promise((res, rej) => {
+    const tx = db.transaction(DATASET_STORE, 'readwrite');
+    const req = tx.objectStore(DATASET_STORE).put(record, classIdx);
+    req.onsuccess = res; req.onerror = e => rej(e.target.error);
   });
 }
 
 // Save one class's samples to IDB. Debounced per-class to avoid hammering the
-// encoder during rapid capture bursts.
+// encoder during rapid capture bursts. Returns a promise that resolves once the
+// scheduled write completes (immediate=true skips the debounce).
 function saveClassToIDB(classIdx, immediate) {
-  if (!classIdx && classIdx !== 0) return;
+  if (!classIdx && classIdx !== 0) return Promise.resolve();
+  // Any change to the captured samples invalidates the prepared training
+  // snapshot — otherwise training silently runs on stale data.
+  preparedData = null;
   clearTimeout(_saveDebounceTimers[classIdx]);
   const delay = immediate ? 0 : 600;
-  _saveDebounceTimers[classIdx] = setTimeout(async () => {
-    try {
-      const db = await openDatasetDB();
-      const samples = capturedSamples[classIdx] || [];
-      const jpegData = await Promise.all(
-        samples.map(imgData => imageDataToJPEG(imgData))
-      );
-      const record = {
-        name: classNames[classIdx],
-        color: classColors[classIdx],
-        jpegData
-      };
-      await new Promise((res, rej) => {
-        const tx = db.transaction(DATASET_STORE, 'readwrite');
-        const req = tx.objectStore(DATASET_STORE).put(record, classIdx);
-        req.onsuccess = res; req.onerror = e => rej(e.target.error);
-      });
-    } catch (err) {
-      console.warn('saveClassToIDB failed:', err);
-    }
-  }, delay);
+  return new Promise(resolve => {
+    _saveDebounceTimers[classIdx] = setTimeout(async () => {
+      try {
+        await writeClassToIDB(classIdx);
+      } catch (err) {
+        console.warn('saveClassToIDB failed:', err);
+      } finally {
+        resolve();
+      }
+    }, delay);
+  });
 }
 
 // Restore all classes from IDB into classNames / classColors / capturedSamples.
 // Called when a camera-input or label-classes block is placed.
 let datasetLoadPromise = null;
+// True once the stored dataset has been pulled into memory (or confirmed empty).
+// After that, placing another block just refreshes the UI from the in-memory
+// arrays rather than re-reading IDB — re-reading could overwrite samples the
+// user captured this session (the read races the 600 ms debounced save).
+let datasetLoadedFromIDB = false;
+function refreshDatasetUI() {
+  updateSampleCounts();
+  placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
+    const body = document.getElementById(b.id)?.querySelector('.bk-body');
+    if (body) body.innerHTML = renderLabelRows(b.id);
+  });
+  placedBlocks.filter(b => b.type === 'camera-input').forEach(b => updateThumbStrips(b.id));
+  evaluatePipelineState();
+  refreshDatasetInfo();
+}
 async function loadDatasetFromIDB() {
+  // Already restored — just re-sync the newly-placed block's UI from memory.
+  if (datasetLoadedFromIDB) { refreshDatasetUI(); return; }
   if (datasetLoadPromise) return datasetLoadPromise;
   datasetLoadPromise = (async () => {
     try {
       const db = await openDatasetDB();
-      const records = await new Promise((res, rej) => {
+      // Read keys and records in ONE transaction so index ki lines up between
+      // them — two separate transactions can straddle a concurrent write and
+      // misalign records against keys.
+      const { keys, records } = await new Promise((res, rej) => {
         const tx = db.transaction(DATASET_STORE, 'readonly');
-        const req = tx.objectStore(DATASET_STORE).getAll();
-        req.onsuccess = e => res(e.target.result);
-        req.onerror = e => rej(e.target.error);
-      });
-      const keys = await new Promise((res, rej) => {
-        const tx = db.transaction(DATASET_STORE, 'readonly');
-        const req = tx.objectStore(DATASET_STORE).getAllKeys();
-        req.onsuccess = e => res(e.target.result);
-        req.onerror = e => rej(e.target.error);
+        const store = tx.objectStore(DATASET_STORE);
+        const kReq = store.getAllKeys();
+        const rReq = store.getAll();
+        tx.oncomplete = () => res({ keys: kReq.result, records: rReq.result });
+        tx.onerror = e => rej(e.target.error);
       });
       if (!keys.length) return; // nothing stored yet
 
@@ -476,32 +572,29 @@ async function loadDatasetFromIDB() {
         ? `Wczytywanie ${keys.length} klas z bazy danych...`
         : `Loading ${keys.length} classes from database...`);
 
-      // Decode JPEG blobs — done in parallel per class
+      // Decode JPEG blobs — done in parallel per class. Skip any class that
+      // already has in-memory samples (captured while this load was in flight)
+      // so we don't discard them. A bad sample rejects instead of hanging.
       const decodePromises = keys.map(async (idx, ki) => {
         const rec = records[ki];
         if (!rec || !rec.jpegData || !rec.jpegData.length) return;
-        const decoded = await Promise.all(
-          rec.jpegData.map(buf => jpegToImageData(buf))
-        );
-        capturedSamples[idx] = decoded;
+        if (capturedSamples[idx] && capturedSamples[idx].length) return;
+        try {
+          capturedSamples[idx] = await Promise.all(rec.jpegData.map(buf => jpegToImageData(buf)));
+        } catch (e) {
+          console.warn('Skipping undecodable samples for class', idx, e);
+        }
       });
       await Promise.all(decodePromises);
 
       log('success', lang === 'pl'
         ? `Dataset załadowany: ${capturedSamples.flat().length} próbek`
         : `Dataset loaded: ${capturedSamples.flat().length} samples`);
-      // Refresh UI
-      updateSampleCounts();
-      placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
-        const body = document.getElementById(b.id)?.querySelector('.bk-body');
-        if (body) body.innerHTML = renderLabelRows(b.id);
-      });
-      placedBlocks.filter(b => b.type === 'camera-input').forEach(b => updateThumbStrips(b.id));
-      evaluatePipelineState();
-      refreshDatasetInfo();
+      refreshDatasetUI();
     } catch (err) {
       console.warn('loadDatasetFromIDB failed:', err);
     } finally {
+      datasetLoadedFromIDB = true;
       datasetLoadPromise = null;
     }
   })();
@@ -511,29 +604,30 @@ async function loadDatasetFromIDB() {
 // Remove a single class entry from IDB and repack remaining entries so keys
 // stay contiguous (0, 1, 2 … n-1).
 async function deleteClassFromIDB(classIdx) {
+  // Kill any pending debounced writes first — one firing after the repack would
+  // resurrect a class at a stale index.
+  cancelAllPendingSaves();
   try {
     const db = await openDatasetDB();
-    const keys = await new Promise((res, rej) => {
-      const tx = db.transaction(DATASET_STORE, 'readonly');
-      const req = tx.objectStore(DATASET_STORE).getAllKeys();
-      req.onsuccess = e => res(e.target.result); req.onerror = e => rej(e.target.error);
+    // Read AND repack inside a single readwrite transaction so keys/records stay
+    // aligned and no concurrent write can slip between read and rebuild.
+    await new Promise((res, rej) => {
+      const tx = db.transaction(DATASET_STORE, 'readwrite');
+      const store = tx.objectStore(DATASET_STORE);
+      const kReq = store.getAllKeys();
+      const rReq = store.getAll();
+      rReq.onsuccess = () => {
+        const keys = kReq.result;      // completes before rReq (same store, FIFO)
+        const records = rReq.result;
+        store.clear();
+        let newIdx = 0;
+        for (let ki = 0; ki < keys.length; ki++) {
+          if (keys[ki] === classIdx) continue;
+          store.put(records[ki], newIdx++);
+        }
+      };
+      tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
     });
-    const records = await new Promise((res, rej) => {
-      const tx = db.transaction(DATASET_STORE, 'readonly');
-      const req = tx.objectStore(DATASET_STORE).getAll();
-      req.onsuccess = e => res(e.target.result); req.onerror = e => rej(e.target.error);
-    });
-    // Rebuild: skip the deleted key, shift remaining down
-    const tx = db.transaction(DATASET_STORE, 'readwrite');
-    const store = tx.objectStore(DATASET_STORE);
-    // Clear everything
-    store.clear();
-    let newIdx = 0;
-    for (let ki = 0; ki < keys.length; ki++) {
-      if (keys[ki] === classIdx) continue;
-      store.put(records[ki], newIdx++);
-    }
-    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = e => rej(e.target.error); });
   } catch (err) {
     console.warn('deleteClassFromIDB failed:', err);
   }
@@ -611,12 +705,16 @@ async function importDataset(input) {
       newColors.push(cls.color && CLASS_COLORS.includes(cls.color) && !usedSoFar.has(cls.color)
         ? cls.color
         : CLASS_COLORS.find(c => !usedSoFar.has(c)) || CLASS_COLORS[newNames.length % CLASS_COLORS.length]);
-      const decoded = await Promise.all((cls.samples || []).map(b64 => {
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        return jpegToImageData(bytes.buffer);
-      }));
+      // Decode each sample independently; skip (rather than abort on) any
+      // corrupt sample so one bad frame doesn't sink the whole import.
+      const decoded = (await Promise.all((cls.samples || []).map(b64 => {
+        try {
+          const binary = atob(b64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return jpegToImageData(bytes.buffer).catch(() => null);
+        } catch (_) { return null; }
+      }))).filter(Boolean);
       newSamples.push(decoded);
     }
     // Cap at CLASS_COLORS.length classes
@@ -625,8 +723,14 @@ async function importDataset(input) {
     capturedSamples = newSamples.slice(0, CLASS_COLORS.length);
     preparedData  = null;
 
-    // Persist to IDB
-    await Promise.all(classNames.map((_, i) => saveClassToIDB(i, true)));
+    // Persist to IDB. Cancel pending debounced writes, then WIPE the store so
+    // classes from a previous (larger) dataset can't survive at higher keys and
+    // get merged back in on the next load. Await the writes so the success log
+    // reflects durable state, not a fire-and-forget.
+    cancelAllPendingSaves();
+    await clearDatasetStore();
+    for (let i = 0; i < classNames.length; i++) await writeClassToIDB(i);
+    datasetLoadedFromIDB = true;
 
     // Refresh all block UIs
     placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
@@ -665,6 +769,7 @@ function confirmClearDataset() {
     : `Delete all samples (${totalSamples}) from browser storage? This cannot be undone.`;
   if (!confirm(msg)) return;
   clearDatasetFromIDB();
+  datasetLoadedFromIDB = true; // in-memory is now authoritative; don't re-read
   classNames = lang === 'pl' ? ['Klasa 1', 'Klasa 2'] : ['Class 1', 'Class 2'];
   classColors = CLASS_COLORS.slice(0, 2);
   capturedSamples = [[], []];
@@ -680,14 +785,22 @@ function confirmClearDataset() {
   log('warn', lang === 'pl' ? 'Dataset usunięty z pamięci' : 'Dataset deleted from storage');
 }
 
+// Low-level store wipe (awaitable), shared by the clear-dataset action and the
+// import flow.
+async function clearDatasetStore() {
+  const db = await openDatasetDB();
+  await new Promise((res, rej) => {
+    const tx = db.transaction(DATASET_STORE, 'readwrite');
+    tx.objectStore(DATASET_STORE).clear();
+    tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
+  });
+}
+
 async function clearDatasetFromIDB() {
+  // Cancel pending debounced writes so none re-inserts a record after the wipe.
+  cancelAllPendingSaves();
   try {
-    const db = await openDatasetDB();
-    await new Promise((res, rej) => {
-      const tx = db.transaction(DATASET_STORE, 'readwrite');
-      tx.objectStore(DATASET_STORE).clear();
-      tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
-    });
+    await clearDatasetStore();
   } catch (err) {
     console.warn('clearDatasetFromIDB failed:', err);
   }
@@ -927,6 +1040,22 @@ function buildBlockHTML(type, id) {
   const phase = phases[type] || '';
   const title = titles[type] || type;
 
+  return `
+<div class="bk-header" style="background:${bg}" onmousedown="cardDragStart(event,'${id}')" ontouchstart="cardDragStart(event,'${id}')" ondblclick="toggleCollapse('${id}')">
+  <span class="drag-handle">⠸</span>
+  <span class="bk-title" data-block-title="${id}">${title}</span>
+  <span class="bk-badge">${phase}</span>
+  <span class="bk-status">${t('status_idle')}</span>
+  <button class="bk-close" onclick="confirmRemoveBlock('${id}')" onmousedown="event.stopPropagation()" title="${lang === 'pl' ? 'Usuń blok' : 'Remove block'}">✕</button>
+</div>
+<div class="bk-body">${renderBlockBody(type, id)}</div>
+<div class="block-annotation" id="ann-${id}"></div>`;
+}
+
+// Inner markup of a block's .bk-body (note + prereq strip + type-specific body).
+// Extracted so the language switch can rebuild a block body in place without
+// duplicating the type dispatch or touching the header/status.
+function renderBlockBody(type, id) {
   let body = '';
   switch (type) {
     case 'camera-input': body = buildCameraInputBody(id); break;
@@ -942,26 +1071,15 @@ function buildBlockHTML(type, id) {
     case 'explain-ai': body = buildExplainAIBody(id); break;
     case 'model-explorer': body = buildModelExplorerBody(id); break;
   }
-
   return `
-<div class="bk-header" style="background:${bg}" onmousedown="cardDragStart(event,'${id}')" ontouchstart="cardDragStart(event,'${id}')" ondblclick="toggleCollapse('${id}')">
-  <span class="drag-handle">⠸</span>
-  <span class="bk-title" data-block-title="${id}">${title}</span>
-  <span class="bk-badge">${phase}</span>
-  <span class="bk-status">${t('status_idle')}</span>
-  <button class="bk-close" onclick="confirmRemoveBlock('${id}')" onmousedown="event.stopPropagation()" title="${lang === 'pl' ? 'Usuń blok' : 'Remove block'}">✕</button>
-</div>
-<div class="bk-body">
   ${renderBlockNote(type)}
   <div id="prereq-${id}">${renderPrereqStrip(type)}</div>
-  ${body}
-</div>
-<div class="block-annotation" id="ann-${id}"></div>`;
+  ${body}`;
 }
 
 function buildCameraInputBody(id) {
   const classButtons = () => classNames.map((name, i) =>
-    `<button class="bk-btn" style="background:${classColors[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${id}',${i})">${name}</button>`
+    `<button class="bk-btn" style="background:${classColors[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${id}',${i})">${escapeHtml(name)}</button>`
   ).join('');
   return `
 <div class="video-wrap"><video class="bk-video" id="vid-${id}" autoplay playsinline muted></video></div>
@@ -993,7 +1111,7 @@ function renderLabelRows(id) {
     const deleteTip = lang === 'pl' ? 'Usuń klasę' : 'Delete class';
     rows += `<div class="class-row">
 <div class="class-color-dot" style="background:${classColors[i]}"></div>
-<input class="class-name-input" id="cn-${id}-${i}" value="${classNames[i]}"
+<input class="class-name-input" id="cn-${id}-${i}" value="${escapeHtml(classNames[i])}"
   oninput="classNames[${i}]=this.value;updateClassNamesEverywhere()" placeholder="${lang === 'pl' ? 'nazwa klasy...' : 'class name...'}">
 <span class="class-count" id="cc-${id}-${i}">${(capturedSamples[i] || []).length} ${t('lbl_samples')}</span>
 <button style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${classColors[i]};color:#fff" onclick="labelCapture(${i})">${lang === 'pl' ? 'zbierz' : 'capture'}</button>
@@ -1341,6 +1459,11 @@ function refreshBlockText(b) {
     };
     title.textContent = titles[b.type] || b.type;
   }
+  // Re-translate the status badge from the card's current status-* class so it
+  // doesn't stay stuck in the previous language after a switch.
+  const chip = b.card.querySelector('.bk-status');
+  const statusMatch = /status-(\w+)/.exec(b.card.className);
+  if (chip && statusMatch) chip.textContent = t('status_' + statusMatch[1]);
 }
 
 function toggleCollapse(id) {
@@ -1555,7 +1678,7 @@ function updateClassNamesEverywhere() {
     const container = document.getElementById('capture-btns-' + b.id);
     if (!container) return;
     container.innerHTML = classNames.map((name, i) =>
-      `<button class="bk-btn" style="background:${classColors[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${b.id}',${i})">${name}</button>`
+      `<button class="bk-btn" style="background:${classColors[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${b.id}',${i})">${escapeHtml(name)}</button>`
     ).join('');
   });
   persistCanvasState();
@@ -1568,6 +1691,10 @@ function updateClassNamesEverywhere() {
 
 // ===== CAMERA — Training =====
 let cameraStreams = {};
+// Per-id "camera is opening" latch. getUserMedia is async, so without it two
+// rapid clicks both pass the existing-stream check and open two streams — the
+// first is overwritten and never stopped (camera LED stays on).
+let cameraOpening = {};
 
 async function getCameraStream() {
   const bail = e => e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError';
@@ -1593,6 +1720,8 @@ async function getCameraStream() {
 }
 
 async function blockStartCamera(id) {
+  if (cameraOpening[id]) return;
+  cameraOpening[id] = true;
   try {
     if (cameraStreams[id]) {
       cameraStreams[id].getTracks().forEach(t => t.stop());
@@ -1612,6 +1741,8 @@ async function blockStartCamera(id) {
     }
     log('error', msg);
     setBlockStatus(document.getElementById(id), 'error');
+  } finally {
+    cameraOpening[id] = false;
   }
 }
 
@@ -1799,6 +1930,14 @@ async function runPrepare(id) {
   const totalSamples = capturedSamples.reduce((s, a) => s + a.length, 0);
   if (totalSamples === 0) { log('warn', t('log_no_data')); return; }
 
+  // Single-flight: parallel prepares would spawn competing workers whose 'done'
+  // handlers race to overwrite preparedData.
+  if (prepareInProgress) {
+    log('warn', lang === 'pl' ? 'Przygotowanie już trwa.' : 'Preparation is already running.');
+    return;
+  }
+  prepareInProgress = true;
+
   setBlockStatus(document.getElementById(id), 'running');
   log('step', t('log_prep_start'));
 
@@ -1822,6 +1961,28 @@ async function runPrepare(id) {
   }
 
   return new Promise((resolve) => {
+    // Tear down worker + blob URL + guard exactly once, whatever the outcome.
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      try { worker.terminate(); } catch (_) {}
+      URL.revokeObjectURL(workerURL);
+      prepareInProgress = false;
+      resolve();
+    };
+    // Without these, a worker exception left the promise pending forever —
+    // runPipeline would hang and the progress bar freeze with no error.
+    worker.onerror = (err) => {
+      log('error', 'Prepare worker error: ' + (err && err.message ? err.message : 'unknown'));
+      setBlockStatus(document.getElementById(id), 'error');
+      cleanup();
+    };
+    worker.onmessageerror = () => {
+      log('error', 'Prepare worker: message decode failed');
+      setBlockStatus(document.getElementById(id), 'error');
+      cleanup();
+    };
     worker.onmessage = async (e) => {
       if (e.data.type === 'progress') {
         if (prog) prog.value = e.data.pct;
@@ -1850,9 +2011,7 @@ async function runPrepare(id) {
         if (status) status.textContent = t('log_prep_done', n);
         setBlockStatus(document.getElementById(id), 'done');
         evaluatePipelineState();
-        worker.terminate();
-        URL.revokeObjectURL(workerURL);
-        resolve();
+        cleanup();
       }
     };
     worker.postMessage({ samples: allSamples, multiplier, augType });
@@ -1862,6 +2021,10 @@ async function runPrepare(id) {
 // ===== LOAD BASE MODEL =====
 async function runLoadBaseModel(id) {
   if (baseModel) { log('info', 'Base model already loaded'); setBlockStatus(document.getElementById(id), 'done'); return; }
+  // Guard against a double-click racing two ~3 MB downloads (the second would
+  // overwrite baseModel and leak the first GraphModel's weights).
+  if (baseModelLoading) { log('info', lang === 'pl' ? 'Model bazowy już się ładuje...' : 'Base model is already loading...'); return; }
+  baseModelLoading = true;
   setBlockStatus(document.getElementById(id), 'running');
   log('step', t('log_model_loading'));
   const prog = document.getElementById('prog-' + id);
@@ -1882,6 +2045,8 @@ async function runLoadBaseModel(id) {
   } catch (err) {
     log('error', t('log_model_err') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
+  } finally {
+    baseModelLoading = false;
   }
 }
 
@@ -2032,6 +2197,15 @@ async function runTraining(id) {
   }
   if (!validateTrainingData()) return;
 
+  // Single-flight: a second concurrent run (double-click Train, or Run pipeline
+  // while a manual train is in flight) would share trainingCancelled / the chart
+  // histories / fullModel and corrupt all of them.
+  if (trainingInProgress) {
+    log('warn', lang === 'pl' ? 'Trening już trwa.' : 'Training is already running.');
+    return;
+  }
+  trainingInProgress = true;
+
   trainingCancelled = false;
   lossHistory = []; accHistory = [];
   const epochs = parseInt(document.getElementById('ep-' + id)?.value || '15');
@@ -2047,6 +2221,10 @@ async function runTraining(id) {
   // Declared outside try so finally can always dispose them
   let featsTensor = null;
   let ysTensor = null;
+  const allFeats = [];      // per-batch feature tensors — leak on cancel/error otherwise
+  let classifier = null;    // disposed in finally unless training committed it
+  let committed = false;
+  const prevModel = fullModel; // freed AFTER the new model is live (see below)
 
   try {
     // ── STEP 1: Extract bottleneck features from frozen base model ──
@@ -2058,7 +2236,6 @@ async function runTraining(id) {
     // Worker output uses plain {data,width,height} objects; wrap with
     // ImageData (no buffer copy) so tf.browser.fromPixels accepts them.
     const BATCH = 8;
-    const allFeats = [];
     for (let bs = 0; bs < rawXs.length; bs += BATCH) {
       if (trainingCancelled) throw new Error('cancelled');
       const end = Math.min(bs + BATCH, rawXs.length);
@@ -2077,8 +2254,11 @@ async function runTraining(id) {
         }
         return tf.stack(items);
       });
-      allFeats.push(baseModel.predict(batchTensor));
-      batchTensor.dispose();
+      try {
+        allFeats.push(baseModel.predict(batchTensor));
+      } finally {
+        batchTensor.dispose();
+      }
       if (info) info.textContent = lang === 'pl'
         ? `Ekstrakcja cech: ${end}/${rawXs.length}`
         : `Feature extraction: ${end}/${rawXs.length}`;
@@ -2098,7 +2278,7 @@ async function runTraining(id) {
     // ── STEP 2: Train small classifier on bottleneck features ──
     // The base model (GraphModel) cannot be fine-tuned in TF.js — it is always frozen.
     // We train only the Dense head on the pre-extracted feature vectors.
-    const classifier = tf.sequential({
+    classifier = tf.sequential({
       layers: [
         tf.layers.dense({ inputShape: [featSize], units: 128, activation: 'relu' }),
         tf.layers.dropout({ rate: 0.3 }),
@@ -2150,6 +2330,13 @@ async function runTraining(id) {
     fullModel = classifier;
     inferModel = classifier;       // available immediately for same-session inference
     inferMetadata = modelMetadata; // so inference blocks see the right class labels
+    committed = true;              // ownership transferred — don't dispose in finally
+    // Free the previous head now that the live inference loop reads the new one.
+    // Doing it here (not before fit) means a running inference camera has already
+    // switched to `classifier` before the old model's weights are released.
+    if (prevModel && prevModel !== classifier) {
+      try { prevModel.dispose(); } catch (_) {}
+    }
 
     log('info', lang === 'pl' ? 'Model gotowy...' : 'Model ready...');
     log('success', t('log_train_done', finalAcc));
@@ -2167,9 +2354,16 @@ async function runTraining(id) {
       setBlockStatus(document.getElementById(id), 'error');
     }
   } finally {
-    // Always clean up feature tensors regardless of success, cancellation or error
+    // Always clean up feature tensors regardless of success, cancellation or error.
     if (featsTensor) featsTensor.dispose();
     if (ysTensor) ysTensor.dispose();
+    // Batch feature tensors leak if we bailed mid-extraction (dispose is
+    // idempotent, so re-disposing the ones freed after concat is harmless).
+    allFeats.forEach(f => { try { f.dispose(); } catch (_) {} });
+    // The freshly-built classifier leaks if training was cancelled or errored
+    // before ownership transferred to fullModel.
+    if (classifier && !committed) { try { classifier.dispose(); } catch (_) {} }
+    trainingInProgress = false;
   }
 }
 
@@ -2243,13 +2437,22 @@ async function runDownload(id) {
 function pickModelFiles(id) {
   const inp = document.getElementById('file-model-' + id);
   if (!inp) return;
-  inp.onchange = () => tryLoadModelFiles(id);
+  // The 'change' handler is registered once in initBlockAfterPlace. Do NOT also
+  // assign inp.onchange here — that made every file pick run tryLoadModelFiles
+  // twice concurrently (parsing the file and building two models).
   inp.click();
 }
 
 async function tryLoadModelFiles(id) {
   const inp = document.getElementById('file-model-' + id);
   if (!inp || !inp.files.length) { log('warn', lang === 'pl' ? 'Wybierz plik modelu' : 'Select model file first'); return; }
+  if (modelFileLoading) { log('info', lang === 'pl' ? 'Model już się wczytuje...' : 'A model is already loading...'); return; }
+  modelFileLoading = true;
+  // Capture the models we may replace so we can free them once the new ones are
+  // live. A model still referenced by fullModel (a trained head kept for saving)
+  // is never disposed here.
+  const prevInfer = inferModel;
+  const prevBase = baseModel;
   const allFiles = Array.from(inp.files);
   const jsonFile = allFiles.find(f => f.name.endsWith('.json'));
   if (!jsonFile) { log('warn', 'No .json file selected'); return; }
@@ -2291,6 +2494,8 @@ async function tryLoadModelFiles(id) {
           : 'Remember: also load the base model (Pretrained Model block or Load from Browser)');
       }
     }
+    disposeIfUnused(prevInfer, inferModel, fullModel);
+    disposeIfUnused(prevBase, baseModel, fullModel);
     setBlockStatus(document.getElementById(id), 'done');
     log('success', t('log_upload_done', classNames.join(', ')));
     modelSaved = true; // loaded from disk → already exists somewhere
@@ -2298,6 +2503,16 @@ async function tryLoadModelFiles(id) {
   } catch (err) {
     log('error', 'Upload error: ' + err.message);
     setBlockStatus(document.getElementById(id), 'error');
+  } finally {
+    modelFileLoading = false;
+  }
+}
+
+// Dispose a model we're replacing, unless it's the same instance we just kept or
+// is still owned elsewhere (e.g. fullModel keeps a trained head for saving).
+function disposeIfUnused(model, keepA, keepB) {
+  if (model && model !== keepA && model !== keepB) {
+    try { model.dispose(); } catch (_) {}
   }
 }
 
@@ -2308,6 +2523,10 @@ async function runLoadIDB(id) {
     log('warn', lang === 'pl' ? 'Wybierz model z listy (kliknij ↺ aby odświeżyć)' : 'Select a model from the list (click ↺ to refresh)');
     return;
   }
+  if (modelFileLoading) { log('info', lang === 'pl' ? 'Model już się wczytuje...' : 'A model is already loading...'); return; }
+  modelFileLoading = true;
+  const prevInfer = inferModel;
+  const prevBase = baseModel;
   setBlockStatus(document.getElementById(id), 'running');
   log('step', 'Loading from IndexedDB: ' + name + '...');
   try {
@@ -2329,6 +2548,8 @@ async function runLoadIDB(id) {
     const metaStr = localStorage.getItem('ml-blocks-meta-' + name) || localStorage.getItem('ml-blocks-meta');
     const meta = metaStr ? JSON.parse(metaStr) : {};
     processLoadedMeta(id, meta);
+    disposeIfUnused(prevInfer, inferModel, fullModel);
+    disposeIfUnused(prevBase, baseModel, fullModel);
     setBlockStatus(document.getElementById(id), 'done');
     log('success', t('log_upload_done', meta.classLabels ? meta.classLabels.join(', ') : '—'));
     modelSaved = true;
@@ -2336,6 +2557,8 @@ async function runLoadIDB(id) {
   } catch (err) {
     log('error', 'IDB load error: ' + err.message);
     setBlockStatus(document.getElementById(id), 'error');
+  } finally {
+    modelFileLoading = false;
   }
 }
 
@@ -2348,7 +2571,7 @@ async function refreshIDBList(id) {
       .filter(k => k.startsWith('indexeddb://ml-blocks-') && !k.startsWith('indexeddb://ml-blocks-base-'))
       .map(k => k.replace('indexeddb://ml-blocks-', ''));
     sel.innerHTML = names.length
-      ? names.map(n => '<option value="' + n + '">' + n + '</option>').join('')
+      ? names.map(n => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join('')
       : '<option value="" disabled selected>' + t('lbl_no_saved_models') + '</option>';
   } catch (e) {
     sel.innerHTML = '<option value="" disabled selected>' + t('lbl_no_saved_models') + '</option>';
@@ -2368,12 +2591,18 @@ function processLoadedMeta(id, meta) {
     }
   }
   if (meta.classLabels) {
-    for (let i = 0; i < meta.classLabels.length; i++) classNames[i] = meta.classLabels[i];
+    for (let i = 0; i < meta.classLabels.length; i++) {
+      classNames[i] = meta.classLabels[i];
+      // Keep classColors / capturedSamples aligned so a model with more classes
+      // than the current session doesn't render undefined-coloured result bars.
+      if (!classColors[i]) classColors[i] = CLASS_COLORS[i % CLASS_COLORS.length];
+      if (!capturedSamples[i]) capturedSamples[i] = [];
+    }
   }
   const el = document.getElementById('meta-' + id);
   if (el) {
     el.innerHTML = `
-  <b>${t('lbl_classes')}:</b> ${classNames.join(', ')}<br>
+  <b>${t('lbl_classes')}:</b> ${classNames.map(escapeHtml).join(', ')}<br>
   <b>${t('lbl_accuracy')}:</b> ${meta.trainingAccuracy ? (meta.trainingAccuracy * 100).toFixed(1) + '%' : '—'}<br>
   <b>${t('lbl_timestamp')}:</b> ${meta.timestamp ? new Date(meta.timestamp).toLocaleString() : '—'}
 `;
@@ -2444,6 +2673,8 @@ async function loadZeroShotModel(statusEl) {
 
 async function startZeroShot(id) {
   const statusEl = document.getElementById('zs-status-' + id);
+  if (cameraOpening['zs-' + id]) return;
+  cameraOpening['zs-' + id] = true;
   if (zsStreams[id]) zsStreams[id].getTracks().forEach(t => t.stop());
   try {
     setBlockStatus(document.getElementById(id), 'running');
@@ -2466,6 +2697,8 @@ async function startZeroShot(id) {
     if (statusEl) statusEl.textContent = err.message || '';
     log('error', (lang === 'pl' ? 'B\u0142\u0105d zero-shot: ' : 'Zero-shot error: ') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
+  } finally {
+    cameraOpening['zs-' + id] = false;
   }
 }
 
@@ -2481,8 +2714,11 @@ async function runZeroShot(id) {
   const vid = document.getElementById('zsvid-' + id);
   if (!vid || !vid.srcObject) return;
   const labels = imagenetLabels;
+  // Declared outside try so a throw in predict/softmax/data() still frees them
+  // — this runs up to 10x/s, so a leak here compounds fast.
+  let tensor = null, logitsTensor = null, probsTensor = null;
   try {
-    const tensor = tf.tidy(() =>
+    tensor = tf.tidy(() =>
       tf.browser.fromPixels(vid)
         .resizeBilinear([224, 224])
         .toFloat().div(255)
@@ -2490,12 +2726,9 @@ async function runZeroShot(id) {
     );
     // The Kaggle classification model outputs raw logits, not probabilities.
     // Apply softmax to convert to a proper 0-1 probability distribution.
-    const logitsTensor = zeroShotModel.predict(tensor);
-    const probsTensor = tf.softmax(logitsTensor);
+    logitsTensor = zeroShotModel.predict(tensor);
+    probsTensor = tf.softmax(logitsTensor);
     const probs = await probsTensor.data();
-    logitsTensor.dispose();
-    probsTensor.dispose();
-    tensor.dispose();
     // Partial top-5 selection — single linear pass instead of allocating
     // 1001 wrapper objects + full sort every frame.
     const K = 5;
@@ -2520,7 +2753,7 @@ async function runZeroShot(id) {
         const pct = Math.min(100, v * 100).toFixed(1);
         return `<div style="margin-bottom:3px">
 <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:1px">
-  <span style="font-weight:600;color:var(--c-model);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">${label}</span>
+  <span style="font-weight:600;color:var(--c-model);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">${escapeHtml(label)}</span>
   <span style="color:var(--c-muted)">${pct}%</span>
 </div>
 <div style="background:#E2E8F0;border-radius:3px;height:5px">
@@ -2529,11 +2762,21 @@ async function runZeroShot(id) {
       }).join('');
     }
   } catch (e) { /* silent — frame may not be ready yet */ }
+  finally {
+    if (tensor) tensor.dispose();
+    if (logitsTensor) logitsTensor.dispose();
+    if (probsTensor) probsTensor.dispose();
+  }
 }
 
 async function startInferCamera(id) {
+  if (cameraOpening['infer']) return;
+  cameraOpening['infer'] = true;
   try {
     if (inferCameraStream) inferCameraStream.getTracks().forEach(t => t.stop());
+    // Clear any leftover freeze from a previous session — otherwise the
+    // inference loop early-returns forever and predictions never resume.
+    frozenFrame = false;
     inferCameraStream = await getCameraStream();
     const vid = document.getElementById('vid-' + id);
     if (vid) { vid.srcObject = inferCameraStream; vid.play().catch(() => {}); }
@@ -2549,12 +2792,15 @@ async function startInferCamera(id) {
   } catch (err) {
     log('error', t('log_camera_err') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
+  } finally {
+    cameraOpening['infer'] = false;
   }
 }
 
 function stopInferCamera(id) {
   if (inferInterval) { clearInterval(inferInterval); inferInterval = null; }
   if (inferCameraStream) { inferCameraStream.getTracks().forEach(t => t.stop()); inferCameraStream = null; }
+  frozenFrame = false;
   setBlockStatus(document.getElementById(id), 'idle');
   log('info', 'Inference camera stopped');
   evaluatePipelineState();
@@ -2652,9 +2898,13 @@ async function runInference(camId) {
   if (!vid || !vid.srcObject) return;
   if (!baseModel) return; // user is between block placements; silent
 
+  // Declared outside try so a throw in either predict() (e.g. a loaded model
+  // whose input shape doesn't match the base features) frees them instead of
+  // leaking ~0.6 MB per tick at 5-10 fps.
+  let tensor = null, features = null, predTensor = null;
   try {
     const inputSize = (inferMetadata && inferMetadata.inputSize) || 224;
-    const tensor = tf.tidy(() =>
+    tensor = tf.tidy(() =>
       tf.browser.fromPixels(vid)
         .resizeBilinear([inputSize, inputSize])
         .toFloat().div(255)
@@ -2664,13 +2914,9 @@ async function runInference(camId) {
     // Two-step prediction: baseModel (frozen GraphModel) -> features ->
     // inferModel (classifier head) -> class probabilities. baseModel is
     // synchronous; no need to await.
-    const features = baseModel.predict(tensor);
-    const predTensor = inferModel.predict(features);
+    features = baseModel.predict(tensor);
+    predTensor = inferModel.predict(features);
     const predictions = await predTensor.data();
-    predTensor.dispose();
-    features.dispose();
-
-    tensor.dispose();
 
     // argmax + confidence in one pass — avoids spread + indexOf.
     let maxIdx = 0;
@@ -2720,6 +2966,10 @@ async function runInference(camId) {
 
   } catch (err) {
     // silent
+  } finally {
+    if (predTensor) predTensor.dispose();
+    if (features) features.dispose();
+    if (tensor) tensor.dispose();
   }
 }
 
@@ -2925,7 +3175,7 @@ async function runXAI(id) {
   if (resultEl) {
     const lbl = classNames[baseClass];
     const pct = (baseConf * 100).toFixed(1);
-    resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">${lbl} ${pct}%</span>`;
+    resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">${escapeHtml(lbl)} ${pct}%</span>`;
   }
 
   if (thumbCv && bestDrop > 0.001) {
@@ -2966,7 +3216,7 @@ async function runXAI(id) {
         const color = deltaPP > 0.05 ? '#16A34A' : deltaPP < -0.05 ? '#DC2626' : '#94A3B8';
         rows.push(`<div class="xai-class-row">
   <span class="xai-class-dot" style="background:${classColors[i]}"></span>
-  <span class="xai-class-name" title="${classNames[i]}">${classNames[i]}</span>
+  <span class="xai-class-name" title="${escapeHtml(classNames[i])}">${escapeHtml(classNames[i])}</span>
   <span class="xai-class-track">
     <span class="xai-bar-base" style="width:${(b*100).toFixed(1)}%"></span>
     <span class="xai-bar-occ" style="width:${(o*100).toFixed(1)}%;background:${classColors[i]}"></span>
@@ -3121,7 +3371,7 @@ async function runXAISaliency(p) {
     if (resultEl) {
       const lbl = classNames[baseClass];
       const pct = (baseConf * 100).toFixed(1);
-      resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">${lbl} ${pct}%</span>`;
+      resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">${escapeHtml(lbl)} ${pct}%</span>`;
     }
     if (thumbCv) {
       const half = 32; // 64×64 thumb centred on hottest pixel
@@ -3271,6 +3521,14 @@ const BLOCK_PHASE_MAP = {
 
 // ===== PIPELINE RUNNER =====
 async function runPipeline() {
+  // Single-flight: a second Run while one is in flight would drive two prepares
+  // and two trainings over the same shared state.
+  if (pipelineRunning) {
+    log('warn', lang === 'pl' ? 'Pipeline już działa.' : 'Pipeline is already running.');
+    return;
+  }
+  pipelineRunning = true;
+  try {
   // Sort blocks left-to-right by X position
   const sorted = [...placedBlocks].sort((a, b) => a.x - b.x);
   log('step', '=== Pipeline Start ===');
@@ -3300,6 +3558,9 @@ async function runPipeline() {
   }
   clearFlowPhase();
   log('success', '=== Pipeline Done ===');
+  } finally {
+    pipelineRunning = false;
+  }
 }
 
 // ===== GUIDE MODAL =====
@@ -3373,14 +3634,10 @@ document.addEventListener('DOMContentLoaded', () => {
   evaluatePipelineState();
   if (typeof refreshEmptyState === 'function') refreshEmptyState();
 
-  // Canvas scroll sync
-  const canvas = document.getElementById('canvas');
-  canvas.addEventListener('wheel', (e) => {
-    e.preventDefault();
-  }, { passive: false });
-
-  // Quick start if EDU mode
-  if (eduMode) {
+  // Quick start if EDU mode — but ONLY when the canvas is empty. restoreCanvasState()
+  // above may have already rebuilt a saved pipeline; adding another one on every
+  // reload made the block count grow without bound (6 → 12 → 18 …).
+  if (eduMode && placedBlocks.length === 0) {
     setTimeout(quickStartTraining, 300);
   }
 

@@ -6,7 +6,6 @@
     <title>MobileNet V3 Small — Architecture Explorer</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
     <style>
         :root {
             --bg-main: #FFFFFF;
@@ -419,7 +418,7 @@
                 <p>Optimized for mobile/edge inference using Neural Architecture Search (NAS) + NetAdapt. Features hard-swish activation, squeeze-and-excitation modules, and depthwise separable convolutions.</p>
                 <div class="model-info-stats">
                     <div><strong>2.5M</strong>Parameters</div>
-                    <div><strong>~67MB</strong>Download</div>
+                    <div><strong>~6MB</strong>Download</div>
                     <div><strong>224×224</strong>Input</div>
                     <div><strong>67.4%</strong>Top-1 Acc.</div>
                 </div>
@@ -443,7 +442,7 @@
         <div id="tab-features" class="tab-content">
             <div class="section-header">
                 <h2>Feature Map Visualization</h2>
-                <p>Intermediate activations at key layers after running inference. Load a model and run inference to populate.</p>
+                <p>A <strong>schematic</strong> of how spatial detail collapses as depth increases, plus the model's <strong>real</strong> 1024-dim embedding at the bottom. The per-stage grids are illustrative (the graph model doesn't expose named intermediate tensors); the final embedding is a genuine forward pass. Load a model and run inference to populate.</p>
             </div>
             <div id="fmap-container">
                 <div class="empty-state">
@@ -540,120 +539,26 @@ const ARCH = [
     { id: 'output', type: 'output', tag: 'OUTPUT', name: 'Classifier',       detail: 'Linear → Softmax',                     shape: '1×1×1000',   params: '1,025,000', desc: '1×1 conv to 1000 ImageNet classes, softmax activation.' },
 ];
 const TAG_CLASSES = { input:'tag-input', stem:'tag-stem', bneck:'tag-bneck', head:'tag-head', output:'tag-output' };
-// =====================================================================
-// Build MobileNet V3 Small from scratch using TF.js layers
-// (random weights — no download needed, real architecture & real ops)
-// =====================================================================
-// Hard-swish: x * relu6(x+3) / 6
-function hardSwish(x) {
-    return tf.tidy(() => x.mul(tf.relu6(x.add(3)).div(6)));
-}
-// Squeeze-and-Excitation block
-function seBlock(x, inChannels, seRatio = 0.25) {
-    return tf.tidy(() => {
-        const seChannels = Math.max(1, Math.round(inChannels * seRatio));
-        const pooled = x.mean([1, 2], true);                          // [1,1,1,C]
-        const w1 = tf.variable(tf.randomNormal([1,1,inChannels, seChannels], 0, 0.01));
-        const w2 = tf.variable(tf.randomNormal([1,1,seChannels, inChannels], 0, 0.01));
-        const sq = tf.relu(pooled.conv2d(w1, 1, 'same'));
-        const ex = tf.sigmoid(sq.conv2d(w2, 1, 'same'));
-        return x.mul(ex);
-    });
-}
-// Depthwise conv: using grouped approach via channel-wise conv
-function depthwiseConv(x, kernelSize, stride, channels) {
-    return tf.tidy(() => {
-        const k = tf.randomNormal([kernelSize, kernelSize, channels, 1], 0, 0.01);
-        return tf.depthwiseConv2d(x, k, stride, 'same');
-    });
-}
-// Pointwise conv
-function pointwiseConv(x, inCh, outCh) {
-    return tf.tidy(() => {
-        const k = tf.randomNormal([1, 1, inCh, outCh], 0, 0.01);
-        return x.conv2d(k, 1, 'same');
-    });
-}
-// Batch norm (simplified: just normalize per channel)
-function bn(x) {
-    return tf.tidy(() => {
-        const {mean, variance} = tf.moments(x, [0,1,2], true);
-        return x.sub(mean).div(variance.add(1e-5).sqrt());
-    });
-}
-// Inverted residual bottleneck block
-function bottleneck(x, inCh, outCh, expandCh, kernelSize, stride, useSE, useHS) {
-    return tf.tidy(() => {
-        let out = x;
-        // Expand
-        if (expandCh !== inCh) {
-            out = pointwiseConv(out, inCh, expandCh);
-            out = bn(out);
-            out = useHS ? hardSwish(out) : tf.relu(out);
-        }
-        // Depthwise
-        out = depthwiseConv(out, kernelSize, stride, expandCh);
-        out = bn(out);
-        out = useHS ? hardSwish(out) : tf.relu(out);
-        // SE
-        if (useSE) out = seBlock(out, expandCh);
-        // Project
-        out = pointwiseConv(out, expandCh, outCh);
-        out = bn(out);
-        // Residual
-        if (stride === 1 && inCh === outCh) out = out.add(x);
-        return out;
-    });
-}
-// Intermediate activations captured during forward pass
-let capturedActivations = {};
-function runForwardPass(imgTensor) {
-    return tf.tidy(() => {
-        capturedActivations = {};
-        let x = imgTensor; // [1,224,224,3]
-        // Stem
-        const stemK = tf.randomNormal([3,3,3,16], 0, 0.01);
-        x = x.conv2d(stemK, 2, 'same');
-        x = bn(x);
-        x = hardSwish(x);
-        capturedActivations['stem'] = x.clone(); // 112×112×16
-        // Bottlenecks: [inCh, outCh, expandCh, k, stride, SE, HS]
-        const cfg = [
-            [16,  16,  16,  3, 2, true,  false],
-            [16,  24,  72,  3, 2, false, false],
-            [24,  24,  88,  3, 1, false, false],
-            [24,  40,  96,  5, 2, true,  true],
-            [40,  40,  240, 5, 1, true,  true],
-            [40,  40,  240, 5, 1, true,  true],
-            [40,  48,  120, 5, 1, true,  true],
-            [48,  48,  144, 5, 1, true,  true],
-            [48,  96,  288, 5, 2, true,  true],
-            [96,  96,  576, 5, 1, true,  true],
-            [96,  96,  576, 5, 1, true,  true],
-        ];
-        cfg.forEach(([inCh, outCh, expCh, k, s, se, hs], i) => {
-            x = bottleneck(x, inCh, outCh, expCh, k, s, se, hs);
-            if ([2, 5, 10].includes(i)) {
-                capturedActivations[`b${i+1}`] = x.clone();
-            }
-        });
-        // Head
-        const headK = tf.randomNormal([1,1,96,576], 0, 0.01);
-        x = x.conv2d(headK, 1, 'same');
-        x = bn(x); x = hardSwish(x);
-        capturedActivations['head'] = x.clone(); // 7×7×576
-        x = x.mean([1,2], true); // GAP → 1×1×576
-        const fcK = tf.randomNormal([1,1,576,1024], 0, 0.01);
-        x = x.conv2d(fcK, 1, 'same'); x = hardSwish(x);
-        const outK = tf.randomNormal([1,1,1024,1000], 0, 0.01);
-        x = x.conv2d(outK, 1, 'same');
-        return tf.softmax(x.squeeze()); // [1000]
-    });
+// Escape strings interpolated into innerHTML (label text comes from an external
+// list — escape it defensively).
+function escapeHtmlX(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 // =====================================================================
 // State
 // =====================================================================
-let model = null;
+// The real pretrained MobileNet V3-Small used by KlockiAI, loaded as two TF.js
+// graph models: the classification variant (1001 ImageNet logits) for the demo,
+// and the feature-vector variant (1024-dim embedding) for the embedding view.
+// These are the SAME weights the training app uses, so what students see here
+// matches what actually powers their model.
+const V3_CLASSIFIER_URL = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-classification/versions/1/model.json?tfjs-format=file';
+const V3_FEATURE_URL    = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-feature-vector/versions/1/model.json?tfjs-format=file';
+const IMAGENET_LABELS_URL = 'https://storage.googleapis.com/download.tensorflow.org/data/ImageNetLabels.txt';
+let model = null;          // { classifier, feature } once loaded
+let imagenetLabels = null; // index-aligned 1001-entry list (index 0 = background)
 let currentImage = null;
 // =====================================================================
 // Arch rendering
@@ -711,14 +616,25 @@ async function loadModel() {
     const progressBar  = document.getElementById('progress-bar');
     const progressLabel = document.getElementById('progress-label');
     progressWrap.classList.add('visible');
-    progressLabel.textContent = 'Downloading weights (~10 MB), please wait…';
+    progressLabel.textContent = 'Downloading weights (~6 MB), please wait…';
     try {
-        model = await mobilenet.load({ version: 2, alpha: 0.5 });
-        // Warm-up
+        // Load both real V3-Small graph models + the ImageNet label list.
+        const [classifier, feature, labelsText] = await Promise.all([
+            tf.loadGraphModel(V3_CLASSIFIER_URL, {
+                onProgress: (frac) => { progressBar.style.width = Math.round(frac * 80) + '%'; }
+            }),
+            tf.loadGraphModel(V3_FEATURE_URL),
+            fetch(IMAGENET_LABELS_URL).then(r => r.text())
+        ]);
+        imagenetLabels = labelsText.trim().split('\n');
+        model = { classifier, feature };
+        // Warm-up both graphs so the first real inference isn't slow.
         tf.tidy(() => {
             const dummy = tf.zeros([1, 224, 224, 3]);
-            model.infer(dummy, true);
+            classifier.predict(dummy);
+            feature.predict(dummy);
         });
+        progressBar.style.width = '100%';
         progressBar.classList.add('done');
         progressLabel.textContent = 'Model ready!';
         const backend = tf.getBackend();
@@ -795,13 +711,26 @@ async function classify() {
     btn.innerHTML = `<svg class="icon-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Running…`;
     try {
         const start = performance.now();
-        const predictions = await model.classify(currentImage, 5);
+        // Real V3-Small classification: preprocess to [1,224,224,3] in [0,1]
+        // (the graph model normalizes exactly this way — no extra scaling), run
+        // the classifier, softmax the logits, take the top 5.
+        const probs = tf.tidy(() => {
+            const input = tf.browser.fromPixels(currentImage)
+                .resizeBilinear([224, 224])
+                .toFloat().div(255).expandDims(0);
+            return tf.softmax(model.classifier.predict(input).squeeze());
+        });
+        const data = await probs.data();
+        probs.dispose();
+        // Partial top-5 over the 1001 classes.
+        const idx = Array.from(data.keys()).sort((a, b) => data[b] - data[a]).slice(0, 5);
+        const predictions = idx.map(i => ({ className: (imagenetLabels && imagenetLabels[i]) || `class_${i}`, probability: data[i] }));
         const elapsed = (performance.now() - start).toFixed(1);
         document.getElementById('stat-time').textContent = elapsed;
         document.getElementById('predictions').innerHTML = predictions.map(p => `
             <div class="pred-item">
                 <div class="pred-header">
-                    <span class="pred-name" title="${p.className}">${p.className.split(',')[0]}</span>
+                    <span class="pred-name" title="${escapeHtmlX(p.className)}">${escapeHtmlX(p.className.split(',')[0])}</span>
                     <span class="pred-score">${(p.probability * 100).toFixed(1)}%</span>
                 </div>
                 <div class="pred-bar-bg"><div class="pred-bar" style="width:${p.probability * 100}%"></div></div>
@@ -817,7 +746,7 @@ async function classify() {
     }
 }
 // =====================================================================
-// Feature map visualization using model.infer()
+// Feature map visualization: real 1024-dim embedding + schematic stage maps
 // =====================================================================
 async function visualizeFeatureMaps() {
     const container = document.getElementById('fmap-container');
@@ -828,10 +757,14 @@ async function visualizeFeatureMaps() {
               .resizeBilinear([224, 224])
               .toFloat().div(255).expandDims(0)
         );
-        // model.infer returns the embedding (last conv layer before classifier)
-        const embedding = model.infer(imgTensor, true); // [1, 1024] or [1,1,1,1024]
+        // Real 1024-dim embedding from the V3-Small feature-vector model. The
+        // input is normalized to [0,1] exactly once (the graph model expects
+        // that), so this is a genuine forward pass — not a near-black image.
+        const embedding = model.feature.predict(imgTensor);
         imgTensor.dispose();
-        // Also generate simulated spatial feature maps using image channels
+        // Illustrative spatial maps (see buildStageMaps): the graph model doesn't
+        // expose named intermediate tensors, so these are a schematic, not the
+        // network's real per-layer activations.
         const stages = await buildStageMaps();
         let html = '';
         const canvasesToInsert = [];
@@ -872,7 +805,7 @@ async function visualizeFeatureMaps() {
                 <div style="margin-bottom:28px">
                     <div style="font-size:12px;font-weight:700;color:var(--text-heading);margin-bottom:10px;display:flex;align-items:center;gap:8px">
                         ${label}
-                        <span style="font-size:10px;font-weight:400;color:var(--text-body)">${C} channels · ${H}×${W} spatial</span>
+                        <span style="font-size:10px;font-weight:400;color:var(--text-body)">${C} channels · ${H}×${W} spatial · schematic</span>
                     </div>
                     <div class="fmap-grid">${items.join('')}${extra}</div>
                 </div>`;
