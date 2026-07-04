@@ -412,7 +412,7 @@ const EDU_ANNOTATIONS = {
   'zero-shot':        { pl: '🌍 1001 klas ImageNet — to, co MobileNet już zna',      en: '🌍 1001 ImageNet classes — what MobileNet already knows' },
   'explain-ai':       { pl: '🔍 Sprawdzamy które fragmenty obrazu wpływają na decyzję', en: '🔍 Find which image regions drove the decision' },
   'model-explorer':   { pl: '🔬 Architektura warstwa po warstwie',                   en: '🔬 Architecture layer by layer' },
-  'evaluate':         { pl: '📊 Ocena modelu: macierz pomyłek i błędy (na danych treningowych)', en: '📊 Model scorecard: confusion matrix + mistakes (on training data)' },
+  'evaluate':         { pl: '📊 Ocena na 20% zbiorze testowym: dokładność, macierz pomyłek i błędy', en: '📊 Scorecard on the 20% test set: accuracy, confusion matrix + mistakes' },
   'deploy-export':    { pl: '🚀 Eksportuj działającą aplikację z modelem w środku',   en: '🚀 Export a working app with the model baked in' }
 };
 function getEduAnnotation(type) {
@@ -1509,8 +1509,8 @@ function buildModelExplorerBody(id) {
 
 function buildEvaluateBody(id) {
   const hint = lang === 'pl'
-    ? 'Ocenia wytrenowany model na zebranych próbkach: macierz pomyłek i błędne predykcje. Uwaga: to dokładność na danych treningowych.'
-    : 'Scores the trained model on your collected samples: confusion matrix + mistakes. Note: this is training-data accuracy.';
+    ? 'Dzieli próbki 80/20 i ocenia wytrenowany model na 20% zbiorze testowym: dokładność, macierz pomyłek i błędne predykcje.'
+    : 'Splits samples 80/20 and scores the trained model on the 20% test set: accuracy, confusion matrix and mistakes.';
   return `
 <div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:4px">${hint}</div>
 ${makeBtn(lang === 'pl' ? '▶ Oceń model' : '▶ Evaluate model', `runEvaluate('${id}')`, 'var(--c-eval)')}
@@ -2684,18 +2684,19 @@ async function extractFeatures(samples) {
 
 let evaluateInProgress = false;
 async function runEvaluate(id) {
-  // Evaluate the EXACT deployed model (baseModel → inferModel) on the collected
-  // samples. Because the model was trained on these images, this is training-set
-  // accuracy — optimistic by nature — so the UI labels it honestly and nudges
-  // the user to test on fresh images for a true generalisation check.
+  // Split the samples 80/20 (stratified per class) and score the deployed model
+  // (baseModel → inferModel) on the held-out 20% test set only. Note: the
+  // deployed model was trained on all images, so these test images were seen —
+  // the UI says so and nudges the user to try fresh photos for a true check.
   if (!inferModel || !baseModel) {
     showToast(lang === 'pl'
       ? 'Najpierw wytrenuj lub wczytaj model (potrzebny model + model bazowy).'
       : 'Train or load a model first (needs the classifier + base model).', 'warn');
     return;
   }
-  if (!capturedSamples.some(a => a && a.length)) {
-    showToast(lang === 'pl' ? 'Brak próbek do oceny.' : 'No samples to evaluate.', 'warn');
+  const classesWithSamples = capturedSamples.filter(a => a && a.length).length;
+  if (classesWithSamples < 2) {
+    showToast(lang === 'pl' ? 'Ocena wymaga min. 2 klas z próbkami.' : 'Evaluation needs at least 2 classes with samples.', 'warn');
     return;
   }
   if (evaluateInProgress) return;
@@ -2707,21 +2708,30 @@ async function runEvaluate(id) {
   setBlockStatus(document.getElementById(id), 'running');
   if (resEl) resEl.innerHTML = '';
 
-  // Flatten every captured sample with its class label.
-  const allSamples = [], allLabels = [];
+  // Stratified 80/20 split: hold out ~20% per class as the test set. We keep the
+  // ImageData refs so we can show the actual misclassified test thumbnails.
+  const testSamples = [], testLabels = [];
   for (let c = 0; c < classNames.length; c++) {
-    for (const s of (capturedSamples[c] || [])) { allSamples.push(s); allLabels.push(c); }
+    const arr = (capturedSamples[c] || []).slice();
+    if (!arr.length) continue;
+    // Deterministic index-based shuffle so the split is stable across clicks.
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(((i * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    const nTest = Math.max(1, Math.round(arr.length * 0.2));
+    for (let i = 0; i < nTest; i++) { testSamples.push(arr[i]); testLabels.push(c); }
   }
 
   let feat = null, probT = null;
   try {
-    setStatus(lang === 'pl' ? 'Ekstrakcja cech...' : 'Extracting features...');
-    feat = await extractFeatures(allSamples);
+    setStatus(lang === 'pl' ? 'Ekstrakcja cech (20% testowych)...' : 'Extracting features (20% test)...');
+    feat = await extractFeatures(testSamples);
     setStatus(lang === 'pl' ? 'Predykcja modelu...' : 'Running model...');
     probT = inferModel.predict(feat);
     const probs = await probT.data();
     const K = probT.shape[1];                 // classes the deployed model knows
-    const maxTruth = allLabels.reduce((m, v) => Math.max(m, v), 0);
+    const maxTruth = testLabels.reduce((m, v) => Math.max(m, v), 0);
     const numClasses = Math.max(K, maxTruth + 1);
 
     const argmaxRow = (row) => {
@@ -2730,21 +2740,21 @@ async function runEvaluate(id) {
     const confusion = Array.from({ length: numClasses }, () => new Array(numClasses).fill(0));
     const misclassified = [];
     let correct = 0;
-    for (let i = 0; i < allLabels.length; i++) {
+    for (let i = 0; i < testLabels.length; i++) {
       const pred = argmaxRow(i);
-      const truth = allLabels[i];
+      const truth = testLabels[i];
       confusion[truth][pred]++;
       if (pred === truth) correct++;
-      else misclassified.push({ sample: allSamples[i], truth, pred, conf: probs[i * K + pred] });
+      else misclassified.push({ sample: testSamples[i], truth, pred, conf: probs[i * K + pred] });
     }
-    const acc = allLabels.length ? correct / allLabels.length : 0;
+    const acc = testLabels.length ? correct / testLabels.length : 0;
 
-    renderEvaluation(id, { confusion, acc, total: allLabels.length, misclassified, numClasses });
+    renderEvaluation(id, { confusion, acc, total: testLabels.length, misclassified, numClasses });
     setStatus('');
     setBlockStatus(document.getElementById(id), 'done');
     log('success', lang === 'pl'
-      ? `Ocena modelu na danych treningowych: ${(acc * 100).toFixed(0)}%`
-      : `Model evaluated on training data: ${(acc * 100).toFixed(0)}%`);
+      ? `Ocena na zbiorze testowym (20%): ${(acc * 100).toFixed(0)}% z ${testLabels.length} zdjęć`
+      : `Test-set (20%) evaluation: ${(acc * 100).toFixed(0)}% of ${testLabels.length} images`);
   } catch (err) {
     log('error', 'Evaluation error: ' + err.message);
     console.error(err);
@@ -2764,19 +2774,20 @@ function renderEvaluation(id, r) {
   const el = document.getElementById('eval-results-' + id);
   if (!el) return;
   const pct = (x) => (x * 100).toFixed(0) + '%';
-  // This is training-set accuracy, so a high score is expected — the honest
-  // takeaway is to test on NEW images. A low score means something is wrong.
+  // Test-set (20%) accuracy from the deployed model. The model trained on all
+  // images (including these), so keep an honest note; a low score still flags a
+  // model that learned poorly.
   let verdict, verdictClass;
   if (r.acc < 0.7) {
     verdictClass = 'warn';
     verdict = lang === 'pl'
-      ? '⚠️ Niska dokładność nawet na danych treningowych — model słabo się nauczył. Zbierz więcej lub wyraźniejsze próbki.'
-      : '⚠️ Low accuracy even on training data — the model learned poorly. Collect more or clearer samples.';
+      ? '⚠️ Niska dokładność na zbiorze testowym — model słabo się nauczył. Zbierz więcej lub wyraźniejsze próbki.'
+      : '⚠️ Low test-set accuracy — the model learned poorly. Collect more or clearer samples.';
   } else {
     verdictClass = 'ok';
     verdict = lang === 'pl'
-      ? 'ℹ️ To dokładność na danych treningowych (model widział te zdjęcia). Aby sprawdzić, czy naprawdę się nauczył, zrób nowe zdjęcia w bloku predykcji.'
-      : 'ℹ️ This is accuracy on training data (the model saw these images). To check if it really learned, try new photos in the prediction block.';
+      ? 'ℹ️ Wynik na 20% odłożonych próbek. Model trenował na wszystkich zdjęciach, więc dla prawdziwego testu zrób nowe zdjęcia w bloku predykcji.'
+      : 'ℹ️ Score on the held-out 20% of samples. The model trained on all images, so for a true test try fresh photos in the prediction block.';
   }
 
   // Confusion matrix table.
@@ -2805,14 +2816,14 @@ function renderEvaluation(id, r) {
   if (shown.length) {
     missHtml = `<div class="eval-miss-title">${lang === 'pl' ? 'Błędy modelu:' : 'Model mistakes:'}</div><div class="eval-miss-grid" id="eval-miss-${id}"></div>`;
   } else if (r.total > 0) {
-    missHtml = `<div class="eval-miss-title">${lang === 'pl' ? 'Brak błędów na danych treningowych 🎉' : 'No mistakes on the training data 🎉'}</div>`;
+    missHtml = `<div class="eval-miss-title">${lang === 'pl' ? 'Brak błędów na zbiorze testowym 🎉' : 'No mistakes on the test set 🎉'}</div>`;
   }
 
   el.innerHTML = `
     <div class="eval-scores">
       <div class="eval-score eval-score-test">
         <div class="eval-score-val">${pct(r.acc)}</div>
-        <div class="eval-score-lbl">${lang === 'pl' ? `dokładność (${r.total} próbek)` : `accuracy (${r.total} samples)`}</div>
+        <div class="eval-score-lbl">${lang === 'pl' ? `test (20%) — ${r.total} zdjęć` : `test (20%) — ${r.total} images`}</div>
       </div>
     </div>
     <div class="eval-verdict eval-verdict-${verdictClass}">${verdict}</div>
