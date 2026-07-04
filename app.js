@@ -71,7 +71,7 @@ const STRINGS = {
   pl: {
     phase_data: 'Dane', phase_label: 'Etykiety', phase_prep: 'Przygotowanie',
     phase_model: 'Model', phase_train: 'Trening', phase_deploy: 'Zapis', phase_infer: 'Predykcja', phase_xai: 'Wyjaśnialne AI',
-    btn_guide: 'Przewodnik', btn_clear: 'Wyczyść', btn_run: 'Uruchom', btn_edu: '🎓 Edu',
+    btn_guide: 'Przewodnik', btn_clear: 'Wyczyść', btn_run: 'Uruchom', btn_edu: '🎓 Edu', btn_tidy: '🧹 Uporządkuj',
     sidebar_training: 'Trening', sidebar_inference: 'Predykcja',
     block_camera_input: 'Kamera: Dane', block_label_classes: 'Etykiety klas',
     block_prepare_data: 'Dane', block_pretrained_model: 'Model bazowy',
@@ -150,7 +150,7 @@ const STRINGS = {
   en: {
     phase_data: 'Data', phase_label: 'Labels', phase_prep: 'Prepare',
     phase_model: 'Model', phase_train: 'Train', phase_deploy: 'Save', phase_infer: 'Prediction', phase_xai: 'Explainable AI',
-    btn_guide: 'Guide', btn_clear: 'Clear', btn_run: 'Run', btn_edu: '🎓 Edu',
+    btn_guide: 'Guide', btn_clear: 'Clear', btn_run: 'Run', btn_edu: '🎓 Edu', btn_tidy: '🧹 Tidy up',
     sidebar_training: 'Training', sidebar_inference: 'Prediction',
     block_camera_input: 'Camera: Input', block_label_classes: 'Label Classes',
     block_prepare_data: 'Data', block_pretrained_model: 'Pretrained Model',
@@ -764,25 +764,52 @@ function refreshDatasetInfo() {
 
 function confirmClearDataset() {
   const totalSamples = capturedSamples.flat().length;
-  const msg = lang === 'pl'
-    ? `Usunąć wszystkie próbki (${totalSamples}) z pamięci przeglądarki? Tej operacji nie można cofnąć.`
-    : `Delete all samples (${totalSamples}) from browser storage? This cannot be undone.`;
-  if (!confirm(msg)) return;
+  if (totalSamples === 0) {
+    showToast(lang === 'pl' ? 'Brak próbek do usunięcia.' : 'No samples to delete.', 'info', { duration: 2500 });
+    return;
+  }
+  // Snapshot the whole dataset for undo before wiping.
+  const snapshot = {
+    names: classNames.slice(),
+    colors: classColors.slice(),
+    samples: capturedSamples.map(a => a.slice())
+  };
   clearDatasetFromIDB();
   datasetLoadedFromIDB = true; // in-memory is now authoritative; don't re-read
   classNames = lang === 'pl' ? ['Klasa 1', 'Klasa 2'] : ['Class 1', 'Class 2'];
   classColors = CLASS_COLORS.slice(0, 2);
   capturedSamples = [[], []];
   preparedData = null;
-  placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
-    const body = document.getElementById(b.id)?.querySelector('.bk-body');
-    if (body) body.innerHTML = renderLabelRows(b.id);
-  });
+  refreshLabelAndCameraBlocks();
   updateClassNamesEverywhere();
   evaluatePipelineState();
   persistCanvasState();
   refreshDatasetInfo();
   log('warn', lang === 'pl' ? 'Dataset usunięty z pamięci' : 'Dataset deleted from storage');
+
+  showToast(
+    lang === 'pl' ? `Usunięto dataset (${totalSamples} próbek)` : `Deleted dataset (${totalSamples} samples)`,
+    'warn',
+    {
+      duration: 8000,
+      actionLabel: lang === 'pl' ? 'Cofnij' : 'Undo',
+      onAction: async () => {
+        classNames = snapshot.names;
+        classColors = snapshot.colors;
+        capturedSamples = snapshot.samples;
+        preparedData = null;
+        cancelAllPendingSaves();
+        await clearDatasetStore();
+        for (let i = 0; i < classNames.length; i++) await writeClassToIDB(i);
+        refreshLabelAndCameraBlocks();
+        updateClassNamesEverywhere();
+        evaluatePipelineState();
+        persistCanvasState();
+        refreshDatasetInfo();
+        log('info', lang === 'pl' ? 'Dataset przywrócony' : 'Dataset restored');
+      }
+    }
+  );
 }
 
 // Low-level store wipe (awaitable), shared by the clear-dataset action and the
@@ -982,14 +1009,12 @@ function ensureBlockOnCanvas(type) {
     'show-results': lang === 'pl' ? 'Pokaż wyniki' : 'Show Results'
   };
   const name = titles[type] || type;
-  const msg = lang === 'pl'
-    ? `Brakuje bloku "${name}" na tablicy. Dodać go teraz?`
-    : `The "${name}" block is missing on the canvas. Add it now?`;
-  if (!confirm(msg)) return false;
-  // Place to the right of existing blocks, vertical: 40 + index * 40
+  // Auto-add the missing prerequisite block — it's non-destructive and expected,
+  // so no need to interrupt with a confirm; just place it and note it.
   const x = 16 + (placedBlocks.length * 40);
   const y = 40 + (placedBlocks.length * 40);
   placeBlock(type, Math.min(x, 600), Math.min(y, 400));
+  showToast(lang === 'pl' ? `Dodano brakujący blok „${name}"` : `Added missing "${name}" block`, 'info', { duration: 3000 });
   return true;
 }
 
@@ -1143,13 +1168,16 @@ function labelCapture(classIdx) {
 // Permanently remove a class (name + samples + color) and compact the arrays.
 // Guards: requires at least 1 class remaining. Invalidates preparedData.
 async function deleteClass(classIdx) {
+  if (classNames.length <= 1) return; // never destroy the last class
   const name = classNames[classIdx] || '';
-  const count = (capturedSamples[classIdx] || []).length;
-  const countTxt = count > 0 ? ` (${count} ${lang === 'pl' ? 'próbek' : 'samples'})` : '';
-  const msg = lang === 'pl'
-    ? `Usunąć klasę "${name}"${countTxt}? Tej operacji nie można cofnąć.`
-    : `Delete class "${name}"${countTxt}? This cannot be undone.`;
-  if (!confirm(msg)) return;
+  // Snapshot for undo (samples are shared ImageData refs — fine, we're only
+  // removing the array slot, not the pixels).
+  const snapshot = {
+    idx: classIdx,
+    name: classNames[classIdx],
+    color: classColors[classIdx],
+    samples: capturedSamples[classIdx]
+  };
 
   // Splice all parallel arrays
   classNames.splice(classIdx, 1);
@@ -1161,33 +1189,70 @@ async function deleteClass(classIdx) {
 
   // Remove from IDB and repack remaining keys
   await deleteClassFromIDB(classIdx);
+  refreshLabelAndCameraBlocks();
+  updateClassNamesEverywhere();
+  evaluatePipelineState();
+  persistCanvasState();
+  log('warn', lang === 'pl' ? `Usunięto klasę "${name}"` : `Deleted class "${name}"`);
 
-  // Re-render all affected blocks
+  showToast(
+    lang === 'pl' ? `Usunięto klasę „${name}"` : `Deleted class "${name}"`,
+    'warn',
+    {
+      actionLabel: lang === 'pl' ? 'Cofnij' : 'Undo',
+      onAction: async () => {
+        classNames.splice(snapshot.idx, 0, snapshot.name);
+        classColors.splice(snapshot.idx, 0, snapshot.color);
+        capturedSamples.splice(snapshot.idx, 0, snapshot.samples);
+        preparedData = null;
+        cancelAllPendingSaves();
+        await clearDatasetStore();
+        for (let i = 0; i < classNames.length; i++) await writeClassToIDB(i);
+        refreshLabelAndCameraBlocks();
+        updateClassNamesEverywhere();
+        evaluatePipelineState();
+        persistCanvasState();
+        log('info', lang === 'pl' ? `Przywrócono klasę „${snapshot.name}"` : `Restored class "${snapshot.name}"`);
+      }
+    }
+  );
+}
+
+// Re-render every label-classes block body and every camera capture-button strip
+// from the current class arrays. Shared by delete/clear/import/undo paths.
+function refreshLabelAndCameraBlocks() {
   placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
     const body = document.getElementById(b.id)?.querySelector('.bk-body');
     if (body) body.innerHTML = renderLabelRows(b.id);
   });
-  updateClassNamesEverywhere();
-  evaluatePipelineState();
-  persistCanvasState();
-  log('warn', lang === 'pl'
-    ? `Usunięto klasę "${name}"`
-    : `Deleted class "${name}"`);
+  placedBlocks.filter(b => b.type === 'camera-input').forEach(b => updateThumbStrips(b.id));
 }
 
 function clearClassSamples(classIdx) {
   if (!capturedSamples[classIdx] || capturedSamples[classIdx].length === 0) return;
+  const name = classNames[classIdx];
+  const snapshot = capturedSamples[classIdx];
   capturedSamples[classIdx] = [];
-  log('info', lang === 'pl'
-    ? `Usunięto próbki klasy "${classNames[classIdx]}"`
-    : `Deleted samples for class "${classNames[classIdx]}"`);
-  placedBlocks.filter(b => b.type === 'label-classes').forEach(b => {
-    const body = document.getElementById(b.id)?.querySelector('.bk-body');
-    if (body) body.innerHTML = renderLabelRows(b.id);
-  });
-  updateThumbStrips();
+  log('info', lang === 'pl' ? `Usunięto próbki klasy "${name}"` : `Deleted samples for class "${name}"`);
+  refreshLabelAndCameraBlocks();
   evaluatePipelineState();
+  refreshDatasetInfo();
   saveClassToIDB(classIdx, true); // immediate — saves empty array
+  showToast(
+    lang === 'pl' ? `Wyczyszczono próbki „${name}" (${snapshot.length})` : `Cleared "${name}" samples (${snapshot.length})`,
+    'warn',
+    {
+      actionLabel: lang === 'pl' ? 'Cofnij' : 'Undo',
+      onAction: () => {
+        capturedSamples[classIdx] = snapshot;
+        refreshLabelAndCameraBlocks();
+        evaluatePipelineState();
+        refreshDatasetInfo();
+        saveClassToIDB(classIdx, true);
+        log('info', lang === 'pl' ? `Przywrócono próbki „${name}"` : `Restored "${name}" samples`);
+      }
+    }
+  );
 }
 
 function addClass(labelBlockId) {
@@ -1413,6 +1478,7 @@ function placeBlock(type, x, y) {
   refreshEmptyState();
   evaluatePipelineState();
   persistCanvasState();
+  updatePipelineOrder();
   return id;
 }
 
@@ -1508,6 +1574,8 @@ function cardDragStart(e, id) {
     ny = Math.max(0, ny);
     card.style.left = nx + 'px';
     card.style.top = ny + 'px';
+    // Keep connector curves attached to the block as it moves.
+    drawPipelineConnectors();
     // Trash detection
     const tr = trash.getBoundingClientRect();
     const inTrash = p.clientX >= tr.left && p.clientX <= tr.right &&
@@ -1530,6 +1598,7 @@ function cardDragStart(e, id) {
         b.x = parseFloat(card.style.left);
         b.y = parseFloat(card.style.top);
         persistCanvasState();
+        updatePipelineOrder(); // x may have changed → renumber
       }
     }
     draggedCard = null;
@@ -1570,7 +1639,11 @@ function confirmRemoveBlock(id) {
       ? 'Próbki klas zostaną zachowane (możesz dodać blok ponownie). Usunąć blok?'
       : 'Class samples will be preserved (you can add the block again). Remove block?';
   }
-  if (needsConfirm && !confirm(msg)) return;
+  if (needsConfirm) {
+    uiConfirm(msg, { okLabel: lang === 'pl' ? 'Usuń blok' : 'Remove block', danger: true })
+      .then(ok => { if (ok) removeBlock(id); });
+    return;
+  }
   removeBlock(id);
 }
 
@@ -1617,6 +1690,7 @@ function removeBlock(id) {
   refreshEmptyState();
   evaluatePipelineState();
   persistCanvasState();
+  updatePipelineOrder();
 }
 
 function clearCanvas() {
@@ -1654,6 +1728,8 @@ function clearCanvas() {
   evaluatePipelineState();
   refreshEmptyState();
   persistCanvasState();
+  const svg = document.getElementById('pipeline-connectors');
+  if (svg) svg.innerHTML = '';
 }
 
 // ===== SAMPLE COUNTS =====
@@ -2146,17 +2222,18 @@ function drawChart(canvasId) {
 }
 
 // Train pre-flight validation. Returns true if training should proceed.
-function validateTrainingData() {
+async function validateTrainingData() {
   const counts = capturedSamples.map(arr => (arr || []).length);
   const classesWithSamples = counts.filter(n => n > 0).length;
   if (classesWithSamples < 2) {
     const msg = lang === 'pl'
       ? `Trening wymaga co najmniej 2 klas z próbkami (masz ${classesWithSamples}). Zbierz próbki dla dwóch lub więcej klas.`
       : `Training needs at least 2 classes with samples (you have ${classesWithSamples}). Collect samples for two or more classes.`;
-    alert(msg);
+    showToast(msg, 'error');
     log('warn', msg);
     return false;
   }
+  const cont = lang === 'pl' ? 'Kontynuuj mimo to' : 'Continue anyway';
   const MIN_PER_CLASS = 5;
   const tooFew = counts
     .map((n, i) => ({ n, name: classNames[i] }))
@@ -2166,7 +2243,7 @@ function validateTrainingData() {
     const msg = lang === 'pl'
       ? `Niektóre klasy mają mniej niż ${MIN_PER_CLASS} próbek: ${list}. Modele potrzebują kilku przykładów na klasę. Kontynuować mimo to?`
       : `Some classes have fewer than ${MIN_PER_CLASS} samples: ${list}. Models need several examples per class. Continue anyway?`;
-    if (!confirm(msg)) return false;
+    if (!(await uiConfirm(msg, { okLabel: cont }))) return false;
   }
   const nonZero = counts.filter(n => n > 0);
   const max = Math.max(...nonZero);
@@ -2175,7 +2252,7 @@ function validateTrainingData() {
     const msg = lang === 'pl'
       ? `Bardzo nierówny rozkład klas (od ${min} do ${max} próbek). Model nauczy się rozpoznawać klasę większościową. Kontynuować?`
       : `Class imbalance is large (${min}–${max} samples). The model will favour the majority class. Continue?`;
-    if (!confirm(msg)) return false;
+    if (!(await uiConfirm(msg, { okLabel: cont }))) return false;
   }
   return true;
 }
@@ -2195,7 +2272,7 @@ async function runTraining(id) {
     }
     return;
   }
-  if (!validateTrainingData()) return;
+  if (!(await validateTrainingData())) return;
 
   // Single-flight: a second concurrent run (double-click Train, or Run pipeline
   // while a manual train is in flight) would share trainingCancelled / the chart
@@ -3457,7 +3534,12 @@ function notifyModelTrained() {
 }
 
 // Lightweight bottom-right toast notifications. Multiple stack vertically.
-function showToast(text, kind) {
+// Toast with optional action button(s). opts:
+//   { kind, duration, actionLabel, onAction }  — single action
+//   or { kind, duration, actions: [{label, onClick, primary}] } — multiple.
+// Clicking an action dismisses the toast and runs its handler.
+function showToast(text, kind, opts) {
+  opts = opts || {};
   let stack = document.getElementById('toast-stack');
   if (!stack) {
     stack = document.createElement('div');
@@ -3466,14 +3548,64 @@ function showToast(text, kind) {
   }
   const el = document.createElement('div');
   el.className = 'toast toast-' + (kind || 'info');
-  el.textContent = text;
-  stack.appendChild(el);
-  // Trigger entrance transition
-  requestAnimationFrame(() => el.classList.add('show'));
-  setTimeout(() => {
+  const msg = document.createElement('span');
+  msg.className = 'toast-msg';
+  msg.textContent = text;
+  el.appendChild(msg);
+
+  const actions = opts.actions || (opts.actionLabel ? [{ label: opts.actionLabel, onClick: opts.onAction, primary: true }] : []);
+  let dismissed = false;
+  const dismiss = () => {
+    if (dismissed) return;
+    dismissed = true;
     el.classList.remove('show');
     setTimeout(() => el.remove(), 400);
-  }, 5500);
+  };
+  if (actions.length) {
+    const row = document.createElement('div');
+    row.className = 'toast-actions';
+    actions.forEach(a => {
+      const btn = document.createElement('button');
+      btn.className = 'toast-btn' + (a.primary ? ' toast-btn-primary' : '');
+      btn.textContent = a.label;
+      btn.onclick = () => { dismiss(); if (a.onClick) a.onClick(); };
+      row.appendChild(btn);
+    });
+    el.appendChild(row);
+  }
+  stack.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(dismiss, opts.duration || 5500);
+  return dismiss;
+}
+
+// Promise-based confirm dialog — a non-blocking replacement for window.confirm()
+// that matches the app's visual language and is bilingual. Resolves true/false.
+function uiConfirm(message, opts) {
+  opts = opts || {};
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay confirm-overlay';
+    const okLabel = opts.okLabel || (lang === 'pl' ? 'Potwierdź' : 'Confirm');
+    const cancelLabel = opts.cancelLabel || (lang === 'pl' ? 'Anuluj' : 'Cancel');
+    const box = document.createElement('div');
+    box.className = 'modal-box confirm-box';
+    box.innerHTML = `
+      <div class="confirm-msg">${escapeHtml(message)}</div>
+      <div class="confirm-actions">
+        <button class="confirm-cancel">${escapeHtml(cancelLabel)}</button>
+        <button class="confirm-ok${opts.danger ? ' confirm-ok-danger' : ''}">${escapeHtml(okLabel)}</button>
+      </div>`;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    const close = (val) => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(val); };
+    const onKey = (e) => { if (e.key === 'Escape') close(false); if (e.key === 'Enter') close(true); };
+    box.querySelector('.confirm-ok').onclick = () => close(true);
+    box.querySelector('.confirm-cancel').onclick = () => close(false);
+    overlay.onclick = (e) => { if (e.target === overlay) close(false); };
+    document.addEventListener('keydown', onKey);
+    requestAnimationFrame(() => box.querySelector('.confirm-ok').focus());
+  });
 }
 
 // Warn before unload if a fresh model has not been saved.
@@ -3537,6 +3669,10 @@ async function runPipeline() {
     const id = b.id;
     // Activate flow bar phase
     setFlowPhase(BLOCK_PHASE_MAP[b.type] || 'data');
+    // Highlight the block (and the connector leading into it) that's running.
+    const card = document.getElementById(id);
+    if (card) card.classList.add('block-running');
+    document.getElementById('pipeline-connectors')?.classList.add('pipe-active');
 
     switch (b.type) {
       case 'prepare-data':
@@ -3549,6 +3685,7 @@ async function runPipeline() {
         await runTraining(id);
         break;
     }
+    if (card) card.classList.remove('block-running');
     // Edu mode annotations
     if (eduMode) {
       const ann = document.getElementById('ann-' + id);
@@ -3557,9 +3694,12 @@ async function runPipeline() {
     await tf.nextFrame();
   }
   clearFlowPhase();
+  document.getElementById('pipeline-connectors')?.classList.remove('pipe-active');
   log('success', '=== Pipeline Done ===');
   } finally {
     pipelineRunning = false;
+    document.querySelectorAll('.block-running').forEach(c => c.classList.remove('block-running'));
+    document.getElementById('pipeline-connectors')?.classList.remove('pipe-active');
   }
 }
 
@@ -3567,6 +3707,9 @@ async function runPipeline() {
 function showGuide() {
   const modal = document.getElementById('guide-modal');
   if (modal) modal.classList.remove('hidden');
+  // Sync the "don't show again" checkbox with the stored preference.
+  const chk = document.getElementById('chk-no-guide');
+  if (chk) chk.checked = localStorage.getItem('ml-blocks-no-guide') === '1';
   renderGuideSteps();
 }
 function closeGuide() {
@@ -3613,6 +3756,80 @@ function refreshEmptyState() {
   el.classList.toggle('hidden', placedBlocks.length > 0);
 }
 
+// ===== PIPELINE ORDER VISUALIZATION =====
+// Blocks execute left-to-right by x-position (see runPipeline), which is
+// otherwise invisible. Number each block by that order and draw connector
+// curves between consecutive blocks so the data flow is legible.
+function updatePipelineOrder() {
+  const sorted = [...placedBlocks].sort((a, b) => a.x - b.x);
+  sorted.forEach((b, i) => {
+    const card = document.getElementById(b.id);
+    if (!card) return;
+    const header = card.querySelector('.bk-header');
+    if (!header) return;
+    let badge = header.querySelector('.order-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'order-badge';
+      header.insertBefore(badge, header.firstChild);
+    }
+    badge.textContent = i + 1;
+  });
+  drawPipelineConnectors(sorted);
+}
+
+// Auto-arrange blocks left-to-right in pipeline order on a tidy row. Blocks
+// often pile up and overlap (especially after quick-starts); one click lays
+// them out cleanly. The canvas scrolls horizontally to fit them all.
+function tidyUpCanvas() {
+  if (!placedBlocks.length) return;
+  const sorted = [...placedBlocks].sort((a, b) => a.x - b.x);
+  const COL_W = 300, START_X = 16, START_Y = 24;
+  sorted.forEach((b, i) => {
+    b.x = START_X + i * COL_W;
+    b.y = START_Y;
+    const card = document.getElementById(b.id);
+    if (card) { card.style.left = b.x + 'px'; card.style.top = b.y + 'px'; }
+  });
+  persistCanvasState();
+  updatePipelineOrder();
+  showToast(lang === 'pl' ? 'Uporządkowano bloki' : 'Blocks tidied up', 'info', { duration: 2500 });
+}
+
+function drawPipelineConnectors(sorted) {
+  const canvas = document.getElementById('canvas');
+  if (!canvas) return;
+  sorted = sorted || [...placedBlocks].sort((a, b) => a.x - b.x);
+  let svg = document.getElementById('pipeline-connectors');
+  if (!svg) {
+    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.id = 'pipeline-connectors';
+    // Insert as the first canvas child so it paints behind the block cards.
+    canvas.insertBefore(svg, canvas.firstChild);
+  }
+  const w = Math.max(canvas.scrollWidth, canvas.clientWidth);
+  const h = Math.max(canvas.scrollHeight, canvas.clientHeight);
+  svg.setAttribute('width', w);
+  svg.setAttribute('height', h);
+  // offsetLeft/Top are already in canvas content coordinates (canvas is the
+  // positioned offset parent), so no scroll math is needed.
+  let paths = '';
+  const HEADER_MID = 24;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = document.getElementById(sorted[i].id);
+    const b = document.getElementById(sorted[i + 1].id);
+    if (!a || !b) continue;
+    const x1 = a.offsetLeft + a.offsetWidth;
+    const y1 = a.offsetTop + HEADER_MID;
+    const x2 = b.offsetLeft;
+    const y2 = b.offsetTop + HEADER_MID;
+    const mx = (x1 + x2) / 2;
+    paths += `<path class="pipe-path" d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}"/>`;
+    paths += `<circle class="pipe-dot" cx="${x2}" cy="${y2}" r="3"/>`;
+  }
+  svg.innerHTML = paths;
+}
+
 // ===== EDU MODE =====
 // (CSS class applied on DOMContentLoaded — document.body may not exist yet
 //  if this script runs before <body>.)
@@ -3639,6 +3856,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // reload made the block count grow without bound (6 → 12 → 18 …).
   if (eduMode && placedBlocks.length === 0) {
     setTimeout(quickStartTraining, 300);
+  }
+
+  // First-run onboarding: auto-open the guide unless the user ticked "don't
+  // show again" (and not in edu mode, which drives its own quick-start).
+  if (!eduMode && localStorage.getItem('ml-blocks-no-guide') !== '1') {
+    setTimeout(showGuide, 600);
   }
 
   log('step', lang === 'pl' ? 'KlockiAI gotowy — przeciągnij bloki na tablicę!' : 'KlockiAI ready — drag blocks onto the canvas!');

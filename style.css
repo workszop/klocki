@@ -335,6 +335,69 @@ select {
   background-attachment: local
 }
 
+/* Pipeline connector layer — painted behind the block cards. */
+#pipeline-connectors {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: visible
+}
+
+#pipeline-connectors .pipe-path {
+  fill: none;
+  stroke: #94A3B8;
+  stroke-width: 2.5;
+  stroke-dasharray: 6 5;
+  opacity: .7
+}
+
+#pipeline-connectors .pipe-dot {
+  fill: #94A3B8;
+  opacity: .8
+}
+
+#pipeline-connectors.pipe-active .pipe-path {
+  stroke: var(--c-train, #DC2626);
+  opacity: 1;
+  animation: pipe-flow 1s linear infinite
+}
+
+@keyframes pipe-flow {
+  to {
+    stroke-dashoffset: -22
+  }
+}
+
+/* Order badge in each block header. */
+.order-badge {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .9);
+  color: #1a1a2e;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 2px;
+  border: 1.5px solid rgba(0, 0, 0, .15)
+}
+
+/* Currently-executing block during a pipeline run. */
+.block-card.block-running {
+  box-shadow: 0 0 0 3px #DC2626, 6px 6px 0 #1a1a2e;
+  animation: block-pulse 1s ease-in-out infinite
+}
+
+@keyframes block-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(220, 38, 38, .5), 6px 6px 0 #1a1a2e }
+  50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, .9), 6px 6px 0 #1a1a2e }
+}
+
 #canvas-inner {
   position: absolute;
   inset: 0;
@@ -516,6 +579,85 @@ select {
 
 .toast-error {
   background: #B91C1C
+}
+
+.toast {
+  pointer-events: auto
+}
+
+.toast-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  justify-content: flex-end
+}
+
+.toast-btn {
+  background: rgba(255, 255, 255, .15);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700
+}
+
+.toast-btn-primary {
+  background: #fff;
+  color: #1E3932;
+  border-color: #fff
+}
+
+.toast-btn:hover {
+  filter: brightness(1.1)
+}
+
+/* Promise-based confirm dialog */
+.confirm-box {
+  max-width: 420px
+}
+
+.confirm-msg {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--c-text);
+  margin-bottom: 20px
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end
+}
+
+.confirm-cancel,
+.confirm-ok {
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  border: 2px solid #1a1a2e;
+  box-shadow: 3px 3px 0 #1a1a2e
+}
+
+.confirm-cancel {
+  background: #fff;
+  color: #1a1a2e
+}
+
+.confirm-ok {
+  background: #1E3932;
+  color: #fff
+}
+
+.confirm-ok-danger {
+  background: #B91C1C
+}
+
+.confirm-cancel:active,
+.confirm-ok:active {
+  transform: translate(3px, 3px);
+  box-shadow: none
 }
 
 .block-card .bk-header {
