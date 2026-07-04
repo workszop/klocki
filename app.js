@@ -4418,6 +4418,11 @@ const PIPELINE_ORDER = {
 function pipelineRank(type) {
   return (PIPELINE_ORDER[type] === undefined) ? 99 : PIPELINE_ORDER[type];
 }
+// Two independent pipelines: training (ranks 0–7) and prediction (8+). Badges,
+// connectors and the tidy layout treat them separately.
+function pipelineGroup(type) {
+  return pipelineRank(type) < 8 ? 0 : 1;
+}
 // Blocks in canonical pipeline order (rank first, x as tiebreaker).
 function pipelineSorted() {
   return [...placedBlocks].sort((a, b) => {
@@ -4428,7 +4433,8 @@ function pipelineSorted() {
 
 function updatePipelineOrder() {
   const sorted = pipelineSorted();
-  sorted.forEach((b, i) => {
+  const counters = [0, 0]; // per-group step numbers
+  sorted.forEach((b) => {
     const card = document.getElementById(b.id);
     if (!card) return;
     const header = card.querySelector('.bk-header');
@@ -4439,7 +4445,8 @@ function updatePipelineOrder() {
       badge.className = 'order-badge';
       header.insertBefore(badge, header.firstChild);
     }
-    badge.textContent = i + 1;
+    const g = pipelineGroup(b.type);
+    badge.textContent = ++counters[g];
   });
   drawPipelineConnectors(sorted);
 }
@@ -4450,13 +4457,23 @@ function updatePipelineOrder() {
 function tidyUpCanvas() {
   if (!placedBlocks.length) return;
   const sorted = pipelineSorted();
-  const COL_W = 300, START_X = 16, START_Y = 24;
-  sorted.forEach((b, i) => {
-    b.x = START_X + i * COL_W;
-    b.y = START_Y;
-    const card = document.getElementById(b.id);
-    if (card) { card.style.left = b.x + 'px'; card.style.top = b.y + 'px'; }
-  });
+  const COL_W = 300, START_X = 16, START_Y = 24, ROW_GAP = 40;
+  const place = (blocks, y) => {
+    blocks.forEach((b, i) => {
+      b.x = START_X + i * COL_W;
+      b.y = y;
+      const card = document.getElementById(b.id);
+      if (card) { card.style.left = b.x + 'px'; card.style.top = b.y + 'px'; }
+    });
+  };
+  // Row 1: the training pipeline. Row 2: the prediction pipeline, placed below
+  // the tallest training block so the two flows don't overlap.
+  const train = sorted.filter(b => pipelineGroup(b.type) === 0);
+  const infer = sorted.filter(b => pipelineGroup(b.type) === 1);
+  place(train, START_Y);
+  let maxH = 0;
+  train.forEach(b => { const c = document.getElementById(b.id); if (c) maxH = Math.max(maxH, c.offsetHeight); });
+  place(infer, train.length ? START_Y + maxH + ROW_GAP : START_Y);
   persistCanvasState();
   updatePipelineOrder();
   showToast(lang === 'pl' ? 'Uporządkowano bloki' : 'Blocks tidied up', 'info', { duration: 2500 });
@@ -4482,6 +4499,9 @@ function drawPipelineConnectors(sorted) {
   let paths = '';
   const HEADER_MID = 24;
   for (let i = 0; i < sorted.length - 1; i++) {
+    // Training and prediction are separate pipelines — don't draw a line from
+    // the last training block to the first prediction block.
+    if (pipelineGroup(sorted[i].type) !== pipelineGroup(sorted[i + 1].type)) continue;
     const a = document.getElementById(sorted[i].id);
     const b = document.getElementById(sorted[i + 1].id);
     if (!a || !b) continue;
