@@ -94,7 +94,7 @@ const STRINGS = {
     btn_download: 'Pobierz model', btn_load_idb: 'Wczytaj z przeglądarki',
     btn_pick_files: 'Wybierz plik (.json)', param_model_name: 'Nazwa modelu', lbl_no_saved_models: 'Brak zapisanych modeli',
     btn_train: 'Trenuj', btn_stop_train: 'Zatrzymaj',
-    btn_freeze_frame: 'Zamroź klatkę', btn_run_xai: 'Analizuj (Zamroź kadr)',
+    btn_freeze_frame: 'Zamroź klatkę', btn_run_xai: '🔍 Dlaczego? (Analizuj)',
     lbl_class: 'Klasa', lbl_samples: 'próbek', lbl_accuracy: 'Dokładność',
     lbl_no_model: 'Brak modelu — najpierw wczytaj lub załaduj',
     lbl_classes: 'Klasy', lbl_timestamp: 'Data treningu',
@@ -174,7 +174,7 @@ const STRINGS = {
     btn_download: 'Download model', btn_load_idb: 'Load from Browser',
     btn_pick_files: 'Pick file (.json)', param_model_name: 'Model name', lbl_no_saved_models: 'No saved models',
     btn_train: 'Train', btn_stop_train: 'Stop',
-    btn_freeze_frame: 'Freeze Frame', btn_run_xai: 'Analyze (Freeze frame)',
+    btn_freeze_frame: 'Freeze Frame', btn_run_xai: '🔍 Why? (Analyze)',
     lbl_class: 'Class', lbl_samples: 'samples', lbl_accuracy: 'Accuracy',
     lbl_no_model: 'No model — load or train one first',
     lbl_classes: 'Classes', lbl_timestamp: 'Trained on',
@@ -412,7 +412,7 @@ const EDU_ANNOTATIONS = {
   'zero-shot':        { pl: '🌍 1001 klas ImageNet — to, co MobileNet już zna',      en: '🌍 1001 ImageNet classes — what MobileNet already knows' },
   'explain-ai':       { pl: '🔍 Sprawdzamy które fragmenty obrazu wpływają na decyzję', en: '🔍 Find which image regions drove the decision' },
   'model-explorer':   { pl: '🔬 Architektura warstwa po warstwie',                   en: '🔬 Architecture layer by layer' },
-  'evaluate':         { pl: '📊 Ocena na 20% zbiorze testowym: dokładność, macierz pomyłek i błędy', en: '📊 Scorecard on the 20% test set: accuracy, confusion matrix + mistakes' },
+  'evaluate':         { pl: '📊 Prawdziwy test: trenuje na 80%, sprawdza na niewidzianych 20%', en: '📊 True hold-out: trains on 80%, tests on the unseen 20%' },
   'deploy-export':    { pl: '🚀 Eksportuj działającą aplikację z modelem w środku',   en: '🚀 Export a working app with the model baked in' }
 };
 function getEduAnnotation(type) {
@@ -927,7 +927,7 @@ const BLOCK_PREREQS = {
   'zero-shot': [], // self-contained — loads its own classifier on demand
   'explain-ai': ['inferModel', 'baseModel', 'inferStream'],
   'model-explorer': [],
-  'evaluate': ['inferModel', 'baseModel', 'samples'], // scores the deployed model
+  'evaluate': ['baseModel', 'samples', 'classes'], // trains fresh head on 80%, tests 20%
   'deploy-export': ['fullModel', 'baseModel']
 };
 
@@ -1461,9 +1461,12 @@ function buildExplainAIBody(id) {
   const optNorm   = lang === 'pl' ? 'Normalna (7×7)': 'Normal (7×7)';
   const optHi     = lang === 'pl' ? 'Dokładna (14×14)' : 'Detailed (14×14)';
   const stopLbl   = lang === 'pl' ? 'Stop' : 'Stop';
-  const legendHi  = lang === 'pl' ? 'wspiera predykcję' : 'supports prediction';
-  const legendLo  = lang === 'pl' ? 'przeciwko predykcji' : 'against prediction';
-  const waitMsg   = lang === 'pl' ? 'Kliknij „Analizuj" aby rozpocząć' : 'Click "Analyze" to start';
+  const legendHi  = lang === 'pl' ? '🟥 patrzył tutaj' : '🟥 looked here';
+  const legendLo  = lang === 'pl' ? 'myliło 🟦' : 'distracting 🟦';
+  const waitMsg   = lang === 'pl' ? 'Uruchom kamerę predykcji, potem kliknij „Analizuj"' : 'Start the prediction camera, then click "Analyze"';
+  const howto     = lang === 'pl'
+    ? 'Podświetlone obszary to te, na które model patrzył, podejmując decyzję. Czerwone = główny dowód.'
+    : 'The highlighted areas are what the model looked at to decide. Red = its main evidence.';
   return `
 <div id="xai-wrap-${id}" style="position:relative; width:224px; height:224px; margin: 0 auto; border-radius:6px; overflow:hidden; background:#000;">
   <canvas id="xai-vid-${id}" style="width:100%; height:100%; display:block;"></canvas>
@@ -1474,6 +1477,7 @@ function buildExplainAIBody(id) {
   <div class="xai-legend-bar"></div>
   <span class="xai-legend-label">${legendHi}</span>
 </div>
+<div class="xai-howto">${howto}</div>
 ${makeParam(methLabel, `<select id="xai-method-${id}">
   <option value="occlusion" selected>${optOccl}</option>
   <option value="saliency">${optSal}</option>
@@ -1509,8 +1513,8 @@ function buildModelExplorerBody(id) {
 
 function buildEvaluateBody(id) {
   const hint = lang === 'pl'
-    ? 'Dzieli próbki 80/20 i ocenia wytrenowany model na 20% zbiorze testowym: dokładność, macierz pomyłek i błędne predykcje.'
-    : 'Splits samples 80/20 and scores the trained model on the 20% test set: accuracy, confusion matrix and mistakes.';
+    ? 'Dzieli próbki 80/20, trenuje świeży model na 80% i testuje na niewidzianych 20% — prawdziwy sprawdzian generalizacji.'
+    : 'Splits 80/20, trains a fresh model on 80%, and tests on the unseen 20% — a true generalisation check.';
   return `
 <div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:4px">${hint}</div>
 ${makeBtn(lang === 'pl' ? '▶ Oceń model' : '▶ Evaluate model', `runEvaluate('${id}')`, 'var(--c-eval)')}
@@ -2684,19 +2688,23 @@ async function extractFeatures(samples) {
 
 let evaluateInProgress = false;
 async function runEvaluate(id) {
-  // Split the samples 80/20 (stratified per class) and score the deployed model
-  // (baseModel → inferModel) on the held-out 20% test set only. Note: the
-  // deployed model was trained on all images, so these test images were seen —
-  // the UI says so and nudges the user to try fresh photos for a true check.
-  if (!inferModel || !baseModel) {
-    showToast(lang === 'pl'
-      ? 'Najpierw wytrenuj lub wczytaj model (potrzebny model + model bazowy).'
-      : 'Train or load a model first (needs the classifier + base model).', 'warn');
+  // TRUE hold-out evaluation. Split samples 80/20 (stratified), train a FRESH
+  // head on the 80% only, then test on the 20% the fresh head has never seen.
+  // (The deployed model can't give a genuine hold-out because it trained on all
+  // images.) Only the test-set numbers are reported.
+  if (!baseModel) {
+    log('warn', t('log_no_model_base'));
+    if (!placedBlocks.some(b => b.type === 'pretrained-model')) ensureBlockOnCanvas('pretrained-model');
     return;
   }
-  const classesWithSamples = capturedSamples.filter(a => a && a.length).length;
-  if (classesWithSamples < 2) {
-    showToast(lang === 'pl' ? 'Ocena wymaga min. 2 klas z próbkami.' : 'Evaluation needs at least 2 classes with samples.', 'warn');
+  // Each evaluated class needs >=2 samples so the split yields both a train and
+  // a test example.
+  const counts = capturedSamples.map(a => (a || []).length);
+  const usable = counts.filter(n => n >= 2).length;
+  if (usable < 2) {
+    showToast(lang === 'pl'
+      ? 'Prawdziwy test wymaga min. 2 klas z co najmniej 2 próbkami (aby podzielić 80/20).'
+      : 'A true hold-out test needs at least 2 classes with 2+ samples each (to split 80/20).', 'warn');
     return;
   }
   if (evaluateInProgress) return;
@@ -2708,61 +2716,91 @@ async function runEvaluate(id) {
   setBlockStatus(document.getElementById(id), 'running');
   if (resEl) resEl.innerHTML = '';
 
-  // Stratified 80/20 split: hold out ~20% per class as the test set. We keep the
-  // ImageData refs so we can show the actual misclassified test thumbnails.
-  const testSamples = [], testLabels = [];
-  for (let c = 0; c < classNames.length; c++) {
+  const numClasses = classNames.length;
+  // Stratified 80/20 split. Keep the test ImageData refs for the thumbnails.
+  const trainSamples = [], trainLabels = [], testSamples = [], testLabels = [];
+  for (let c = 0; c < numClasses; c++) {
     const arr = (capturedSamples[c] || []).slice();
-    if (!arr.length) continue;
+    if (arr.length < 2) { arr.forEach(s => { trainSamples.push(s); trainLabels.push(c); }); continue; }
     // Deterministic index-based shuffle so the split is stable across clicks.
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(((i * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     const nTest = Math.max(1, Math.round(arr.length * 0.2));
-    for (let i = 0; i < nTest; i++) { testSamples.push(arr[i]); testLabels.push(c); }
+    arr.forEach((s, i) => {
+      if (i < nTest) { testSamples.push(s); testLabels.push(c); }
+      else { trainSamples.push(s); trainLabels.push(c); }
+    });
   }
 
-  let feat = null, probT = null;
+  let trainFeat = null, testFeat = null, ysTensor = null, classifier = null, trainProbT = null, testProbT = null;
   try {
-    setStatus(lang === 'pl' ? 'Ekstrakcja cech (20% testowych)...' : 'Extracting features (20% test)...');
-    feat = await extractFeatures(testSamples);
-    setStatus(lang === 'pl' ? 'Predykcja modelu...' : 'Running model...');
-    probT = inferModel.predict(feat);
-    const probs = await probT.data();
-    const K = probT.shape[1];                 // classes the deployed model knows
-    const maxTruth = testLabels.reduce((m, v) => Math.max(m, v), 0);
-    const numClasses = Math.max(K, maxTruth + 1);
+    setStatus(lang === 'pl' ? 'Ekstrakcja cech...' : 'Extracting features...');
+    trainFeat = await extractFeatures(trainSamples);
+    testFeat = await extractFeatures(testSamples);
+    const featSize = trainFeat.shape[1];
 
-    const argmaxRow = (row) => {
-      let m = 0; for (let k = 1; k < K; k++) if (probs[row * K + k] > probs[row * K + m]) m = k; return m;
+    const idxT = tf.tensor1d(trainLabels, 'int32');
+    ysTensor = tf.oneHot(idxT, numClasses);
+    idxT.dispose();
+
+    setStatus(lang === 'pl' ? 'Trening na 80% (świeży model)...' : 'Training on 80% (fresh model)...');
+    classifier = tf.sequential({
+      layers: [
+        tf.layers.dense({ inputShape: [featSize], units: 128, activation: 'relu' }),
+        tf.layers.dropout({ rate: 0.3 }),
+        tf.layers.dense({ units: numClasses, activation: 'softmax' })
+      ]
+    });
+    classifier.compile({ optimizer: tf.train.adam(0.001), loss: 'categoricalCrossentropy', metrics: ['accuracy'] });
+    await classifier.fit(trainFeat, ysTensor, { epochs: 20, batchSize: 16, shuffle: true });
+
+    setStatus(lang === 'pl' ? 'Test na 20% (niewidziane)...' : 'Testing on 20% (unseen)...');
+    trainProbT = classifier.predict(trainFeat);
+    testProbT = classifier.predict(testFeat);
+    const trainProbs = await trainProbT.data();
+    const testProbs = await testProbT.data();
+
+    const argmaxRow = (probs, row) => {
+      let m = 0; for (let k = 1; k < numClasses; k++) if (probs[row * numClasses + k] > probs[row * numClasses + m]) m = k; return m;
     };
+    // Train accuracy is computed for the overfit verdict but not displayed.
+    let trainCorrect = 0;
+    for (let i = 0; i < trainLabels.length; i++) if (argmaxRow(trainProbs, i) === trainLabels[i]) trainCorrect++;
+    const trainAcc = trainLabels.length ? trainCorrect / trainLabels.length : 0;
+
+    // Test confusion matrix + misclassified thumbnails — the 20% hold-out only.
     const confusion = Array.from({ length: numClasses }, () => new Array(numClasses).fill(0));
     const misclassified = [];
     let correct = 0;
     for (let i = 0; i < testLabels.length; i++) {
-      const pred = argmaxRow(i);
+      const pred = argmaxRow(testProbs, i);
       const truth = testLabels[i];
       confusion[truth][pred]++;
       if (pred === truth) correct++;
-      else misclassified.push({ sample: testSamples[i], truth, pred, conf: probs[i * K + pred] });
+      else misclassified.push({ sample: testSamples[i], truth, pred, conf: testProbs[i * numClasses + pred] });
     }
     const acc = testLabels.length ? correct / testLabels.length : 0;
 
-    renderEvaluation(id, { confusion, acc, total: testLabels.length, misclassified, numClasses });
+    renderEvaluation(id, { confusion, acc, trainAcc, total: testLabels.length, misclassified, numClasses });
     setStatus('');
     setBlockStatus(document.getElementById(id), 'done');
     log('success', lang === 'pl'
-      ? `Ocena na zbiorze testowym (20%): ${(acc * 100).toFixed(0)}% z ${testLabels.length} zdjęć`
-      : `Test-set (20%) evaluation: ${(acc * 100).toFixed(0)}% of ${testLabels.length} images`);
+      ? `Test na niewidzianych 20%: ${(acc * 100).toFixed(0)}% z ${testLabels.length} zdjęć`
+      : `Hold-out test on unseen 20%: ${(acc * 100).toFixed(0)}% of ${testLabels.length} images`);
   } catch (err) {
     log('error', 'Evaluation error: ' + err.message);
     console.error(err);
     setStatus((lang === 'pl' ? 'Błąd: ' : 'Error: ') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   } finally {
-    if (feat) feat.dispose();
-    if (probT) probT.dispose();
+    if (trainFeat) trainFeat.dispose();
+    if (testFeat) testFeat.dispose();
+    if (ysTensor) ysTensor.dispose();
+    if (trainProbT) trainProbT.dispose();
+    if (testProbT) testProbT.dispose();
+    if (classifier) { try { classifier.dispose(); } catch (_) {} }
     evaluateInProgress = false;
   }
 }
@@ -2774,20 +2812,26 @@ function renderEvaluation(id, r) {
   const el = document.getElementById('eval-results-' + id);
   if (!el) return;
   const pct = (x) => (x * 100).toFixed(0) + '%';
-  // Test-set (20%) accuracy from the deployed model. The model trained on all
-  // images (including these), so keep an honest note; a low score still flags a
-  // model that learned poorly.
+  // Genuine hold-out: the 20% test images were never seen by the fresh head, so
+  // test accuracy is a real generalisation measure. Flag overfitting when the
+  // (internal) train accuracy is high but test accuracy lags.
+  const gap = (r.trainAcc || 0) - r.acc;
   let verdict, verdictClass;
-  if (r.acc < 0.7) {
+  if (gap >= 0.25 && (r.trainAcc || 0) > 0.8) {
     verdictClass = 'warn';
     verdict = lang === 'pl'
-      ? '⚠️ Niska dokładność na zbiorze testowym — model słabo się nauczył. Zbierz więcej lub wyraźniejsze próbki.'
-      : '⚠️ Low test-set accuracy — the model learned poorly. Collect more or clearer samples.';
-  } else {
+      ? '⚠️ Model dobrze radzi sobie z danymi treningowymi, ale słabo z niewidzianymi (przeuczenie). Dodaj więcej różnorodnych zdjęć.'
+      : '⚠️ Great on training data but weak on unseen data (overfitting). Add more varied images.';
+  } else if (r.acc >= 0.8) {
     verdictClass = 'ok';
     verdict = lang === 'pl'
-      ? 'ℹ️ Wynik na 20% odłożonych próbek. Model trenował na wszystkich zdjęciach, więc dla prawdziwego testu zrób nowe zdjęcia w bloku predykcji.'
-      : 'ℹ️ Score on the held-out 20% of samples. The model trained on all images, so for a true test try fresh photos in the prediction block.';
+      ? '✅ Model dobrze generalizuje — trafia na zdjęciach, których nigdy nie widział.'
+      : '✅ The model generalises well — it gets images it never saw right.';
+  } else {
+    verdictClass = 'warn';
+    verdict = lang === 'pl'
+      ? '⚠️ Słaba skuteczność na niewidzianych danych — zbierz więcej lub wyraźniejsze próbki.'
+      : '⚠️ Weak on unseen data — collect more or clearer samples.';
   }
 
   // Confusion matrix table.
@@ -2823,7 +2867,7 @@ function renderEvaluation(id, r) {
     <div class="eval-scores">
       <div class="eval-score eval-score-test">
         <div class="eval-score-val">${pct(r.acc)}</div>
-        <div class="eval-score-lbl">${lang === 'pl' ? `test (20%) — ${r.total} zdjęć` : `test (20%) — ${r.total} images`}</div>
+        <div class="eval-score-lbl">${lang === 'pl' ? `niewidziane (20%) — ${r.total} zdjęć` : `unseen (20%) — ${r.total} images`}</div>
       </div>
     </div>
     <div class="eval-verdict eval-verdict-${verdictClass}">${verdict}</div>
@@ -3756,7 +3800,7 @@ async function runXAI(id) {
     await new Promise(r => setTimeout(r, 0));
   }
 
-  // ── 5. Final render + counterfactual narrative ──
+  // ── 5. Final render + plain-language explanation ──
   renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY);
 
   // Find the most-supportive patch (largest positive importance)
@@ -3773,10 +3817,21 @@ async function runXAI(id) {
     if (counterPreds[i] > counterPreds[counterClass]) counterClass = i;
   }
 
+  // Outline the single most-important region so "the model looked HERE" is
+  // unmistakable, on top of the heatmap.
+  if (bestDrop > 0.001) {
+    drawXAIFocusBox(overlay, bestX, bestY, PATCH_SIZE, scaleX, scaleY);
+  }
+
+  const lbl = classNames[baseClass];
+  const pct = (baseConf * 100).toFixed(0);
+  // Headline: clear plain-language statement of the decision + how sure.
   if (resultEl) {
-    const lbl = classNames[baseClass];
-    const pct = (baseConf * 100).toFixed(1);
-    resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">${escapeHtml(lbl)} ${pct}%</span>`;
+    const sees = lang === 'pl' ? 'Model widzi' : 'The model sees';
+    const sure = baseConf >= 0.85 ? (lang === 'pl' ? 'jest pewny' : 'confident')
+      : baseConf >= 0.6 ? (lang === 'pl' ? 'raczej pewny' : 'fairly sure')
+      : (lang === 'pl' ? 'niepewny' : 'unsure');
+    resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">🔍 ${sees} „${escapeHtml(lbl)}" ${pct}%</span> <span style="font-weight:400;color:var(--c-muted);font-style:normal">(${sure})</span>`;
   }
 
   if (thumbCv && bestDrop > 0.001) {
@@ -3786,18 +3841,20 @@ async function runXAI(id) {
     tctx.drawImage(canvas, bestX, bestY, PATCH_SIZE, PATCH_SIZE, 0, 0, 64, 64);
   }
   if (detailEl && detailText && bestDrop > 0.001) {
-    const dropPct = (bestDrop * 100).toFixed(1);
+    const dropPct = (bestDrop * 100).toFixed(0);
     const counterLbl = classNames[counterClass];
     const baseLbl = classNames[baseClass];
+    // Plain-language "why": what it focused on (thumbnail beside), and what
+    // would change its mind.
     let txt;
     if (counterClass !== baseClass) {
       txt = lang === 'pl'
-        ? `Najwazniejszy obszar: ukrycie go zmniejsza pewnosc "${baseLbl}" o ${dropPct} pp i model wybralby "${counterLbl}".`
-        : `Most important region: hiding it drops "${baseLbl}" confidence by ${dropPct} pp; the model would predict "${counterLbl}" instead.`;
+        ? `Najważniejszy dowód to zaznaczony fragment (obok). Bez niego pewność „${baseLbl}" spada o ${dropPct} pkt i model uznałby to za „${counterLbl}".`
+        : `The key evidence is the highlighted patch (shown left). Without it, "${baseLbl}" confidence falls ${dropPct} points and the model would call this "${counterLbl}".`;
     } else {
       txt = lang === 'pl'
-        ? `Najwazniejszy obszar: ukrycie go zmniejsza pewnosc "${baseLbl}" o ${dropPct} pp.`
-        : `Most important region: hiding it drops "${baseLbl}" confidence by ${dropPct} pp.`;
+        ? `Najważniejszy dowód to zaznaczony fragment (obok). Bez niego pewność „${baseLbl}" spada o ${dropPct} pkt.`
+        : `The key evidence is the highlighted patch (shown left). Without it, "${baseLbl}" confidence falls ${dropPct} points.`;
     }
     detailText.textContent = txt;
     detailEl.style.display = 'block';
@@ -3846,6 +3903,21 @@ async function runXAI(id) {
     xaiCancelled = false;
     if (progEl) progEl.style.display = 'none';
   }
+}
+
+// Draw a bright outlined box (with a small "★" marker) around the single most
+// important region, on top of the heatmap, so students immediately see the one
+// spot the model relied on most.
+function drawXAIFocusBox(overlay, px, py, patch, scaleX, scaleY) {
+  const octx = overlay.getContext('2d');
+  const x = px * scaleX, y = py * scaleY, w = patch * scaleX, h = patch * scaleY;
+  octx.save();
+  octx.lineWidth = Math.max(3, 3 * (window.devicePixelRatio || 1));
+  octx.strokeStyle = '#FACC15';
+  octx.shadowColor = 'rgba(0,0,0,0.6)';
+  octx.shadowBlur = 6;
+  octx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+  octx.restore();
 }
 
 // Diverging colormap renderer. Positive heatmap values (occlusion drops the
@@ -3971,8 +4043,12 @@ async function runXAISaliency(p) {
     // Headline result + thumbnail of the most-important region
     if (resultEl) {
       const lbl = classNames[baseClass];
-      const pct = (baseConf * 100).toFixed(1);
-      resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">${escapeHtml(lbl)} ${pct}%</span>`;
+      const pct = (baseConf * 100).toFixed(0);
+      const sees = lang === 'pl' ? 'Model widzi' : 'The model sees';
+      const sure = baseConf >= 0.85 ? (lang === 'pl' ? 'jest pewny' : 'confident')
+        : baseConf >= 0.6 ? (lang === 'pl' ? 'raczej pewny' : 'fairly sure')
+        : (lang === 'pl' ? 'niepewny' : 'unsure');
+      resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">🔍 ${sees} „${escapeHtml(lbl)}" ${pct}%</span> <span style="font-weight:400;color:var(--c-muted);font-style:normal">(${sure})</span>`;
     }
     if (thumbCv) {
       const half = 32; // 64×64 thumb centred on hottest pixel
@@ -3986,8 +4062,8 @@ async function runXAISaliency(p) {
     if (detailEl && detailText) {
       const lbl = classNames[baseClass];
       detailText.textContent = lang === 'pl'
-        ? `Saliency: piksele zmieniające najmocniej pewność „${lbl}". Czerwone obszary = wrażliwe na drobne zmiany jasności/koloru.`
-        : `Saliency: pixels that most affect the "${lbl}" score. Red regions = sensitive to small changes in brightness/colour.`;
+        ? `Podświetlone piksele najmocniej wpływają na decyzję „${lbl}" — to na nie model patrzył najbardziej.`
+        : `The highlighted pixels most affect the "${lbl}" decision — these are what the model paid the most attention to.`;
       detailEl.style.display = 'block';
       // Saliency is a single-pass method — no per-class deltas. Hide the row.
       const classesEl = document.getElementById('xai-classes-' + p.id);
