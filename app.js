@@ -4307,8 +4307,10 @@ async function runPipeline() {
   }
   pipelineRunning = true;
   try {
-  // Sort blocks left-to-right by X position
-  const sorted = [...placedBlocks].sort((a, b) => a.x - b.x);
+  // Run in canonical pipeline order (matches the connector lines and badges),
+  // not by physical x-position — so a block dropped anywhere still runs in the
+  // right order.
+  const sorted = pipelineSorted();
   log('step', '=== Pipeline Start ===');
 
   for (const b of sorted) {
@@ -4403,11 +4405,29 @@ function refreshEmptyState() {
 }
 
 // ===== PIPELINE ORDER VISUALIZATION =====
-// Blocks execute left-to-right by x-position (see runPipeline), which is
-// otherwise invisible. Number each block by that order and draw connector
-// curves between consecutive blocks so the data flow is legible.
+// Canonical pipeline order — matches the side panel top-to-bottom (training
+// then prediction). Order badges, connector lines AND the Run order all follow
+// this, so the flow is always logically correct no matter where a block is
+// dropped on the canvas. Blocks of the same rank fall back to left-to-right.
+const PIPELINE_ORDER = {
+  'camera-input': 0, 'label-classes': 1, 'prepare-data': 2, 'pretrained-model': 3,
+  'train-model': 4, 'save-model': 5, 'evaluate': 6, 'deploy-export': 7,
+  'upload-model': 8, 'camera-infer': 9, 'show-results': 10,
+  'zero-shot': 11, 'explain-ai': 12, 'model-explorer': 13
+};
+function pipelineRank(type) {
+  return (PIPELINE_ORDER[type] === undefined) ? 99 : PIPELINE_ORDER[type];
+}
+// Blocks in canonical pipeline order (rank first, x as tiebreaker).
+function pipelineSorted() {
+  return [...placedBlocks].sort((a, b) => {
+    const r = pipelineRank(a.type) - pipelineRank(b.type);
+    return r !== 0 ? r : a.x - b.x;
+  });
+}
+
 function updatePipelineOrder() {
-  const sorted = [...placedBlocks].sort((a, b) => a.x - b.x);
+  const sorted = pipelineSorted();
   sorted.forEach((b, i) => {
     const card = document.getElementById(b.id);
     if (!card) return;
@@ -4429,7 +4449,7 @@ function updatePipelineOrder() {
 // them out cleanly. The canvas scrolls horizontally to fit them all.
 function tidyUpCanvas() {
   if (!placedBlocks.length) return;
-  const sorted = [...placedBlocks].sort((a, b) => a.x - b.x);
+  const sorted = pipelineSorted();
   const COL_W = 300, START_X = 16, START_Y = 24;
   sorted.forEach((b, i) => {
     b.x = START_X + i * COL_W;
@@ -4445,7 +4465,7 @@ function tidyUpCanvas() {
 function drawPipelineConnectors(sorted) {
   const canvas = document.getElementById('canvas');
   if (!canvas) return;
-  sorted = sorted || [...placedBlocks].sort((a, b) => a.x - b.x);
+  sorted = sorted || pipelineSorted();
   let svg = document.getElementById('pipeline-connectors');
   if (!svg) {
     svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
