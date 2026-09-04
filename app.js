@@ -3,12 +3,45 @@ const SCHEMA_VERSION = "v1";
 const CLASS_COLORS = ['#0369A1', '#7C3AED', '#D97706', '#DC2626', '#059669', '#DB2777'];
 // Feature-vector variant: 576-dim output, used as the frozen backbone for
 // transfer-learning (Train Model block). The full classifier variant is loaded
-// separately by the Zero-shot block — see CLASSIFIER_MODEL_URL.
+// separately by the Zero-shot block – see CLASSIFIER_MODEL_URL.
 const MODEL_URL = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-feature-vector/versions/1/model.json?tfjs-format=file';
 // Full MobileNetV3-Small with the original 1001-class ImageNet softmax head.
 // Used by the Zero-shot block to demonstrate "what does the base model know
-// without any training" — produces actual ImageNet probabilities.
+// without any training" – produces actual ImageNet probabilities.
 const CLASSIFIER_MODEL_URL = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-classification/versions/1/model.json?tfjs-format=file';
+
+// ===== BLOCK METADATA =====
+// One record per block type. Every per-type lookup reads this table:
+//   phase    - flow-bar pill lit while the block runs in the pipeline
+//   color    - header / border colour token (matches the sidebar dots)
+//   badge    - short label in the card header
+//   titleKey - STRINGS key of the block title (sidebar label and card title)
+//   rank     - canonical pipeline order (badges, connectors, Run order)
+//   group    - 'train' (ranks 0-7) or 'infer' (8+): two independent pipelines
+const BLOCK_META = {
+  'camera-input':     { phase: 'data',   color: 'var(--c-data)',   badge: 'DATA',   titleKey: 'block_camera_input',     rank: 0,  group: 'train' },
+  'label-classes':    { phase: 'label',  color: 'var(--c-label)',  badge: 'LABEL',  titleKey: 'block_label_classes',    rank: 1,  group: 'train' },
+  'prepare-data':     { phase: 'prep',   color: 'var(--c-prep)',   badge: 'PREP',   titleKey: 'block_prepare_data',     rank: 2,  group: 'train' },
+  'pretrained-model': { phase: 'model',  color: 'var(--c-model)',  badge: 'MODEL',  titleKey: 'block_pretrained_model', rank: 3,  group: 'train' },
+  'train-model':      { phase: 'train',  color: 'var(--c-train)',  badge: 'TRAIN',  titleKey: 'block_train_model',      rank: 4,  group: 'train' },
+  'save-model':       { phase: 'deploy', color: 'var(--c-deploy)', badge: 'DEPLOY', titleKey: 'block_save_model',       rank: 5,  group: 'train' },
+  'evaluate':         { phase: 'infer',  color: 'var(--c-eval)',   badge: 'EVAL',   titleKey: 'block_evaluate',         rank: 6,  group: 'train' },
+  'deploy-export':    { phase: 'deploy', color: 'var(--c-deploy)', badge: 'DEPLOY', titleKey: 'block_deploy_export',    rank: 7,  group: 'train' },
+  'upload-model':     { phase: 'infer',  color: 'var(--c-data)',   badge: 'DATA',   titleKey: 'block_upload_model',     rank: 8,  group: 'infer' },
+  'camera-infer':     { phase: 'infer',  color: 'var(--c-data)',   badge: 'DATA',   titleKey: 'block_camera_infer',     rank: 9,  group: 'infer' },
+  'show-results':     { phase: 'infer',  color: 'var(--c-eval)',   badge: 'PRED',   titleKey: 'block_show_results',     rank: 10, group: 'infer' },
+  'zero-shot':        { phase: 'infer',  color: 'var(--c-model)',  badge: 'PRED',   titleKey: 'block_zero_shot',        rank: 11, group: 'infer' },
+  'explain-ai':       { phase: 'infer',  color: 'var(--c-eval)',   badge: 'EVAL',   titleKey: 'block_explain_ai',       rank: 12, group: 'infer' },
+  'model-explorer':   { phase: 'model',  color: 'var(--c-eval)',   badge: 'EVAL',   titleKey: 'block_model_explorer',   rank: 13, group: 'infer' }
+};
+// Unknown types (a stale saved layout) get a neutral record so nothing throws.
+const BLOCK_META_FALLBACK = { phase: 'data', color: '#64748B', badge: '', titleKey: null, rank: 99, group: 'infer' };
+function blockMeta(type) { return BLOCK_META[type] || BLOCK_META_FALLBACK; }
+// Translated block title; the type id itself for an unknown type.
+function blockTitle(type) {
+  const m = BLOCK_META[type];
+  return m ? t(m.titleKey) : type;
+}
 
 // ===== HTML ESCAPING =====
 // Class names and model metadata are user-controlled and also arrive from
@@ -40,10 +73,10 @@ function mulberry32(seed) {
 }
 
 // ===== BUNDLE HELPERS =====
-// Chunked encoding — avoids O(n²) string concat for multi-MB weight buffers.
+// Chunked encoding – avoids O(n²) string concat for multi-MB weight buffers.
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
-  const CHUNK = 0x8000; // 32 KB — safe limit for String.fromCharCode.apply
+  const CHUNK = 0x8000; // 32 KB – safe limit for String.fromCharCode.apply
   const parts = [];
   for (let i = 0; i < bytes.length; i += CHUNK) {
     parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
@@ -68,7 +101,7 @@ function normalizeWeightData(wd) {
     return merged.buffer;
   }
   if (wd instanceof ArrayBuffer) return wd;
-  // CompositeArrayBuffer or typed-array view — copy to plain ArrayBuffer
+  // CompositeArrayBuffer or typed-array view – copy to plain ArrayBuffer
   if (typeof wd.slice === 'function') return wd.slice(0);
   return new Uint8Array(wd).buffer;
 }
@@ -88,14 +121,14 @@ const STRINGS = {
     btn_guide: 'Przewodnik', btn_clear: 'Wyczyść', btn_run: 'Uruchom', btn_edu: '🎓 Edu', btn_tidy: '🧹 Uporządkuj',
     sidebar_training: 'Trening', sidebar_inference: 'Predykcja',
     block_camera_input: 'Kamera: Dane', block_label_classes: 'Etykiety klas',
-    block_prepare_data: 'Dane', block_pretrained_model: 'Model bazowy',
+    block_prepare_data: 'Augmentacja danych', block_pretrained_model: 'Model bazowy',
     block_train_model: 'Trenuj model', block_save_model: 'Zapisz model',
     block_upload_model: 'Wczytaj model', block_camera_infer: 'Kamera: Predykcja',
     block_predict: 'Predykcja', block_show_results: 'Pokaż wyniki',
     block_zero_shot: 'Model bazowy / Predykcja', block_explain_ai: 'Explainable AI', block_model_explorer: 'Eksplorator modelu',
     block_evaluate: 'Ocena modelu', block_deploy_export: 'Eksport aplikacji',
     log_title: 'Pipeline Log',
-    guide_title: 'Przewodnik — KlockiAI', guide_subtitle: 'Jak zbudować swój pierwszy model AI w przeglądarce',
+    guide_title: 'Przewodnik – KlockiAI', guide_subtitle: 'Jak zbudować swój pierwszy model AI w przeglądarce',
     guide_close: 'OK', guide_dontshow: 'Nie pokazuj ponownie',
     status_idle: 'Oczekuje', status_running: 'Działa', status_done: 'Gotowe', status_error: 'Błąd',
     btn_start_camera: 'Uruchom kamerę', btn_stop_camera: 'Zatrzymaj',
@@ -110,24 +143,24 @@ const STRINGS = {
     btn_train: 'Trenuj', btn_stop_train: 'Zatrzymaj',
     btn_freeze_frame: 'Zamroź klatkę', btn_run_xai: '🔍 Dlaczego? (Analizuj)',
     lbl_class: 'Klasa', lbl_samples: 'próbek', lbl_accuracy: 'Dokładność',
-    lbl_no_model: 'Brak modelu — najpierw wczytaj lub załaduj',
+    lbl_no_model: 'Brak modelu – najpierw wczytaj lub załaduj',
     lbl_classes: 'Klasy', lbl_timestamp: 'Data treningu',
     log_camera_start: 'Kamera uruchomiona', log_camera_err: 'Błąd kamery: ',
     log_capture: (n, cls) => `Zebrano ${n} próbkę(i) dla klasy "${cls}"`,
     log_prep_start: 'Rozpoczynam przygotowanie danych...',
     log_prep_aug: (n) => `Augmentacja: wygenerowano ${n} dodatkowych próbek`,
-    log_prep_done: (n) => `Przygotowanie zakończone — łącznie ${n} próbek`,
+    log_prep_done: (n) => `Przygotowanie zakończone – łącznie ${n} próbek`,
     log_model_loading: 'Ładowanie MobileNetV3-Small...',
     log_model_loaded: 'Model bazowy załadowany ✓',
     log_model_err: 'Błąd ładowania modelu: ',
-    log_train_start: (e) => `Trening — ${e} epok`,
+    log_train_start: (e) => `Trening – ${e} epok`,
     log_train_epoch: (e, l, a) => `Epoka ${e}: strata=${l.toFixed(4)}, dokł.=${(a * 100).toFixed(1)}%`,
-    log_train_done: (a) => `Trening zakończony — dokładność ${(a * 100).toFixed(1)}%`,
+    log_train_done: (a) => `Trening zakończony – dokładność ${(a * 100).toFixed(1)}%`,
     log_train_cancel: 'Trening przerwany przez użytkownika',
     log_save_idb: 'Model zapisany w IndexedDB ✓',
     log_download: 'Pobieranie plików modelu...',
     log_upload_start: 'Wczytywanie modelu z pliku...',
-    log_upload_done: (cls) => `Model załadowany — klasy: ${cls}`,
+    log_upload_done: (cls) => `Model załadowany – klasy: ${cls}`,
     log_upload_warn: 'Ostrzeżenie: inna wersja schematu. Model może działać niepoprawnie.',
     log_infer_start: 'Predykcja uruchomiona',
     log_infer_result: (cls, pct) => `→ ${cls}: ${(pct * 100).toFixed(1)}%`,
@@ -167,13 +200,201 @@ const STRINGS = {
     aria_chart_idle: 'Wykres treningu: brak danych',
     aria_chart: (ep, loss, acc) => `Wykres treningu: epoka ${ep}, strata ${loss}, dokładność ${acc}%`,
     btn_unfreeze_frame: 'Wznów klatkę',
+    // ─── Dataset ───
+    log_idb_loading: (n) => `Wczytywanie ${n} klas z bazy danych...`,
+    log_idb_loaded: (n) => `Dataset załadowany: ${n} próbek`,
+    log_export_empty: 'Brak próbek do pobrania.',
+    log_export_prep: 'Przygotowywanie datasetu...',
+    log_export_done: (total, n) => `Dataset pobrany (${total} próbek, ${n} klas)`,
+    log_import_start: 'Wczytywanie datasetu z pliku...',
+    log_import_bad_format: 'Nieprawidłowy format pliku datasetu.',
+    log_import_done: (n, total) => `Dataset wczytany: ${n} klas, ${total} próbek`,
+    default_class_name: 'Klasa',
+    default_class_names: ['Klasa 1', 'Klasa 2'],
+    class_name_n: (n) => `Klasa ${n}`,
+    dataset_info: (total, perClass) => `${total} próbek – ${perClass}`,
+    toast_no_samples_delete: 'Brak próbek do usunięcia.',
+    log_dataset_deleted: 'Dataset usunięty z pamięci',
+    toast_dataset_deleted: (n) => `Usunięto dataset (${n} próbek)`,
+    log_dataset_restored: 'Dataset przywrócony',
+    btn_undo: 'Cofnij',
+    log_photos_uploaded: (n, name) => `Wgrano ${n} zdjęć do „${name}"`,
+    toast_photos_failed: 'Nie udało się wczytać zdjęć.',
+    class_deleted: (name) => `Usunięto klasę „${name}"`,
+    class_restored: (name) => `Przywrócono klasę „${name}"`,
+    samples_deleted: (name) => `Usunięto próbki klasy „${name}"`,
+    toast_samples_cleared: (name, n) => `Wyczyszczono próbki „${name}" (${n})`,
+    samples_restored: (name) => `Przywrócono próbki „${name}"`,
+    log_max_classes: 'Maksymalna liczba klas osiągnięta',
+    log_class_added: (name) => `Dodano klasę: ${name}`,
+    // ─── Block bodies ───
+    toast_block_added: (name) => `Dodano brakujący blok „${name}"`,
+    log_camera_block_added: 'Dodano blok Kamera: Dane. Uruchom kamerę i spróbuj ponownie.',
+    title_upload_active: 'Wgraj zdjęcia do aktywnej klasy',
+    btn_upload_photos: '📁 Wgraj zdjęcia',
+    btn_add_class: 'Dodaj klasę',
+    title_clear_samples: 'Wyczyść próbki',
+    title_delete_class: 'Usuń klasę',
+    title_upload_photos: 'Wgraj zdjęcia',
+    ph_class_name: 'nazwa klasy...',
+    btn_capture_short: 'zbierz',
+    prep_hint: 'Przeskaluj zebrane zdjęcia do rozmiaru modelu. Opcjonalnie augmentuj dane, aby zwiększyć liczbę próbek.',
+    opt_prepare_only: 'Tylko przygotowanie',
+    btn_preview_aug: '👁 Podgląd augmentacji',
+    btn_prepare: 'Przygotuj dane',
+    zs_note: 'Pełny klasyfikator MobileNetV3 (1001 klas ImageNet). Pierwsze uruchomienie pobiera ~5 MB.',
+    btn_start: 'Uruchom', btn_stop: 'Stop',
+    pred_waiting: 'oczekiwanie na predykcję...',
+    xai_granularity: 'Rozdzielczość', xai_method: 'Metoda',
+    xai_opt_occlusion: 'Okluzja (po krokach)', xai_opt_saliency: 'Saliency (gradient)',
+    xai_opt_fast: 'Szybko (4×4)', xai_opt_normal: 'Normalna (7×7)', xai_opt_detailed: 'Dokładna (14×14)',
+    xai_legend_hi: '🟥 patrzył tutaj', xai_legend_lo: 'myliło 🟦',
+    xai_wait: 'Uruchom kamerę predykcji, potem kliknij „Analizuj"',
+    xai_howto: 'Podświetlone obszary to te, na które model patrzył, podejmując decyzję. Czerwone = główny dowód.',
+    explorer_desc: 'Eksploruj architekturę MobileNet V3 Small – warstwy, mapy cech i inferencję na żywo.',
+    btn_open_explorer: 'Otwórz eksplorator',
+    eval_hint: 'Dzieli próbki 80/20, trenuje świeży model na 80% i testuje na niewidzianych 20% – prawdziwy sprawdzian generalizacji.',
+    btn_evaluate: '▶ Oceń model',
+    deploy_hint: 'Eksportuj samodzielną stronę HTML z Twoim modelem w środku – działa offline, klasyfikuje z kamery. Podziel się nią z innymi!',
+    btn_export_app: '🚀 Eksportuj aplikację',
+    trash_label: 'Kosz',
+    // ─── Blocks / canvas ───
+    confirm_remove_train: 'Wytrenowany model nie został jeszcze zapisany. Usunąć blok?',
+    confirm_remove_labels: 'Próbki klas zostaną zachowane (możesz dodać blok ponownie). Usunąć blok?',
+    btn_remove_block: 'Usuń blok',
+    btn_confirm: 'Potwierdź', btn_cancel: 'Anuluj',
+    log_block_added: (type, n) => `+ ${type} #${n}`,
+    log_block_removed: (id) => `Usunięto blok #${id}`,
+    log_canvas_cleared: 'Obszar roboczy wyczyszczony',
+    toast_tidied: 'Uporządkowano bloki',
+    log_qs_train: 'Szybki start: bloki treningowe dodane!',
+    log_qs_infer: 'Szybki start: bloki predykcji dodane!',
+    log_ready: 'KlockiAI gotowy – przeciągnij bloki na tablicę!',
+    // ─── Camera / capture ───
+    err_no_camera: 'Nie znaleziono kamery',
+    hint_file_protocol: ' ⚠️ Otwórz przez http://localhost:8765 (nie file://)',
+    warn_start_camera_first: 'Najpierw uruchom kamerę!',
+    warn_camera_loading: 'Kamera jeszcze się ładuje, poczekaj chwilę...',
+    capture_progress: (cls, n, total) => `${cls}: zbieranie ${n}/${total}...`,
+    log_capture_aborted: 'Zbieranie przerwane – kamera zatrzymana.',
+    // ─── Prepare ───
+    aug_collect_first: 'Najpierw zbierz kilka próbek.',
+    aug_original: 'oryginał',
+    aug_off: 'Augmentacja wyłączona – tylko oryginały.',
+    warn_prep_running: 'Przygotowanie już trwa.',
+    err_prep_worker: 'Błąd workera przygotowania: ',
+    err_prep_decode: 'Worker przygotowania: nie udało się odczytać wiadomości',
+    // ─── Base model ───
+    info_base_loading: 'Model bazowy już się ładuje...',
+    info_base_already: 'Model bazowy już załadowany',
+    status_base_loaded: 'MobileNetV3-Small załadowany ✓',
+    // ─── Training ───
+    interp_overfit: '⚠️ 100% dokładności przy małej liczbie próbek – model może zapamiętywać, a nie uczyć się. Dodaj więcej zdjęć.',
+    interp_falling: '📉 Strata spada – model się uczy!',
+    interp_flat: '➡️ Strata się wypłaszcza – bliski końca nauki.',
+    interp_progress: (pct) => `Uczenie w toku – dokładność ${pct}%.`,
+    chart_loss: 'strata', chart_acc: 'dokł.',
+    val_min_classes: (n) => `Trening wymaga co najmniej 2 klas z próbkami (masz ${n}). Zbierz próbki dla dwóch lub więcej klas.`,
+    btn_continue_anyway: 'Kontynuuj mimo to',
+    val_too_few: (min, list) => `Niektóre klasy mają mniej niż ${min} próbek: ${list}. Modele potrzebują kilku przykładów na klasę. Kontynuować mimo to?`,
+    val_imbalance: (min, max) => `Bardzo nierówny rozkład klas (od ${min} do ${max} próbek). Model nauczy się rozpoznawać klasę większościową. Kontynuować?`,
+    warn_train_running: 'Trening już trwa.',
+    log_feat_extract: (n) => `Ekstrakcja cech z ${n} próbek...`,
+    feat_progress: (done, total) => `Ekstrakcja cech: ${done}/${total}`,
+    log_feat_shape: (n, size) => `Cechy: ${n}×${size}`,
+    train_eta: (e, n, s) => `Epoka ${e}/${n} | ETA: ${s}s`,
+    log_model_ready: 'Model gotowy...',
+    err_training: 'Błąd treningu: ',
+    log_train_stopping: 'Zatrzymywanie po bieżącej epoce...',
+    // ─── Evaluate ───
+    eval_need_samples: 'Prawdziwy test wymaga min. 2 klas z co najmniej 2 próbkami (aby podzielić 80/20).',
+    eval_extracting: 'Ekstrakcja cech...',
+    eval_training: 'Trening na 80% (świeży model)...',
+    eval_testing: 'Test na 20% (niewidziane)...',
+    log_eval_settings: (e, lr, bs, fromTrain) => `Ocena: ${e} epok, lr ${lr}, batch ${bs} (${fromTrain ? 'ustawienia z bloku Trenuj model' : 'ustawienia domyślne'})`,
+    log_eval_done: (pct, n) => `Test na niewidzianych 20%: ${pct}% z ${n} zdjęć`,
+    err_eval: 'Błąd oceny: ',
+    err_prefix: 'Błąd: ',
+    eval_verdict_overfit: '⚠️ Model dobrze radzi sobie z danymi treningowymi, ale słabo z niewidzianymi (przeuczenie). Dodaj więcej różnorodnych zdjęć.',
+    eval_verdict_ok: '✅ Model dobrze generalizuje – trafia na zdjęciach, których nigdy nie widział.',
+    eval_verdict_weak: '⚠️ Słaba skuteczność na niewidzianych danych – zbierz więcej lub wyraźniejsze próbki.',
+    eval_mistakes: 'Błędy modelu:',
+    eval_no_mistakes: 'Brak błędów na zbiorze testowym 🎉',
+    eval_unseen_lbl: (n) => `niewidziane (20%) – ${n} zdjęć`,
+    eval_matrix_title: 'Macierz pomyłek (wiersz = prawda, kolumna = predykcja)',
+    // ─── Save / load / export ───
+    err_save: 'Błąd zapisu: ',
+    err_download: 'Błąd pobierania: ',
+    log_model_downloaded: (fname) => `Model pobrany ✓ (${fname})`,
+    toast_train_first: 'Najpierw wytrenuj model.',
+    deploy_packing: 'Pakowanie modelu (~6 MB)...',
+    deploy_exported: 'Wyeksportowano ✓',
+    log_app_exported: 'Aplikacja wyeksportowana: klocki-classifier.html',
+    toast_app_exported: 'Aplikacja wyeksportowana 🚀',
+    err_export: 'Błąd eksportu: ',
+    err_import: 'Błąd importu: ',
+    export_title: 'Klasyfikator KlockiAI',
+    export_start: '▶ Uruchom kamerę',
+    export_made_with: 'Zrobione w KlockiAI',
+    export_loading: 'Ładowanie modelu...',
+    export_ready: 'Gotowe – uruchom kamerę',
+    export_no_camera: 'Brak dostępu do kamery',
+    warn_pick_model_file: 'Wybierz plik modelu',
+    warn_no_json: 'Nie wybrano pliku .json',
+    info_model_loading: 'Model już się wczytuje...',
+    log_base_from_file: 'Model bazowy wczytany z pliku ✓',
+    warn_load_base_too: 'Pamiętaj: załaduj też model bazowy (blok "Model bazowy" lub "Wczytaj z przeglądarki")',
+    err_upload: 'Błąd wczytywania: ',
+    warn_pick_from_list: 'Wybierz model z listy (kliknij ↺ aby odświeżyć)',
+    log_idb_load: (name) => `Wczytywanie z IndexedDB: ${name}...`,
+    log_base_from_browser: 'Model bazowy wczytany z przeglądarki ✓',
+    warn_base_not_in_browser: 'Brak modelu bazowego w przeglądarce – załaduj blok "Model bazowy" z CDN',
+    err_idb_load: 'Błąd wczytywania z IndexedDB: ',
+    toast_no_model_to_save: 'Brak wytrenowanego modelu do zapisania.',
+    toast_saved_as: (name) => `Zapisano jako „${name}"`,
+    toast_model_trained: '✅ Model gotowy – zapisz go, zanim zamkniesz kartę!',
+    btn_save_now: '💾 Zapisz teraz',
+    // ─── Zero-shot ───
+    log_zs_loading: 'Ładowanie pełnego klasyfikatora MobileNetV3 (1001 klas)...',
+    log_zs_loaded: 'Klasyfikator zero-shot załadowany ✓',
+    zs_downloading: 'Pobieranie modelu...',
+    log_zs_started: 'Zero-shot uruchomiony',
+    err_zs: 'Błąd zero-shot: ',
+    log_zs_stopped: 'Zero-shot zatrzymany',
+    // ─── Inference ───
+    log_infer_camera_start: 'Kamera predykcji uruchomiona',
+    log_infer_camera_stopped: 'Kamera predykcji zatrzymana',
+    lbl_threshold: 'próg',
+    pred_below_threshold: 'poniżej progu pewności',
+    log_frame_frozen: '❄️ Klatka zamrożona',
+    log_frame_resumed: '▶ Wznowiono',
+    // ─── XAI ───
+    log_xai_stopping: 'Zatrzymywanie analizy XAI...',
+    warn_xai_no_model: 'Najpierw załaduj lub wytrenuj model!',
+    err_xai_no_base: 'Brak modelu bazowego! Załaduj blok "Model bazowy".',
+    xai_analyzing: 'Analizuję... (nie ruszaj kamery)',
+    xai_start_camera: 'Uruchom "Kamera: Predykcja"',
+    warn_saliency_fallback: 'Saliency niedostępny dla tego modelu – przełączam na okluzję',
+    xai_sees: 'Model widzi',
+    xai_sure_high: 'jest pewny', xai_sure_mid: 'raczej pewny', xai_sure_low: 'niepewny',
+    xai_detail_counter: (base, drop, counter) => `Najważniejszy dowód to zaznaczony fragment (obok). Bez niego pewność „${base}" spada o ${drop} pkt i model uznałby to za „${counter}".`,
+    xai_detail_same: (base, drop) => `Najważniejszy dowód to zaznaczony fragment (obok). Bez niego pewność „${base}" spada o ${drop} pkt.`,
+    xai_saliency_detail: (lbl) => `Podświetlone piksele najmocniej wpływają na decyzję „${lbl}" – to na nie model patrzył najbardziej.`,
+    log_xai_cancelled: 'Analiza XAI przerwana',
+    xai_cancelled_short: 'Przerwano',
+    err_xai: 'Błąd XAI: ',
+    // ─── Pipeline ───
+    warn_pipeline_running: 'Pipeline już działa.',
+    log_pipeline_start: '=== Start pipeline ===',
+    log_pipeline_done: '=== Pipeline zakończony ===',
+    log_pipeline_stopped: (name) => `Pipeline zatrzymany na kroku „${name}"`,
     guide_shortcuts: 'Skróty: ? przewodnik, Esc zamknij, Ctrl+Enter uruchom, T uporządkuj, L język, E tryb Edu',
     guide_steps: [
-      { title: 'Krok 1 — Kamera', desc: 'Dodaj blok "Kamera — Dane" na tablicę. Uruchom kamerę i zbieraj zdjęcia dla każdej klasy, klikając "Zbierz próbki".' },
-      { title: 'Krok 2 — Etykiety', desc: 'Dodaj blok "Etykiety klas" i nazwij swoje kategorie, np. "Pies", "Kot", "Inne". Wybierz aktywną klasę przed zbieraniem.' },
-      { title: 'Krok 3 — Przygotowanie danych', desc: 'Blok "Przygotuj dane" zmieni rozmiar zdjęć i opcjonalnie wygeneruje więcej próbek przez augmentację (obrócenie, jasność).' },
-      { title: 'Krok 4 — Model bazowy', desc: 'Blok "Model bazowy" pobierze MobileNetV3-Small z sieci (~3MB). Ten model "widział" miliony zdjęć i rozumie cechy wizualne.' },
-      { title: 'Krok 5 — Trening', desc: 'Blok "Trenuj model" dostosuje model do Twoich klas. Obserwuj wykres straty i dokładności w czasie rzeczywistym!' },
+      { title: 'Krok 1 – Kamera', desc: 'Dodaj blok "Kamera – Dane" na tablicę. Uruchom kamerę i zbieraj zdjęcia dla każdej klasy, klikając "Zbierz próbki".' },
+      { title: 'Krok 2 – Etykiety', desc: 'Dodaj blok "Etykiety klas" i nazwij swoje kategorie, np. "Pies", "Kot", "Inne". Wybierz aktywną klasę przed zbieraniem.' },
+      { title: 'Krok 3 – Przygotowanie danych', desc: 'Blok "Przygotuj dane" zmieni rozmiar zdjęć i opcjonalnie wygeneruje więcej próbek przez augmentację (obrócenie, jasność).' },
+      { title: 'Krok 4 – Model bazowy', desc: 'Blok "Model bazowy" pobierze MobileNetV3-Small z sieci (~3MB). Ten model "widział" miliony zdjęć i rozumie cechy wizualne.' },
+      { title: 'Krok 5 – Trening', desc: 'Blok "Trenuj model" dostosuje model do Twoich klas. Obserwuj wykres straty i dokładności w czasie rzeczywistym!' },
       { title: 'Krok 6: Predykcja', desc: 'Po treningu użyj bloków predykcji: wczytaj model, uruchom kamerę i obserwuj predykcje na żywo.' },
     ]
   },
@@ -183,14 +404,14 @@ const STRINGS = {
     btn_guide: 'Guide', btn_clear: 'Clear', btn_run: 'Run', btn_edu: '🎓 Edu', btn_tidy: '🧹 Tidy up',
     sidebar_training: 'Training', sidebar_inference: 'Prediction',
     block_camera_input: 'Camera: Input', block_label_classes: 'Label Classes',
-    block_prepare_data: 'Data', block_pretrained_model: 'Pretrained Model',
+    block_prepare_data: 'Prepare Data', block_pretrained_model: 'Pretrained Model',
     block_train_model: 'Train Model', block_save_model: 'Save Model',
     block_upload_model: 'Load Model', block_camera_infer: 'Camera: Prediction',
     block_predict: 'Predict', block_show_results: 'Show Results',
     block_zero_shot: 'Base Model / Predict', block_explain_ai: 'Explainable AI', block_model_explorer: 'Model Explorer',
     block_evaluate: 'Evaluate Model', block_deploy_export: 'Export App',
     log_title: 'Pipeline Log',
-    guide_title: 'Guide — KlockiAI', guide_subtitle: 'How to build your first AI model in the browser',
+    guide_title: 'Guide – KlockiAI', guide_subtitle: 'How to build your first AI model in the browser',
     guide_close: 'OK', guide_dontshow: 'Do not show again',
     status_idle: 'Idle', status_running: 'Running', status_done: 'Done', status_error: 'Error',
     btn_start_camera: 'Start Camera', btn_stop_camera: 'Stop',
@@ -205,24 +426,24 @@ const STRINGS = {
     btn_train: 'Train', btn_stop_train: 'Stop',
     btn_freeze_frame: 'Freeze Frame', btn_run_xai: '🔍 Why? (Analyze)',
     lbl_class: 'Class', lbl_samples: 'samples', lbl_accuracy: 'Accuracy',
-    lbl_no_model: 'No model — load or train one first',
+    lbl_no_model: 'No model – load or train one first',
     lbl_classes: 'Classes', lbl_timestamp: 'Trained on',
     log_camera_start: 'Camera started', log_camera_err: 'Camera error: ',
     log_capture: (n, cls) => `Captured ${n} sample(s) for class "${cls}"`,
     log_prep_start: 'Starting data preparation...',
     log_prep_aug: (n) => `Augmentation: generated ${n} additional samples`,
-    log_prep_done: (n) => `Data ready — ${n} total samples`,
+    log_prep_done: (n) => `Data ready – ${n} total samples`,
     log_model_loading: 'Loading MobileNetV3-Small...',
     log_model_loaded: 'Base model loaded ✓',
     log_model_err: 'Model load error: ',
-    log_train_start: (e) => `Training — ${e} epochs`,
+    log_train_start: (e) => `Training – ${e} epochs`,
     log_train_epoch: (e, l, a) => `Epoch ${e}: loss=${l.toFixed(4)}, acc=${(a * 100).toFixed(1)}%`,
-    log_train_done: (a) => `Training complete — accuracy ${(a * 100).toFixed(1)}%`,
+    log_train_done: (a) => `Training complete – accuracy ${(a * 100).toFixed(1)}%`,
     log_train_cancel: 'Training cancelled',
     log_save_idb: 'Model saved to IndexedDB ✓',
     log_download: 'Downloading model files...',
     log_upload_start: 'Loading model from file...',
-    log_upload_done: (cls) => `Model loaded — classes: ${cls}`,
+    log_upload_done: (cls) => `Model loaded – classes: ${cls}`,
     log_upload_warn: 'Warning: schema version mismatch. Model may behave unexpectedly.',
     log_infer_start: 'Prediction started',
     log_infer_result: (cls, pct) => `→ ${cls}: ${(pct * 100).toFixed(1)}%`,
@@ -262,13 +483,201 @@ const STRINGS = {
     aria_chart_idle: 'Training chart: no data yet',
     aria_chart: (ep, loss, acc) => `Training chart: epoch ${ep}, loss ${loss}, accuracy ${acc}%`,
     btn_unfreeze_frame: 'Resume Frame',
+    // ─── Dataset ───
+    log_idb_loading: (n) => `Loading ${n} classes from database...`,
+    log_idb_loaded: (n) => `Dataset loaded: ${n} samples`,
+    log_export_empty: 'No samples to export.',
+    log_export_prep: 'Preparing dataset...',
+    log_export_done: (total, n) => `Dataset downloaded (${total} samples, ${n} classes)`,
+    log_import_start: 'Loading dataset from file...',
+    log_import_bad_format: 'Invalid dataset file format.',
+    log_import_done: (n, total) => `Dataset loaded: ${n} classes, ${total} samples`,
+    default_class_name: 'Class',
+    default_class_names: ['Class 1', 'Class 2'],
+    class_name_n: (n) => `Class ${n}`,
+    dataset_info: (total, perClass) => `${total} samples – ${perClass}`,
+    toast_no_samples_delete: 'No samples to delete.',
+    log_dataset_deleted: 'Dataset deleted from storage',
+    toast_dataset_deleted: (n) => `Deleted dataset (${n} samples)`,
+    log_dataset_restored: 'Dataset restored',
+    btn_undo: 'Undo',
+    log_photos_uploaded: (n, name) => `Uploaded ${n} photos to "${name}"`,
+    toast_photos_failed: 'Could not read the images.',
+    class_deleted: (name) => `Deleted class "${name}"`,
+    class_restored: (name) => `Restored class "${name}"`,
+    samples_deleted: (name) => `Deleted samples for class "${name}"`,
+    toast_samples_cleared: (name, n) => `Cleared "${name}" samples (${n})`,
+    samples_restored: (name) => `Restored "${name}" samples`,
+    log_max_classes: 'Maximum class count reached',
+    log_class_added: (name) => `Added class: ${name}`,
+    // ─── Block bodies ───
+    toast_block_added: (name) => `Added missing "${name}" block`,
+    log_camera_block_added: 'Camera: Input added. Start the camera and try again.',
+    title_upload_active: 'Upload photos to the active class',
+    btn_upload_photos: '📁 Upload photos',
+    btn_add_class: 'Add class',
+    title_clear_samples: 'Clear samples',
+    title_delete_class: 'Delete class',
+    title_upload_photos: 'Upload photos',
+    ph_class_name: 'class name...',
+    btn_capture_short: 'capture',
+    prep_hint: 'Resize captured images to model input size. Optionally augment to increase sample count.',
+    opt_prepare_only: 'Prepare only',
+    btn_preview_aug: '👁 Preview augmentation',
+    btn_prepare: 'Prepare data',
+    zs_note: 'Full MobileNetV3 classifier (1001 ImageNet classes). First start downloads ~5 MB.',
+    btn_start: 'Start', btn_stop: 'Stop',
+    pred_waiting: 'waiting for prediction...',
+    xai_granularity: 'Granularity', xai_method: 'Method',
+    xai_opt_occlusion: 'Occlusion (patch-by-patch)', xai_opt_saliency: 'Saliency (gradient)',
+    xai_opt_fast: 'Fast (4×4)', xai_opt_normal: 'Normal (7×7)', xai_opt_detailed: 'Detailed (14×14)',
+    xai_legend_hi: '🟥 looked here', xai_legend_lo: 'distracting 🟦',
+    xai_wait: 'Start the prediction camera, then click "Analyze"',
+    xai_howto: 'The highlighted areas are what the model looked at to decide. Red = its main evidence.',
+    explorer_desc: 'Explore MobileNet V3 Small – layers, feature maps and live inference.',
+    btn_open_explorer: 'Open Explorer',
+    eval_hint: 'Splits 80/20, trains a fresh model on 80%, and tests on the unseen 20% – a true generalisation check.',
+    btn_evaluate: '▶ Evaluate model',
+    deploy_hint: 'Export a self-contained HTML page with your model baked in – works offline, classifies from the camera. Share it with anyone!',
+    btn_export_app: '🚀 Export app',
+    trash_label: 'Trash',
+    // ─── Blocks / canvas ───
+    confirm_remove_train: 'Trained model has not been saved yet. Remove block?',
+    confirm_remove_labels: 'Class samples will be preserved (you can add the block again). Remove block?',
+    btn_remove_block: 'Remove block',
+    btn_confirm: 'Confirm', btn_cancel: 'Cancel',
+    log_block_added: (type, n) => `+ ${type} #${n}`,
+    log_block_removed: (id) => `Removed block #${id}`,
+    log_canvas_cleared: 'Canvas cleared',
+    toast_tidied: 'Blocks tidied up',
+    log_qs_train: 'Quick start: training blocks placed!',
+    log_qs_infer: 'Quick start: inference blocks placed!',
+    log_ready: 'KlockiAI ready – drag blocks onto the canvas!',
+    // ─── Camera / capture ───
+    err_no_camera: 'No camera found',
+    hint_file_protocol: ' ⚠️ Open via http://localhost:8765 (not file://)',
+    warn_start_camera_first: 'Start the camera first!',
+    warn_camera_loading: 'Camera still loading, wait a moment...',
+    capture_progress: (cls, n, total) => `${cls}: collecting ${n}/${total}...`,
+    log_capture_aborted: 'Capture aborted – camera stopped.',
+    // ─── Prepare ───
+    aug_collect_first: 'Collect a few samples first.',
+    aug_original: 'original',
+    aug_off: 'Augmentation off – originals only.',
+    warn_prep_running: 'Preparation is already running.',
+    err_prep_worker: 'Prepare worker error: ',
+    err_prep_decode: 'Prepare worker: message decode failed',
+    // ─── Base model ───
+    info_base_loading: 'Base model is already loading...',
+    info_base_already: 'Base model already loaded',
+    status_base_loaded: 'MobileNetV3-Small loaded ✓',
+    // ─── Training ───
+    interp_overfit: '⚠️ 100% accuracy on few samples – the model may be memorising, not learning. Add more images.',
+    interp_falling: '📉 Loss is dropping – the model is learning!',
+    interp_flat: '➡️ Loss is flattening out – learning is levelling off.',
+    interp_progress: (pct) => `Learning in progress – accuracy ${pct}%.`,
+    chart_loss: 'loss', chart_acc: 'acc',
+    val_min_classes: (n) => `Training needs at least 2 classes with samples (you have ${n}). Collect samples for two or more classes.`,
+    btn_continue_anyway: 'Continue anyway',
+    val_too_few: (min, list) => `Some classes have fewer than ${min} samples: ${list}. Models need several examples per class. Continue anyway?`,
+    val_imbalance: (min, max) => `Class imbalance is large (${min}–${max} samples). The model will favour the majority class. Continue?`,
+    warn_train_running: 'Training is already running.',
+    log_feat_extract: (n) => `Extracting features from ${n} samples...`,
+    feat_progress: (done, total) => `Feature extraction: ${done}/${total}`,
+    log_feat_shape: (n, size) => `Features: ${n}×${size}`,
+    train_eta: (e, n, s) => `Epoch ${e}/${n} | ETA: ${s}s`,
+    log_model_ready: 'Model ready...',
+    err_training: 'Training error: ',
+    log_train_stopping: 'Stopping after current epoch...',
+    // ─── Evaluate ───
+    eval_need_samples: 'A true hold-out test needs at least 2 classes with 2+ samples each (to split 80/20).',
+    eval_extracting: 'Extracting features...',
+    eval_training: 'Training on 80% (fresh model)...',
+    eval_testing: 'Testing on 20% (unseen)...',
+    log_eval_settings: (e, lr, bs, fromTrain) => `Evaluate: ${e} epochs, lr ${lr}, batch ${bs} (${fromTrain ? 'settings from the Train Model block' : 'default settings'})`,
+    log_eval_done: (pct, n) => `Hold-out test on unseen 20%: ${pct}% of ${n} images`,
+    err_eval: 'Evaluation error: ',
+    err_prefix: 'Error: ',
+    eval_verdict_overfit: '⚠️ Great on training data but weak on unseen data (overfitting). Add more varied images.',
+    eval_verdict_ok: '✅ The model generalises well – it gets images it never saw right.',
+    eval_verdict_weak: '⚠️ Weak on unseen data – collect more or clearer samples.',
+    eval_mistakes: 'Model mistakes:',
+    eval_no_mistakes: 'No mistakes on the test set 🎉',
+    eval_unseen_lbl: (n) => `unseen (20%) – ${n} images`,
+    eval_matrix_title: 'Confusion matrix (row = truth, column = prediction)',
+    // ─── Save / load / export ───
+    err_save: 'Save error: ',
+    err_download: 'Download error: ',
+    log_model_downloaded: (fname) => `Model downloaded ✓ (${fname})`,
+    toast_train_first: 'Train a model first.',
+    deploy_packing: 'Packaging model (~6 MB)...',
+    deploy_exported: 'Exported ✓',
+    log_app_exported: 'App exported: klocki-classifier.html',
+    toast_app_exported: 'App exported 🚀',
+    err_export: 'Export error: ',
+    err_import: 'Import error: ',
+    export_title: 'KlockiAI Classifier',
+    export_start: '▶ Start camera',
+    export_made_with: 'Made with KlockiAI',
+    export_loading: 'Loading model...',
+    export_ready: 'Ready – start the camera',
+    export_no_camera: 'No camera access',
+    warn_pick_model_file: 'Select model file first',
+    warn_no_json: 'No .json file selected',
+    info_model_loading: 'A model is already loading...',
+    log_base_from_file: 'Base model loaded from file ✓',
+    warn_load_base_too: 'Remember: also load the base model (Pretrained Model block or Load from Browser)',
+    err_upload: 'Upload error: ',
+    warn_pick_from_list: 'Select a model from the list (click ↺ to refresh)',
+    log_idb_load: (name) => `Loading from IndexedDB: ${name}...`,
+    log_base_from_browser: 'Base model loaded from browser ✓',
+    warn_base_not_in_browser: 'Base model not in browser – load the Pretrained Model block from CDN',
+    err_idb_load: 'IDB load error: ',
+    toast_no_model_to_save: 'No trained model to save.',
+    toast_saved_as: (name) => `Saved as "${name}"`,
+    toast_model_trained: '✅ Model trained – save it before closing the tab!',
+    btn_save_now: '💾 Save now',
+    // ─── Zero-shot ───
+    log_zs_loading: 'Loading full MobileNetV3 classifier (1001 classes)...',
+    log_zs_loaded: 'Zero-shot classifier loaded ✓',
+    zs_downloading: 'Downloading model...',
+    log_zs_started: 'Zero-shot started',
+    err_zs: 'Zero-shot error: ',
+    log_zs_stopped: 'Zero-shot stopped',
+    // ─── Inference ───
+    log_infer_camera_start: 'Inference camera started',
+    log_infer_camera_stopped: 'Inference camera stopped',
+    lbl_threshold: 'threshold',
+    pred_below_threshold: 'below confidence threshold',
+    log_frame_frozen: '❄️ Frame frozen',
+    log_frame_resumed: '▶ Resumed',
+    // ─── XAI ───
+    log_xai_stopping: 'Stopping XAI analysis...',
+    warn_xai_no_model: 'Load or train a model first!',
+    err_xai_no_base: 'Base model not loaded – load the Pretrained Model block first.',
+    xai_analyzing: 'Analyzing... (keep camera still)',
+    xai_start_camera: 'Start "Camera: Prediction" first',
+    warn_saliency_fallback: 'Saliency unavailable for this model – falling back to occlusion',
+    xai_sees: 'The model sees',
+    xai_sure_high: 'confident', xai_sure_mid: 'fairly sure', xai_sure_low: 'unsure',
+    xai_detail_counter: (base, drop, counter) => `The key evidence is the highlighted patch (shown left). Without it, "${base}" confidence falls ${drop} points and the model would call this "${counter}".`,
+    xai_detail_same: (base, drop) => `The key evidence is the highlighted patch (shown left). Without it, "${base}" confidence falls ${drop} points.`,
+    xai_saliency_detail: (lbl) => `The highlighted pixels most affect the "${lbl}" decision – these are what the model paid the most attention to.`,
+    log_xai_cancelled: 'XAI cancelled',
+    xai_cancelled_short: 'Cancelled',
+    err_xai: 'XAI error: ',
+    // ─── Pipeline ───
+    warn_pipeline_running: 'Pipeline is already running.',
+    log_pipeline_start: '=== Pipeline start ===',
+    log_pipeline_done: '=== Pipeline done ===',
+    log_pipeline_stopped: (name) => `Pipeline stopped at step "${name}"`,
     guide_shortcuts: 'Shortcuts: ? guide, Esc close, Ctrl+Enter run, T tidy up, L language, E Edu mode',
     guide_steps: [
-      { title: 'Step 1 — Camera', desc: 'Add the "Camera — Input" block to the canvas. Start the camera and collect images for each class by clicking "Collect Samples".' },
-      { title: 'Step 2 — Labels', desc: 'Add the "Label Classes" block and name your categories, e.g. "Dog", "Cat", "Other". Select the active class before collecting.' },
-      { title: 'Step 3 — Prepare Data', desc: 'The "Prepare Data" block resizes images and can generate more samples through augmentation (flips, rotations, brightness).' },
-      { title: 'Step 4 — Base Model', desc: 'The "Pretrained Model" block downloads MobileNetV3-Small (~3MB). It has seen millions of images and understands visual features.' },
-      { title: 'Step 5 — Training', desc: 'The "Train Model" block fine-tunes the model for your classes. Watch the loss and accuracy chart update in real time!' },
+      { title: 'Step 1 – Camera', desc: 'Add the "Camera – Input" block to the canvas. Start the camera and collect images for each class by clicking "Collect Samples".' },
+      { title: 'Step 2 – Labels', desc: 'Add the "Label Classes" block and name your categories, e.g. "Dog", "Cat", "Other". Select the active class before collecting.' },
+      { title: 'Step 3 – Prepare Data', desc: 'The "Prepare Data" block resizes images and can generate more samples through augmentation (flips, rotations, brightness).' },
+      { title: 'Step 4 – Base Model', desc: 'The "Pretrained Model" block downloads MobileNetV3-Small (~3MB). It has seen millions of images and understands visual features.' },
+      { title: 'Step 5 – Training', desc: 'The "Train Model" block fine-tunes the model for your classes. Watch the loss and accuracy chart update in real time!' },
       { title: 'Step 6: Prediction', desc: 'After training, use the prediction blocks: load the model, start the camera, and watch live predictions.' },
     ]
   }
@@ -299,7 +708,7 @@ let draggedCard = null;
 // Training state
 let classNames = ['Klasa 1', 'Klasa 2'];
 let classColors = CLASS_COLORS.slice(0, 2);
-let capturedSamples = [[], []]; // per class, array of ImageData — dynamic
+let capturedSamples = [[], []]; // per class, array of ImageData – dynamic
 let preparedData = null; // {xs, ys}
 // Bumped on every sample/class change. runPrepare records it on entry and
 // discards a worker result produced from an older snapshot.
@@ -329,7 +738,7 @@ let modelMetadata = null;
 let inferModel = null;
 let inferMetadata = null;
 let inferInterval = null;
-// Single-flight guards — these long-running async actions share global state
+// Single-flight guards – these long-running async actions share global state
 // (preparedData, fullModel, baseModel, the chart histories), so overlapping
 // invocations corrupt each other. Each guard is set on entry and cleared in a
 // finally block.
@@ -338,12 +747,16 @@ let pipelineRunning = false;
 let prepareInProgress = false;
 let baseModelLoading = false;
 let modelFileLoading = false;
+let evaluateInProgress = false;
+// True once the current fullModel has been saved/downloaded; drives the Save
+// pill, the remove/clear confirms and the beforeunload warning.
+let modelSaved = false;
 // Educational mode: shows annotation tooltips above each block, disables drag
 // repositioning, and pre-populates a training pipeline. Toggleable from the
 // topbar; URL param ?edu=1 also enables it (for embedding in iframes).
 let eduMode = (new URLSearchParams(location.search).get('edu') === '1')
   || (localStorage.getItem('ml-blocks-edu') === '1');
-// (toggleEduMode below mutates `eduMode` — every consumer reads the live let.)
+// (toggleEduMode below mutates `eduMode` – every consumer reads the live let.)
 
 // ===== i18n ENGINE =====
 function t(key, ...args) {
@@ -371,23 +784,19 @@ function applyLang() {
   document.getElementById('btn-lang').textContent = lang === 'pl' ? 'EN' : 'PL';
   // Re-render dynamic block content. Titles refresh cheaply for every block;
   // the block BODY (buttons, param labels, hints) is baked at build time from
-  // t(), so it must be rebuilt to switch language — otherwise the canvas shows
+  // t(), so it must be rebuilt to switch language – otherwise the canvas shows
   // a mix of both languages until some unrelated action re-renders it.
   placedBlocks.forEach(b => {
     if (!b.card) return;
     refreshBlockText(b);
     // Skip blocks with live runtime state (streaming camera, running inference,
-    // in-flight training) — rebuilding their innerHTML would orphan the <video>,
+    // in-flight training) – rebuilding their innerHTML would orphan the <video>,
     // interval target, or training chart. They self-heal on stop/restart.
     if (isBlockBusy(b)) return;
     const body = b.card.querySelector('.bk-body');
     if (body) {
       body.innerHTML = renderBlockBody(b.type, b.id);
       initBlockAfterPlace(b.id, b.type);
-      if (eduMode) {
-        b.card.querySelectorAll('[onmousedown]').forEach(el => el.removeAttribute('onmousedown'));
-        b.card.querySelectorAll('[ontouchstart]').forEach(el => el.removeAttribute('ontouchstart'));
-      }
     }
   });
   refreshAllPrereqStrips();
@@ -422,7 +831,7 @@ const LOG_MAX_ENTRIES = 500;
 function log(type, msg) {
   const el = document.createElement('div');
   el.className = `log-line ll-${type}`;
-  const ts = new Date().toLocaleTimeString('pl', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const ts = new Date().toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   el.textContent = `[${ts}] ${msg}`;
   const entries = document.getElementById('log-entries');
   entries.appendChild(el);
@@ -432,7 +841,7 @@ function log(type, msg) {
 }
 function clearLog() { document.getElementById('log-entries').innerHTML = ''; }
 
-// ===== DRAG & DROP — PALETTE =====
+// ===== DRAG & DROP – PALETTE =====
 function paletteDragStart(e) {
   draggedPaletteType = e.currentTarget.dataset.type;
   e.dataTransfer.effectAllowed = 'copy';
@@ -469,19 +878,19 @@ function canvasDrop(e) {
 
 // Educational notes shown at the top of certain blocks. They explain the
 // implicit data-flow relationships between blocks (which block "listens" to
-// which) — the prereq strip alone tells you what's missing, not why.
+// which) – the prereq strip alone tells you what's missing, not why.
 const BLOCK_NOTES = {
   'show-results': {
-    pl: 'Reaguje na klatki z bloku „Kamera: Predykcja" — pokazuje obraz, paski pewności klas i wynik na żywo.',
-    en: 'Listens to frames from "Camera: Prediction" — shows the image, per-class confidence bars and the live prediction.'
+    pl: 'Reaguje na klatki z bloku „Kamera: Predykcja" – pokazuje obraz, paski pewności klas i wynik na żywo.',
+    en: 'Listens to frames from "Camera: Prediction" – shows the image, per-class confidence bars and the live prediction.'
   },
   'explain-ai': {
     pl: 'Analizuje pojedynczą klatkę kamery predykcji i pokazuje, które obszary wpłynęły na decyzję.',
     en: 'Analyses a single inference-camera frame and highlights which regions drove the decision.'
   },
   'zero-shot': {
-    pl: 'Pokazuje, co model bazowy rozpoznaje samodzielnie — przed jakimkolwiek treningiem.',
-    en: 'Shows what the base model recognises on its own — before any training.'
+    pl: 'Pokazuje, co model bazowy rozpoznaje samodzielnie – przed jakimkolwiek treningiem.',
+    en: 'Shows what the base model recognises on its own – before any training.'
   }
 };
 
@@ -494,16 +903,16 @@ function renderBlockNote(type) {
 // EDU-mode annotations rendered above each block when teaching mode is on.
 // Bilingual; keeps the lesson short and conceptual rather than instructional.
 const EDU_ANNOTATIONS = {
-  'camera-input':     { pl: '📷 Zbieramy dane treningowe — zdjęcia dla każdej klasy', en: '📷 Collect training data — images for each class' },
+  'camera-input':     { pl: '📷 Zbieramy dane treningowe – zdjęcia dla każdej klasy', en: '📷 Collect training data – images for each class' },
   'label-classes':    { pl: '🏷️ Etykiety identyfikują każdą kategorię obrazów',     en: '🏷️ Labels identify each image category' },
   'prepare-data':     { pl: '⚙️ Zdjęcia są przeskalowane i augmentowane w Web Worker', en: '⚙️ Images resized + augmented in a Web Worker' },
-  'pretrained-model': { pl: '🧠 MobileNet widział 1.2M zdjęć — "transfer learning"',  en: '🧠 MobileNet has seen 1.2M images — "transfer learning"' },
+  'pretrained-model': { pl: '🧠 MobileNet widział 1.2M zdjęć – "transfer learning"',  en: '🧠 MobileNet has seen 1.2M images – "transfer learning"' },
   'train-model':      { pl: '🚀 model.fit() dostosowuje wagi do naszych klas',         en: '🚀 model.fit() adapts weights to your classes' },
   'save-model':       { pl: '💾 Wagi modelu zapisywane w IndexedDB przeglądarki',    en: '💾 Model weights saved to browser IndexedDB' },
   'upload-model':     { pl: '📤 Wczytujemy wagi modelu z pliku .json + .bin',        en: '📤 Load model weights from .json + .bin file' },
   'camera-infer':     { pl: '📷 Kamera streamuje klatki do predykcji',                en: '📷 Camera streams frames for prediction' },
-  'show-results':     { pl: '🎯 model.predict() — paski pewności + klasa o najwyższym prawdopodobieństwie', en: '🎯 model.predict() — confidence bars + class with the highest probability' },
-  'zero-shot':        { pl: '🌍 1001 klas ImageNet — to, co MobileNet już zna',      en: '🌍 1001 ImageNet classes — what MobileNet already knows' },
+  'show-results':     { pl: '🎯 model.predict() – paski pewności + klasa o najwyższym prawdopodobieństwie', en: '🎯 model.predict() – confidence bars + class with the highest probability' },
+  'zero-shot':        { pl: '🌍 1001 klas ImageNet – to, co MobileNet już zna',      en: '🌍 1001 ImageNet classes – what MobileNet already knows' },
   'explain-ai':       { pl: '🔍 Sprawdzamy które fragmenty obrazu wpływają na decyzję', en: '🔍 Find which image regions drove the decision' },
   'model-explorer':   { pl: '🔬 Architektura warstwa po warstwie',                   en: '🔬 Architecture layer by layer' },
   'evaluate':         { pl: '📊 Prawdziwy test: trenuje na 80%, sprawdza na niewidzianych 20%', en: '📊 True hold-out: trains on 80%, tests on the unseen 20%' },
@@ -562,7 +971,7 @@ function imageDataToJPEG(imgData, quality) {
     const cv = scratchCanvas('enc', imgData.width, imgData.height);
     cv.getContext('2d').putImageData(imgData, 0, 0);
     cv.toBlob(blob => {
-      // toBlob yields null if the canvas is tainted or encoding fails — reject
+      // toBlob yields null if the canvas is tainted or encoding fails – reject
       // so callers surface an error instead of awaiting a promise that never
       // settles.
       if (!blob) { reject(new Error('JPEG encoding failed')); return; }
@@ -572,7 +981,7 @@ function imageDataToJPEG(imgData, quality) {
 }
 
 // Decode a JPEG ArrayBuffer back to ImageData. Rejects on a corrupt/undecodable
-// buffer (e.g. an imported dataset file with garbage sample data) — without a
+// buffer (e.g. an imported dataset file with garbage sample data) – without a
 // reject path a single bad sample would hang import/load forever.
 function jpegToImageData(buf, width, height) {
   return new Promise((resolve, reject) => {
@@ -603,7 +1012,7 @@ function decodeSampleJPEG(buf) {
 }
 
 // Cancel every pending debounced save. Must be called before any operation that
-// repacks or clears class indices (delete class, clear dataset, import) —
+// repacks or clears class indices (delete class, clear dataset, import) –
 // otherwise a timer scheduled under an old index fires afterwards and writes a
 // phantom record at a now-invalid key.
 function cancelAllPendingSaves() {
@@ -672,7 +1081,7 @@ async function writeClassToIDB(classIdx) {
 function saveClassToIDB(classIdx, immediate) {
   if (!classIdx && classIdx !== 0) return Promise.resolve();
   // Any change to the captured samples invalidates the prepared training
-  // snapshot — otherwise training silently runs on stale data.
+  // snapshot – otherwise training silently runs on stale data.
   invalidatePreparedData();
   clearTimeout(_saveDebounceTimers[classIdx]);
   const delay = immediate ? 0 : 600;
@@ -694,7 +1103,7 @@ function saveClassToIDB(classIdx, immediate) {
 let datasetLoadPromise = null;
 // True once the stored dataset has been pulled into memory (or confirmed empty).
 // After that, placing another block just refreshes the UI from the in-memory
-// arrays rather than re-reading IDB — re-reading could overwrite samples the
+// arrays rather than re-reading IDB – re-reading could overwrite samples the
 // user captured this session (the read races the 600 ms debounced save).
 let datasetLoadedFromIDB = false;
 function refreshDatasetUI() {
@@ -708,14 +1117,14 @@ function refreshDatasetUI() {
   refreshDatasetInfo();
 }
 async function loadDatasetFromIDB() {
-  // Already restored — just re-sync the newly-placed block's UI from memory.
+  // Already restored – just re-sync the newly-placed block's UI from memory.
   if (datasetLoadedFromIDB) { refreshDatasetUI(); return; }
   if (datasetLoadPromise) return datasetLoadPromise;
   datasetLoadPromise = (async () => {
     try {
       const db = await openDatasetDB();
       // Read keys and records in ONE transaction so index ki lines up between
-      // them — two separate transactions can straddle a concurrent write and
+      // them – two separate transactions can straddle a concurrent write and
       // misalign records against keys.
       const { keys, records } = await new Promise((res, rej) => {
         const tx = db.transaction(DATASET_STORE, 'readonly');
@@ -738,11 +1147,9 @@ async function loadDatasetFromIDB() {
         classNames[idx] = rec.name;
         classColors[idx] = rec.color || classColors[idx];
       }
-      log('info', lang === 'pl'
-        ? `Wczytywanie ${keys.length} klas z bazy danych...`
-        : `Loading ${keys.length} classes from database...`);
+      log('info', t('log_idb_loading', keys.length));
 
-      // Decode JPEG blobs — done in parallel per class. Skip any class that
+      // Decode JPEG blobs – done in parallel per class. Skip any class that
       // already has in-memory samples (captured while this load was in flight)
       // so we don't discard them. A bad sample rejects instead of hanging.
       const decodePromises = keys.map(async (idx, ki) => {
@@ -757,9 +1164,7 @@ async function loadDatasetFromIDB() {
       });
       await Promise.all(decodePromises);
 
-      log('success', lang === 'pl'
-        ? `Dataset załadowany: ${capturedSamples.flat().length} próbek`
-        : `Dataset loaded: ${capturedSamples.flat().length} samples`);
+      log('success', t('log_idb_loaded', capturedSamples.flat().length));
       refreshDatasetUI();
     } catch (err) {
       console.warn('loadDatasetFromIDB failed:', err);
@@ -771,35 +1176,19 @@ async function loadDatasetFromIDB() {
   return datasetLoadPromise;
 }
 
-// Remove a single class entry from IDB and repack remaining entries so keys
-// stay contiguous (0, 1, 2 … n-1).
-async function deleteClassFromIDB(classIdx) {
-  // Kill any pending debounced writes first — one firing after the repack would
-  // resurrect a class at a stale index.
+// Rewrite the whole store from the in-memory arrays, keys 0..n-1. Memory is
+// authoritative: the old "repack the stored records" approach copied stale
+// records and dropped samples captured in the last 600 ms (still debounced).
+// Shared by class delete, undo paths and import.
+async function rewriteDatasetToIDB() {
+  // Kill any pending debounced writes first - one firing after the rewrite
+  // would resurrect a class at a stale index.
   cancelAllPendingSaves();
   try {
-    const db = await openDatasetDB();
-    // Read AND repack inside a single readwrite transaction so keys/records stay
-    // aligned and no concurrent write can slip between read and rebuild.
-    await new Promise((res, rej) => {
-      const tx = db.transaction(DATASET_STORE, 'readwrite');
-      const store = tx.objectStore(DATASET_STORE);
-      const kReq = store.getAllKeys();
-      const rReq = store.getAll();
-      rReq.onsuccess = () => {
-        const keys = kReq.result;      // completes before rReq (same store, FIFO)
-        const records = rReq.result;
-        store.clear();
-        let newIdx = 0;
-        for (let ki = 0; ki < keys.length; ki++) {
-          if (keys[ki] === classIdx) continue;
-          store.put(records[ki], newIdx++);
-        }
-      };
-      tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
-    });
+    await clearDatasetStore();
+    for (let i = 0; i < classNames.length; i++) await writeClassToIDB(i);
   } catch (err) {
-    console.warn('deleteClassFromIDB failed:', err);
+    console.warn('rewriteDatasetToIDB failed:', err);
   }
 }
 
@@ -811,24 +1200,16 @@ async function deleteClassFromIDB(classIdx) {
 async function exportDataset() {
   const total = capturedSamples.flat().length;
   if (total === 0) {
-    log('warn', lang === 'pl' ? 'Brak próbek do pobrania.' : 'No samples to export.');
+    log('warn', t('log_export_empty'));
     return;
   }
-  log('step', lang === 'pl' ? 'Przygotowywanie datasetu...' : 'Preparing dataset...');
+  log('step', t('log_export_prep'));
   try {
     const classes = await Promise.all(classNames.map(async (name, i) => {
       const samples = capturedSamples[i] || [];
       const jpegBuffers = await Promise.all(samples.map(encodeSampleJPEG));
-      // Convert ArrayBuffer → base64 string for JSON embedding
-      const base64Samples = jpegBuffers.map(buf => {
-        const bytes = new Uint8Array(buf);
-        const CHUNK = 0x8000;
-        const parts = [];
-        for (let j = 0; j < bytes.length; j += CHUNK) {
-          parts.push(String.fromCharCode.apply(null, bytes.subarray(j, j + CHUNK)));
-        }
-        return btoa(parts.join(''));
-      });
+      // ArrayBuffer -> base64 string for JSON embedding
+      const base64Samples = jpegBuffers.map(arrayBufferToBase64);
       return { name, color: classColors[i], samples: base64Samples };
     }));
     const bundle = {
@@ -845,11 +1226,9 @@ async function exportDataset() {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    log('success', lang === 'pl'
-      ? `Dataset pobrany (${total} próbek, ${classes.length} klas)`
-      : `Dataset downloaded (${total} samples, ${classes.length} classes)`);
+    log('success', t('log_export_done', total, classes.length));
   } catch (err) {
-    log('error', 'Export error: ' + err.message);
+    log('error', t('err_export') + err.message);
   }
 }
 
@@ -859,27 +1238,29 @@ async function importDataset(input) {
   // Let an in-flight IDB load finish first, otherwise it would resurrect the
   // old classes on top of the imported ones.
   if (datasetLoadPromise) await datasetLoadPromise;
-  log('step', lang === 'pl' ? 'Wczytywanie datasetu z pliku...' : 'Loading dataset from file...');
+  log('step', t('log_import_start'));
   try {
     const text = await file.text();
     const bundle = JSON.parse(text);
     if (bundle.version !== 'dataset-v1' || !Array.isArray(bundle.classes)) {
-      log('error', lang === 'pl' ? 'Nieprawidłowy format pliku datasetu.' : 'Invalid dataset file format.');
+      log('error', t('log_import_bad_format'));
       return;
     }
     // Decode each class
     const newNames = [];
     const newColors = [];
     const newSamples = [];
-    for (const cls of bundle.classes) {
+    // At most CLASS_COLORS.length classes: capping here (rather than slicing
+    // afterwards) also means a free pool colour always exists below.
+    for (const cls of bundle.classes.slice(0, CLASS_COLORS.length)) {
       // Coerce: a non-string name would persist and later throw on .trim().
       const name = String(cls.name ?? '').trim();
-      newNames.push(name || (lang === 'pl' ? 'Klasa' : 'Class'));
+      newNames.push(name || t('default_class_name'));
       // Accept stored color or assign next pool color
       const usedSoFar = new Set(newColors);
       newColors.push(cls.color && CLASS_COLORS.includes(cls.color) && !usedSoFar.has(cls.color)
         ? cls.color
-        : CLASS_COLORS.find(c => !usedSoFar.has(c)) || CLASS_COLORS[newNames.length % CLASS_COLORS.length]);
+        : CLASS_COLORS.find(c => !usedSoFar.has(c)));
       // Decode each sample independently; skip (rather than abort on) any
       // corrupt sample so one bad frame doesn't sink the whole import.
       const decoded = (await Promise.all((cls.samples || []).map(b64 => {
@@ -892,10 +1273,9 @@ async function importDataset(input) {
       }))).filter(Boolean);
       newSamples.push(decoded);
     }
-    // Cap at CLASS_COLORS.length classes
-    classNames    = newNames.slice(0, CLASS_COLORS.length);
-    classColors   = newColors.slice(0, CLASS_COLORS.length);
-    capturedSamples = newSamples.slice(0, CLASS_COLORS.length);
+    classNames    = newNames;
+    classColors   = newColors;
+    capturedSamples = newSamples;
     invalidatePreparedData();
 
     // Persist to IDB. Cancel pending debounced writes, then WIPE the store so
@@ -918,11 +1298,9 @@ async function importDataset(input) {
     persistCanvasState();
     refreshDatasetInfo();
     const total = capturedSamples.flat().length;
-    log('success', lang === 'pl'
-      ? `Dataset wczytany: ${classNames.length} klas, ${total} próbek`
-      : `Dataset loaded: ${classNames.length} classes, ${total} samples`);
+    log('success', t('log_import_done', classNames.length, total));
   } catch (err) {
-    log('error', 'Import error: ' + err.message);
+    log('error', t('err_import') + err.message);
     console.error(err);
   }
   input.value = ''; // reset so same file can be re-picked
@@ -934,7 +1312,7 @@ function refreshDatasetInfo() {
   const total = capturedSamples.flat().length;
   if (total === 0) { el.textContent = ''; return; }
   const perClass = classNames.map((n, i) => `${n}: ${(capturedSamples[i] || []).length}`).join(' · ');
-  el.textContent = `${total} ${lang === 'pl' ? 'próbek' : 'samples'} — ${perClass}`;
+  el.textContent = t('dataset_info', total, perClass);
 }
 
 async function confirmClearDataset() {
@@ -943,7 +1321,7 @@ async function confirmClearDataset() {
   if (datasetLoadPromise) await datasetLoadPromise;
   const totalSamples = capturedSamples.flat().length;
   if (totalSamples === 0) {
-    showToast(lang === 'pl' ? 'Brak próbek do usunięcia.' : 'No samples to delete.', 'info', { duration: 2500 });
+    showToast(t('toast_no_samples_delete'), 'info', { duration: 2500 });
     return;
   }
   // Snapshot the whole dataset for undo before wiping.
@@ -954,7 +1332,7 @@ async function confirmClearDataset() {
   };
   clearDatasetFromIDB();
   datasetLoadedFromIDB = true; // in-memory is now authoritative; don't re-read
-  classNames = lang === 'pl' ? ['Klasa 1', 'Klasa 2'] : ['Class 1', 'Class 2'];
+  classNames = t('default_class_names').slice();
   classColors = CLASS_COLORS.slice(0, 2);
   capturedSamples = [[], []];
   invalidatePreparedData();
@@ -963,28 +1341,26 @@ async function confirmClearDataset() {
   evaluatePipelineState();
   persistCanvasState();
   refreshDatasetInfo();
-  log('warn', lang === 'pl' ? 'Dataset usunięty z pamięci' : 'Dataset deleted from storage');
+  log('warn', t('log_dataset_deleted'));
 
   showToast(
-    lang === 'pl' ? `Usunięto dataset (${totalSamples} próbek)` : `Deleted dataset (${totalSamples} samples)`,
+    t('toast_dataset_deleted', totalSamples),
     'warn',
     {
       duration: 8000,
-      actionLabel: lang === 'pl' ? 'Cofnij' : 'Undo',
+      actionLabel: t('btn_undo'),
       onAction: async () => {
         classNames = snapshot.names;
         classColors = snapshot.colors;
         capturedSamples = snapshot.samples;
         invalidatePreparedData();
-        cancelAllPendingSaves();
-        await clearDatasetStore();
-        for (let i = 0; i < classNames.length; i++) await writeClassToIDB(i);
+        await rewriteDatasetToIDB();
         refreshLabelAndCameraBlocks();
         updateClassNamesEverywhere();
         evaluatePipelineState();
         persistCanvasState();
         refreshDatasetInfo();
-        log('info', lang === 'pl' ? 'Dataset przywrócony' : 'Dataset restored');
+        log('info', t('log_dataset_restored'));
       }
     }
   );
@@ -1015,7 +1391,7 @@ async function clearDatasetFromIDB() {
 // Save the *layout* (block types + positions) and class names to localStorage
 // after every relevant change. Restore on DOMContentLoaded so an accidental
 // page reload doesn't wipe out the user's setup. Trained models and samples
-// are intentionally NOT persisted — they're large and live in IndexedDB
+// are intentionally NOT persisted – they're large and live in IndexedDB
 // (Save Model block) where the user explicitly opted in.
 const CANVAS_STATE_KEY = 'ml-blocks-canvas-v1';
 let canvasStateRestoring = false;
@@ -1029,7 +1405,7 @@ function persistCanvasState() {
       classColors: classColors.slice()
     };
     localStorage.setItem(CANVAS_STATE_KEY, JSON.stringify(state));
-  } catch (_) { /* quota / disabled storage — silent */ }
+  } catch (_) { /* quota / disabled storage – silent */ }
 }
 
 function restoreCanvasState() {
@@ -1102,7 +1478,7 @@ const BLOCK_PREREQS = {
   'upload-model': [],
   'camera-infer': ['inferModel', 'baseModel'],
   'show-results': ['inferModel', 'baseModel', 'inferStream'],
-  'zero-shot': [], // self-contained — loads its own classifier on demand
+  'zero-shot': [], // self-contained – loads its own classifier on demand
   'explain-ai': ['inferModel', 'baseModel', 'inferStream'],
   'model-explorer': [],
   'evaluate': ['baseModel', 'samples', 'classes'], // trains fresh head on 80%, tests 20%
@@ -1181,24 +1557,12 @@ function refreshAllPrereqStrips() {
 // block already exists or was added; false if the user declined.
 function ensureBlockOnCanvas(type) {
   if (placedBlocks.some(b => b.type === type)) return true;
-  const titles = {
-    'camera-input': lang === 'pl' ? 'Kamera: Dane' : 'Camera: Input',
-    'label-classes': lang === 'pl' ? 'Etykiety klas' : 'Label Classes',
-    'prepare-data': lang === 'pl' ? 'Augmentacja danych' : 'Prepare Data',
-    'pretrained-model': lang === 'pl' ? 'Model bazowy' : 'Pretrained Model',
-    'train-model': lang === 'pl' ? 'Trenuj model' : 'Train Model',
-    'save-model': lang === 'pl' ? 'Zapisz model' : 'Save Model',
-    'upload-model': lang === 'pl' ? 'Wczytaj model' : 'Load Model',
-    'camera-infer': lang === 'pl' ? 'Kamera: Predykcja' : 'Camera: Prediction',
-    'show-results': lang === 'pl' ? 'Pokaż wyniki' : 'Show Results'
-  };
-  const name = titles[type] || type;
-  // Auto-add the missing prerequisite block — it's non-destructive and expected,
+  // Auto-add the missing prerequisite block - it's non-destructive and expected,
   // so no need to interrupt with a confirm; just place it and note it.
   const x = 16 + (placedBlocks.length * 40);
   const y = 40 + (placedBlocks.length * 40);
   placeBlock(type, Math.min(x, 600), Math.min(y, 400));
-  showToast(lang === 'pl' ? `Dodano brakujący blok „${name}"` : `Added missing "${name}" block`, 'info', { duration: 3000 });
+  showToast(t('toast_block_added', blockTitle(type)), 'info', { duration: 3000 });
   return true;
 }
 
@@ -1223,40 +1587,14 @@ function makeBtn(txt, onclick, color) {
 
 // ===== BLOCK FACTORY =====
 function buildBlockHTML(type, id) {
-  const phaseColors = {
-    'camera-input': 'var(--c-data)', 'label-classes': 'var(--c-label)',
-    'prepare-data': 'var(--c-prep)', 'pretrained-model': 'var(--c-model)',
-    'train-model': 'var(--c-train)', 'save-model': 'var(--c-deploy)',
-    'upload-model': 'var(--c-data)', 'camera-infer': 'var(--c-data)',
-    'show-results': 'var(--c-eval)', 'zero-shot': 'var(--c-model)',
-    'explain-ai': 'var(--c-eval)', 'model-explorer': 'var(--c-eval)', 'evaluate': 'var(--c-eval)', 'deploy-export': 'var(--c-deploy)'
-  };
-  const phases = {
-    'camera-input': 'DATA', 'label-classes': 'LABEL', 'prepare-data': 'PREP',
-    'pretrained-model': 'MODEL', 'train-model': 'TRAIN', 'save-model': 'DEPLOY',
-    'upload-model': 'DATA', 'camera-infer': 'DATA',
-    'show-results': 'PRED', 'zero-shot': 'PRED',
-    'explain-ai': 'EVAL', 'model-explorer': 'EVAL', 'evaluate': 'EVAL', 'deploy-export': 'DEPLOY'
-  };
-  const titles = {
-    'camera-input': t('block_camera_input'), 'label-classes': t('block_label_classes'),
-    'prepare-data': t('block_prepare_data'), 'pretrained-model': t('block_pretrained_model'),
-    'train-model': t('block_train_model'), 'save-model': t('block_save_model'),
-    'upload-model': t('block_upload_model'), 'camera-infer': t('block_camera_infer'),
-    'show-results': t('block_show_results'), 'zero-shot': t('block_zero_shot'),
-    'explain-ai': t('block_explain_ai'), 'model-explorer': t('block_model_explorer'), 'evaluate': t('block_evaluate'), 'deploy-export': t('block_deploy_export')
-  };
-  const bg = phaseColors[type] || '#64748B';
-  const phase = phases[type] || '';
-  const title = titles[type] || type;
-
+  const meta = blockMeta(type);
   return `
-<div class="bk-header" style="background:${bg}" onmousedown="cardDragStart(event,'${id}')" ontouchstart="cardDragStart(event,'${id}')" ondblclick="toggleCollapse('${id}')">
+<div class="bk-header" style="background:${meta.color}" onmousedown="cardDragStart(event,'${id}')" ontouchstart="cardDragStart(event,'${id}')" ondblclick="toggleCollapse('${id}')">
   <span class="drag-handle">⠸</span>
-  <span class="bk-title" data-block-title="${id}">${title}</span>
-  <span class="bk-badge">${phase}</span>
+  <span class="bk-title" data-block-title="${id}">${blockTitle(type)}</span>
+  <span class="bk-badge">${meta.badge}</span>
   <span class="bk-status">${t('status_idle')}</span>
-  <button class="bk-close" onclick="confirmRemoveBlock('${id}')" onmousedown="event.stopPropagation()" title="${t('aria_remove_block')}" aria-label="${t('aria_remove_block')}">✕</button>
+  <button class="bk-close" onclick="confirmRemoveBlock('${id}')" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()" title="${t('aria_remove_block')}" aria-label="${t('aria_remove_block')}">✕</button>
 </div>
 <div class="bk-body">${renderBlockBody(type, id)}</div>
 <div class="block-annotation" id="ann-${id}"></div>`;
@@ -1300,9 +1638,9 @@ ${makeParam(t('param_samples'), `<input type="number" id="spc-${id}" value="10" 
 ${makeBtn(t('btn_start_camera'), `blockStartCamera('${id}')`, 'var(--c-data)')}
 <div id="capture-btns-${id}" style="display:flex;flex-direction:column;gap:4px;margin-top:4px">${classButtons()}</div>
 <input type="file" id="cam-photo-up-${id}" accept="image/*" multiple style="display:none" onchange="uploadPhotosToClass(window.activeClass||0, this)">
-<button class="bk-btn" style="margin-top:4px;background:#475569;font-size:11px" onclick="document.getElementById('cam-photo-up-${id}').click()" title="${lang === 'pl' ? 'Wgraj zdj\u0119cia do aktywnej klasy' : 'Upload photos to the active class'}">${lang === 'pl' ? '\ud83d\udcc1 Wgraj zdj\u0119cia' : '\ud83d\udcc1 Upload photos'}</button>
-<button class="bk-btn" style="margin-top:4px;background:#64748B;font-size:11px" onclick="addClass(null)">${lang === 'pl' ? 'Dodaj klas\u0119' : 'Add class'}</button>
-<div id="cam-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">—</div>
+<button class="bk-btn" style="margin-top:4px;background:#475569;font-size:11px" onclick="document.getElementById('cam-photo-up-${id}').click()" title="${t('title_upload_active')}">${t('btn_upload_photos')}</button>
+<button class="bk-btn" style="margin-top:4px;background:#64748B;font-size:11px" onclick="addClass(null)">${t('btn_add_class')}</button>
+<div id="cam-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">–</div>
 <div id="thumbs-${id}" class="thumb-strip"></div>
 <div style="border-top:1px dashed var(--c-border);margin-top:8px;padding-top:8px">
   <input type="file" id="dataset-file-${id}" accept=".json" style="display:none" onchange="importDataset(this)">
@@ -1317,19 +1655,18 @@ function buildLabelClassesBody(id) {
 function renderLabelRows(id) {
   let rows = '';
   for (let i = 0; i < classNames.length; i++) {
-    const isActive = (window.activeClass === i);
     // Show delete-class button only when there are 2+ classes so we can't
     // accidentally destroy the last one.
     const canDelete = classNames.length > 1;
-    const clearTip = lang === 'pl' ? 'Wyczyść próbki' : 'Clear samples';
-    const deleteTip = lang === 'pl' ? 'Usuń klasę' : 'Delete class';
-    const uploadTip = lang === 'pl' ? 'Wgraj zdjęcia' : 'Upload photos';
+    const clearTip = t('title_clear_samples');
+    const deleteTip = t('title_delete_class');
+    const uploadTip = t('title_upload_photos');
     rows += `<div class="class-row">
 <div class="class-color-dot" style="background:${classColors[i]}"></div>
 <input class="class-name-input" id="cn-${id}-${i}" value="${escapeHtml(classNames[i])}" aria-label="${t('aria_class_name', i + 1)}"
-  oninput="updateClassNamesEverywhere(this)" placeholder="${lang === 'pl' ? 'nazwa klasy...' : 'class name...'}">
+  oninput="updateClassNamesEverywhere(this)" placeholder="${t('ph_class_name')}">
 <span class="class-count" id="cc-${id}-${i}">${(capturedSamples[i] || []).length} ${t('lbl_samples')}</span>
-<button style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${classColors[i]};color:#fff" onclick="labelCapture(${i})">${lang === 'pl' ? 'zbierz' : 'capture'}</button>
+<button style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${classColors[i]};color:#fff" onclick="labelCapture(${i})">${t('btn_capture_short')}</button>
 <input type="file" id="photo-up-${id}-${i}" accept="image/*" multiple style="display:none" onchange="uploadPhotosToClass(${i}, this)">
 <button class="class-delete-btn" onclick="document.getElementById('photo-up-${id}-${i}').click()" title="${uploadTip}" aria-label="${uploadTip}">📁</button>
 <button class="class-delete-btn" onclick="clearClassSamples(${i})" title="${clearTip}" aria-label="${clearTip}">⌫</button>
@@ -1378,10 +1715,10 @@ async function uploadPhotosToClass(classIdx, input) {
     evaluatePipelineState();
     refreshDatasetInfo();
     const name = classNames[classIdx];
-    log('success', lang === 'pl' ? `Wgrano ${added} zdjęć do „${name}"` : `Uploaded ${added} photos to "${name}"`);
-    showToast(lang === 'pl' ? `Wgrano ${added} zdjęć do „${name}"` : `Uploaded ${added} photos to "${name}"`, 'success', { duration: 3000 });
+    log('success', t('log_photos_uploaded', added, name));
+    showToast(t('log_photos_uploaded', added, name), 'success', { duration: 3000 });
   } else {
-    showToast(lang === 'pl' ? 'Nie udało się wczytać zdjęć.' : 'Could not read the images.', 'warn', { duration: 3000 });
+    showToast(t('toast_photos_failed'), 'warn', { duration: 3000 });
   }
 }
 
@@ -1392,9 +1729,7 @@ function labelCapture(classIdx) {
     if (!ensureBlockOnCanvas('camera-input')) return;
     camBlock = placedBlocks.find(b => b.type === 'camera-input');
     if (!camBlock) return;
-    log('info', lang === 'pl'
-      ? 'Dodano blok Kamera: Dane. Uruchom kamerę i spróbuj ponownie.'
-      : 'Camera: Input added. Start the camera and try again.');
+    log('info', t('log_camera_block_added'));
     return;
   }
   window.activeClass = classIdx;
@@ -1406,7 +1741,7 @@ function labelCapture(classIdx) {
 async function deleteClass(classIdx) {
   if (classNames.length <= 1) return; // never destroy the last class
   const name = classNames[classIdx] || '';
-  // Snapshot for undo (samples are shared ImageData refs — fine, we're only
+  // Snapshot for undo (samples are shared ImageData refs – fine, we're only
   // removing the array slot, not the pixels).
   const snapshot = {
     idx: classIdx,
@@ -1420,35 +1755,35 @@ async function deleteClass(classIdx) {
   classColors.splice(classIdx, 1);
   capturedSamples.splice(classIdx, 1);
 
-  // Stale — training with deleted class would corrupt ys tensor
+  // Stale – training with deleted class would corrupt ys tensor
   invalidatePreparedData();
 
-  // Remove from IDB and repack remaining keys
-  await deleteClassFromIDB(classIdx);
+  // Rewrite IDB from memory so keys stay contiguous
+  await rewriteDatasetToIDB();
   refreshLabelAndCameraBlocks();
   updateClassNamesEverywhere();
   evaluatePipelineState();
   persistCanvasState();
-  log('warn', lang === 'pl' ? `Usunięto klasę "${name}"` : `Deleted class "${name}"`);
+  refreshDatasetInfo();
+  log('warn', t('class_deleted', name));
 
   showToast(
-    lang === 'pl' ? `Usunięto klasę „${name}"` : `Deleted class "${name}"`,
+    t('class_deleted', name),
     'warn',
     {
-      actionLabel: lang === 'pl' ? 'Cofnij' : 'Undo',
+      actionLabel: t('btn_undo'),
       onAction: async () => {
         classNames.splice(snapshot.idx, 0, snapshot.name);
         classColors.splice(snapshot.idx, 0, snapshot.color);
         capturedSamples.splice(snapshot.idx, 0, snapshot.samples);
         invalidatePreparedData();
-        cancelAllPendingSaves();
-        await clearDatasetStore();
-        for (let i = 0; i < classNames.length; i++) await writeClassToIDB(i);
+        await rewriteDatasetToIDB();
         refreshLabelAndCameraBlocks();
         updateClassNamesEverywhere();
         evaluatePipelineState();
         persistCanvasState();
-        log('info', lang === 'pl' ? `Przywrócono klasę „${snapshot.name}"` : `Restored class "${snapshot.name}"`);
+        refreshDatasetInfo();
+        log('info', t('class_restored', snapshot.name));
       }
     }
   );
@@ -1469,23 +1804,23 @@ function clearClassSamples(classIdx) {
   const name = classNames[classIdx];
   const snapshot = capturedSamples[classIdx];
   capturedSamples[classIdx] = [];
-  log('info', lang === 'pl' ? `Usunięto próbki klasy "${name}"` : `Deleted samples for class "${name}"`);
+  log('info', t('samples_deleted', name));
   refreshLabelAndCameraBlocks();
   evaluatePipelineState();
   refreshDatasetInfo();
-  saveClassToIDB(classIdx, true); // immediate — saves empty array
+  saveClassToIDB(classIdx, true); // immediate – saves empty array
   showToast(
-    lang === 'pl' ? `Wyczyszczono próbki „${name}" (${snapshot.length})` : `Cleared "${name}" samples (${snapshot.length})`,
+    t('toast_samples_cleared', name, snapshot.length),
     'warn',
     {
-      actionLabel: lang === 'pl' ? 'Cofnij' : 'Undo',
+      actionLabel: t('btn_undo'),
       onAction: () => {
         capturedSamples[classIdx] = snapshot;
         refreshLabelAndCameraBlocks();
         evaluatePipelineState();
         refreshDatasetInfo();
         saveClassToIDB(classIdx, true);
-        log('info', lang === 'pl' ? `Przywrócono próbki „${name}"` : `Restored "${name}" samples`);
+        log('info', t('samples_restored', name));
       }
     }
   );
@@ -1494,10 +1829,10 @@ function clearClassSamples(classIdx) {
 function addClass(labelBlockId) {
   const idx = classNames.length;
   if (idx >= CLASS_COLORS.length) {
-    log('warn', lang === 'pl' ? 'Maksymalna liczba klas osi\u0105gni\u0119ta' : 'Maximum class count reached');
+    log('warn', t('log_max_classes'));
     return;
   }
-  const name = lang === 'pl' ? `Klasa ${idx + 1}` : `Class ${idx + 1}`;
+  const name = t('class_name_n', idx + 1);
   // Pick next unused color from the pool; fall back to cycling if all taken.
   const usedColors = new Set(classColors);
   const nextColor = CLASS_COLORS.find(c => !usedColors.has(c)) || CLASS_COLORS[idx % CLASS_COLORS.length];
@@ -1519,31 +1854,29 @@ function addClass(labelBlockId) {
   });
   // Update camera capture buttons (rebuild with new class)
   updateClassNamesEverywhere();
-  log('info', lang === 'pl' ? `Dodano klas\u0119: ${name}` : `Added class: ${name}`);
+  log('info', t('log_class_added', name));
   evaluatePipelineState();
 }
 
 function buildPrepareDataBody(id) {
-  const hint = lang === 'pl'
-    ? 'Przeskaluj zebrane zdjęcia do rozmiaru modelu. Opcjonalnie augmentuj dane, aby zwiększyć liczbę próbek.'
-    : 'Resize captured images to model input size. Optionally augment to increase sample count.';
+  const hint = t('prep_hint');
   return `
 <div style="font-size:12px;color:var(--c-muted);line-height:1.4;padding-bottom:4px">${hint}</div>
 ${makeParam(t('param_augment'), `<select id="aug-${id}" onchange="previewAugmentation('${id}')">
-  <option value="none" selected>${lang === 'pl' ? 'Tylko przygotowanie' : 'Prepare only'}</option>
+  <option value="none" selected>${t('opt_prepare_only')}</option>
   <option value="all">Flip + Brightness + Zoom + Skew</option>
 </select>`)}
-<button class="bk-btn" style="background:#64748B;font-size:11px;margin-top:4px" onclick="previewAugmentation('${id}')">${lang === 'pl' ? '👁 Podgląd augmentacji' : '👁 Preview augmentation'}</button>
+<button class="bk-btn" style="background:#64748B;font-size:11px;margin-top:4px" onclick="previewAugmentation('${id}')">${t('btn_preview_aug')}</button>
 <div id="aug-preview-${id}" class="aug-preview"></div>
 <progress id="prog-${id}" value="0" max="100" style="margin-top:6px"></progress>
-<div id="prep-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">—</div>
-${makeBtn(lang === 'pl' ? 'Przygotuj dane' : 'Prepare data', `runPrepare('${id}')`, 'var(--c-prep)')}`;
+<div id="prep-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">–</div>
+${makeBtn(t('btn_prepare'), `runPrepare('${id}')`, 'var(--c-prep)')}`;
 }
 
 function buildPretrainedModelBody(id) {
   return `
 <progress id="prog-${id}" value="0" max="100"></progress>
-<div id="model-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">—</div>
+<div id="model-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">–</div>
 ${makeBtn(t('btn_load_model'), `runLoadBaseModel('${id}')`, 'var(--c-model)')}`;
 }
 
@@ -1570,7 +1903,7 @@ ${makeBtn(t('btn_stop_train'), `stopTraining('${id}')`, '#64748B')}
 function buildSaveModelBody(id) {
   return `
 ${makeParam(t('param_model_name'), `<input type="text" id="model-name-${id}" value="model-1" placeholder="model-1" style="width:90px;font-size:12px">`)}
-<div id="save-info-${id}" style="font-size:11px;color:var(--c-muted)">—</div>
+<div id="save-info-${id}" style="font-size:11px;color:var(--c-muted)">–</div>
 ${makeBtn(t('btn_save_idb'), `runSaveIDB('${id}')`, 'var(--c-deploy)')}
 ${makeBtn(t('btn_download'), `runDownload('${id}')`, '#0369A1')}`;
 }
@@ -1587,7 +1920,7 @@ ${makeBtn(t('btn_pick_files'), `pickModelFiles('${id}')`, 'var(--c-data)')}
   <button class="bk-btn" style="background:#64748B;padding:4px 8px;font-size:13px;width:auto" onclick="refreshIDBList('${id}')" title="${t('aria_refresh_models')}" aria-label="${t('aria_refresh_models')}">↺</button>
 </div>
 ${makeBtn(t('btn_load_idb'), `runLoadIDB('${id}')`, '#64748B')}
-<div id="meta-${id}" style="font-size:10px;color:var(--c-muted);margin-top:4px;line-height:1.8">—</div>`;
+<div id="meta-${id}" style="font-size:10px;color:var(--c-muted);margin-top:4px;line-height:1.8">–</div>`;
 }
 
 function buildCameraInferBody(id) {
@@ -1600,9 +1933,7 @@ ${makeBtn(t('btn_stop_camera'), `stopInferCamera('${id}')`, '#64748B')}`;
 
 
 function buildZeroShotBody(id) {
-  const note = lang === 'pl'
-    ? 'Pe\u0142ny klasyfikator MobileNetV3 (1001 klas ImageNet). Pierwsze uruchomienie pobiera ~5 MB.'
-    : 'Full MobileNetV3 classifier (1001 ImageNet classes). First start downloads ~5 MB.';
+  const note = t('zs_note');
   return `
 <div style="font-size:10px;color:var(--c-muted);line-height:1.6;padding:4px 0 6px;border-bottom:1px solid var(--c-border);margin-bottom:6px">${note}</div>
 <div class="video-wrap"><video class="bk-video" id="zsvid-${id}" autoplay playsinline muted></video></div>
@@ -1610,8 +1941,8 @@ ${makeParam('FPS', `<select id="zsfps-${id}"><option value="1000">1</option><opt
 <div id="zs-status-${id}" aria-live="polite" style="font-size:10px;color:var(--c-muted);text-align:center;min-height:14px"></div>
 <div id="zs-results-${id}" style="margin-top:6px"></div>
 <div style="display:flex;gap:6px;margin-top:4px">
-${makeBtn(lang === 'pl' ? 'Uruchom' : 'Start', `startZeroShot('${id}')`, 'var(--c-model)')}
-${makeBtn(lang === 'pl' ? 'Stop' : 'Stop', `stopZeroShot('${id}')`, '#64748B')}
+${makeBtn(t('btn_start'), `startZeroShot('${id}')`, 'var(--c-model)')}
+${makeBtn(t('btn_stop'), `stopZeroShot('${id}')`, '#64748B')}
 </div>`;
 }
 
@@ -1620,7 +1951,7 @@ function buildShowResultsBody(id) {
   // Merged Predict + Show Results block. Element IDs that runInference reads
   // (pred-bars-, pred-result-, thr-) live here. Camera frames are rendered
   // by the Camera: Prediction block; this block is the *result* surface.
-  const waitMsg = lang === 'pl' ? 'oczekiwanie na predykcj\u0119...' : 'waiting for prediction...';
+  const waitMsg = t('pred_waiting');
   return `
 <div id="pred-bars-${id}"></div>
 <div id="pred-result-${id}" style="font-size:14px;font-weight:700;padding:8px 10px;background:var(--c-bg);border-radius:6px;text-align:center;min-height:32px;color:var(--c-muted);font-style:italic">${waitMsg}</div>
@@ -1633,20 +1964,18 @@ ${makeParam(t('param_threshold'), `<select id="thr-${id}">
 }
 
 function buildExplainAIBody(id) {
-  const granLabel = lang === 'pl' ? 'Rozdzielczość' : 'Granularity';
-  const methLabel = lang === 'pl' ? 'Metoda' : 'Method';
-  const optOccl   = lang === 'pl' ? 'Okluzja (po krokach)' : 'Occlusion (patch-by-patch)';
-  const optSal    = lang === 'pl' ? 'Saliency (gradient)' : 'Saliency (gradient)';
-  const optFast   = lang === 'pl' ? 'Szybko (4×4)'  : 'Fast (4×4)';
-  const optNorm   = lang === 'pl' ? 'Normalna (7×7)': 'Normal (7×7)';
-  const optHi     = lang === 'pl' ? 'Dokładna (14×14)' : 'Detailed (14×14)';
-  const stopLbl   = lang === 'pl' ? 'Stop' : 'Stop';
-  const legendHi  = lang === 'pl' ? '🟥 patrzył tutaj' : '🟥 looked here';
-  const legendLo  = lang === 'pl' ? 'myliło 🟦' : 'distracting 🟦';
-  const waitMsg   = lang === 'pl' ? 'Uruchom kamerę predykcji, potem kliknij „Analizuj"' : 'Start the prediction camera, then click "Analyze"';
-  const howto     = lang === 'pl'
-    ? 'Podświetlone obszary to te, na które model patrzył, podejmując decyzję. Czerwone = główny dowód.'
-    : 'The highlighted areas are what the model looked at to decide. Red = its main evidence.';
+  const granLabel = t('xai_granularity');
+  const methLabel = t('xai_method');
+  const optOccl   = t('xai_opt_occlusion');
+  const optSal    = t('xai_opt_saliency');
+  const optFast   = t('xai_opt_fast');
+  const optNorm   = t('xai_opt_normal');
+  const optHi     = t('xai_opt_detailed');
+  const stopLbl   = t('btn_stop');
+  const legendHi  = t('xai_legend_hi');
+  const legendLo  = t('xai_legend_lo');
+  const waitMsg   = t('xai_wait');
+  const howto     = t('xai_howto');
   return `
 <div id="xai-wrap-${id}" style="position:relative; width:224px; height:224px; margin: 0 auto; border-radius:6px; overflow:hidden; background:#000;">
   <canvas id="xai-vid-${id}" style="width:100%; height:100%; display:block;"></canvas>
@@ -1683,32 +2012,26 @@ ${makeBtn(stopLbl, `stopXAI('${id}')`, '#64748B')}
 }
 
 function buildModelExplorerBody(id) {
-  const desc = lang === 'pl'
-    ? 'Eksploruj architektur\u0119 MobileNet V3 Small \u2014 warstwy, mapy cech i inferencj\u0119 na \u017cywo.'
-    : 'Explore MobileNet V3 Small \u2014 layers, feature maps and live inference.';
-  const btnLabel = lang === 'pl' ? 'Otwórz eksplorator' : 'Open Explorer';
+  const desc = t('explorer_desc');
+  const btnLabel = t('btn_open_explorer');
   return '<div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:4px">' + desc + '</div>'
     + makeBtn(btnLabel, "window.open('model-explorer.html','_blank')", 'var(--c-eval)');
 }
 
 function buildEvaluateBody(id) {
-  const hint = lang === 'pl'
-    ? 'Dzieli próbki 80/20, trenuje świeży model na 80% i testuje na niewidzianych 20% — prawdziwy sprawdzian generalizacji.'
-    : 'Splits 80/20, trains a fresh model on 80%, and tests on the unseen 20% — a true generalisation check.';
+  const hint = t('eval_hint');
   return `
 <div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:4px">${hint}</div>
-${makeBtn(lang === 'pl' ? '▶ Oceń model' : '▶ Evaluate model', `runEvaluate('${id}')`, 'var(--c-eval)')}
+${makeBtn(t('btn_evaluate'), `runEvaluate('${id}')`, 'var(--c-eval)')}
 <div id="eval-status-${id}" aria-live="polite" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">–</div>
 <div id="eval-results-${id}" class="eval-results"></div>`;
 }
 
 function buildDeployExportBody(id) {
-  const hint = lang === 'pl'
-    ? 'Eksportuj samodzielną stronę HTML z Twoim modelem w środku — działa offline, klasyfikuje z kamery. Podziel się nią z innymi!'
-    : 'Export a self-contained HTML page with your model baked in — works offline, classifies from the camera. Share it with anyone!';
+  const hint = t('deploy_hint');
   return `
 <div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:4px">${hint}</div>
-${makeBtn(lang === 'pl' ? '🚀 Eksportuj aplikację' : '🚀 Export app', `runDeployExport('${id}')`, 'var(--c-deploy)')}
+${makeBtn(t('btn_export_app'), `runDeployExport('${id}')`, 'var(--c-deploy)')}
 <div id="deploy-status-${id}" aria-live="polite" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">–</div>`;
 }
 
@@ -1731,11 +2054,11 @@ function placeBlock(type, x, y) {
   // First-of-type wins; if you place two predict blocks the second is ignored
   // by the inference hot path (matches previous .find() behaviour).
   if (!blocksByType[type]) blocksByType[type] = record;
-  log('info', `+ ${type} #${blockIdCounter}`);
+  log('info', t('log_block_added', type, blockIdCounter));
   initBlockAfterPlace(id, type);
+  // Drag is disabled in edu mode by the guard in cardDragStart, so the handlers
+  // stay attached and dragging works again when edu mode is toggled off.
   if (eduMode) {
-    card.querySelectorAll('[onmousedown]').forEach(el => el.removeAttribute('onmousedown'));
-    card.querySelectorAll('[ontouchstart]').forEach(el => el.removeAttribute('ontouchstart'));
     const ann = document.getElementById('ann-' + id);
     if (ann) ann.textContent = getEduAnnotation(type) || '';
   }
@@ -1747,15 +2070,7 @@ function placeBlock(type, x, y) {
 }
 
 function getPhaseColor(type) {
-  const map = {
-    'camera-input': 'var(--c-data)', 'label-classes': 'var(--c-label)',
-    'prepare-data': 'var(--c-prep)', 'pretrained-model': 'var(--c-model)',
-    'train-model': 'var(--c-train)', 'save-model': 'var(--c-deploy)',
-    'upload-model': 'var(--c-data)', 'camera-infer': 'var(--c-data)',
-    'show-results': 'var(--c-eval)',
-    'explain-ai': 'var(--c-eval)', 'model-explorer': 'var(--c-eval)', 'evaluate': 'var(--c-eval)', 'deploy-export': 'var(--c-deploy)'
-  };
-  return map[type] || '#64748B';
+  return blockMeta(type).color;
 }
 
 function initBlockAfterPlace(id, type) {
@@ -1778,18 +2093,7 @@ function initBlockAfterPlace(id, type) {
 
 function refreshBlockText(b) {
   const title = b.card.querySelector('[data-block-title]');
-  if (title) {
-    const titles = {
-      'camera-input': t('block_camera_input'), 'label-classes': t('block_label_classes'),
-      'prepare-data': t('block_prepare_data'), 'pretrained-model': t('block_pretrained_model'),
-      'train-model': t('block_train_model'), 'save-model': t('block_save_model'),
-      'upload-model': t('block_upload_model'), 'camera-infer': t('block_camera_infer'),
-      'show-results': t('block_show_results'),
-      'explain-ai': t('block_explain_ai'), 'model-explorer': t('block_model_explorer'),
-      'zero-shot': t('block_zero_shot'), 'evaluate': t('block_evaluate'), 'deploy-export': t('block_deploy_export')
-    };
-    title.textContent = titles[b.type] || b.type;
-  }
+  if (title) title.textContent = blockTitle(b.type);
   // Re-translate the status badge from the card's current status-* class so it
   // doesn't stay stuck in the previous language after a switch.
   const chip = b.card.querySelector('.bk-status');
@@ -1808,11 +2112,16 @@ function toggleCollapse(id) {
 // so we add a parallel touchstart path that synthesises clientX/clientY.
 function cardDragStart(e, id) {
   if (eduMode) return;
+  // The close button has its own handler; starting a drag from it would
+  // swallow the tap on touch devices.
+  if (e.target && e.target.closest && e.target.closest('.bk-close')) return;
   // Mouse events report e.button; touch events don't have it.
   if (e.type === 'mousedown' && e.button !== 0) return;
   const isTouch = e.type === 'touchstart';
   const point = isTouch ? e.touches[0] : e;
-  if (isTouch) e.preventDefault(); // suppress 300 ms tap delay + scroll
+  // touchstart is NOT preventDefault-ed: doing so suppressed the synthesised
+  // click/dblclick, so the header double-tap collapse never fired on touch.
+  // Scrolling is cancelled per-move in onMove instead.
   e.stopPropagation();
   draggedCard = id;
   const card = document.getElementById(id);
@@ -1907,17 +2216,13 @@ function confirmRemoveBlock(id) {
   let msg = '';
   if (isTrainBlockWithModel) {
     needsConfirm = true;
-    msg = lang === 'pl'
-      ? 'Wytrenowany model nie został jeszcze zapisany. Usunąć blok?'
-      : 'Trained model has not been saved yet. Remove block?';
+    msg = t('confirm_remove_train');
   } else if (isLabelWithSamples) {
     needsConfirm = true;
-    msg = lang === 'pl'
-      ? 'Próbki klas zostaną zachowane (możesz dodać blok ponownie). Usunąć blok?'
-      : 'Class samples will be preserved (you can add the block again). Remove block?';
+    msg = t('confirm_remove_labels');
   }
   if (needsConfirm) {
-    uiConfirm(msg, { okLabel: lang === 'pl' ? 'Usuń blok' : 'Remove block', danger: true })
+    uiConfirm(msg, { okLabel: t('btn_remove_block'), danger: true })
       .then(ok => { if (ok) removeBlock(id); });
     return;
   }
@@ -1950,7 +2255,7 @@ function removeBlock(id) {
       inferVideoEl = null;
     }
     // The zero-shot classifier is large (~5 MB GPU memory). Free it when
-    // the user removes the only zero-shot block — they can reload it.
+    // the user removes the only zero-shot block – they can reload it.
     if (block.type === 'zero-shot' && !placedBlocks.some(b => b.type === 'zero-shot' && b.id !== id)) {
       if (zeroShotModel) { try { zeroShotModel.dispose(); } catch (_) {} zeroShotModel = null; }
     }
@@ -1963,7 +2268,7 @@ function removeBlock(id) {
   for (const b of placedBlocks) {
     if (!blocksByType[b.type]) blocksByType[b.type] = b;
   }
-  log('warn', `Removed block #${id}`);
+  log('warn', t('log_block_removed', id));
   refreshEmptyState();
   evaluatePipelineState();
   persistCanvasState();
@@ -2013,7 +2318,7 @@ async function clearCanvas() {
   invalidatePreparedData();
   modelSaved = false;
   modelMetadata = null;
-  log('warn', 'Canvas cleared');
+  log('warn', t('log_canvas_cleared'));
   evaluatePipelineState();
   refreshEmptyState();
   persistCanvasState();
@@ -2063,10 +2368,10 @@ function updateClassNamesEverywhere(source) {
   }
 }
 
-// ===== CAMERA — Training =====
+// ===== CAMERA – Training =====
 let cameraStreams = {};
 // Per-id "camera is opening" latch. getUserMedia is async, so without it two
-// rapid clicks both pass the existing-stream check and open two streams — the
+// rapid clicks both pass the existing-stream check and open two streams – the
 // first is overwritten and never stopped (camera LED stays on).
 let cameraOpening = {};
 
@@ -2097,7 +2402,7 @@ async function getCameraStream() {
       } catch (e) { if (bail(e)) throw e; }
     }
   } catch (e) { if (bail(e)) throw e; }
-  throw new Error(lang === 'pl' ? 'Nie znaleziono kamery' : 'No camera found');
+  throw new Error(t('err_no_camera'));
 }
 
 async function blockStartCamera(id) {
@@ -2117,9 +2422,7 @@ async function blockStartCamera(id) {
   } catch (err) {
     let msg = t('log_camera_err') + err.message;
     if (location.protocol === 'file:') {
-      msg += lang === 'pl'
-        ? ' ⚠️ Otwórz przez http://localhost:8765 (nie file://)'
-        : ' ⚠️ Open via http://localhost:8765 (not file://)';
+      msg += t('hint_file_protocol');
     }
     log('error', msg);
     setBlockStatus(document.getElementById(id), 'error');
@@ -2128,16 +2431,20 @@ async function blockStartCamera(id) {
   }
 }
 
+// Per-block "capture burst in flight" latch: two clicks used to interleave two
+// grab loops (double samples, flickering counter).
+const captureBusy = {}; // id -> bool
 function blockCapture(id, cls) {
   if (cls === undefined) cls = window.activeClass || 0;
+  if (captureBusy[id]) return;
   const vid = document.getElementById('vid-' + id);
   if (!vid || !vid.srcObject) {
-    log('warn', lang === 'pl' ? 'Najpierw uruchom kamerę!' : 'Start the camera first!');
+    log('warn', t('warn_start_camera_first'));
     return;
   }
   // Check video is actually playing and has frames
   if (vid.readyState < 2 || vid.videoWidth === 0) {
-    log('warn', lang === 'pl' ? 'Kamera jeszcze się ładuje, poczekaj chwilę...' : 'Camera still loading, wait a moment...');
+    log('warn', t('warn_camera_loading'));
     return;
   }
   const spc = parseInt(document.getElementById('spc-' + id)?.value || '10');
@@ -2149,25 +2456,35 @@ function blockCapture(id, cls) {
   let captured = 0;
   const statusEl = document.getElementById('cam-status-' + id);
   const cardEl = document.getElementById(id);
+  captureBusy[id] = true;
   setBlockStatus(cardEl, 'running');
-  function grab() {
-    if (captured >= spc) {
+  function finish(complete) {
+    captureBusy[id] = false;
+    if (complete) {
       log('success', t('log_capture', spc, classNames[cls]));
       if (statusEl) statusEl.textContent = `${classNames[cls]}: ${capturedSamples[cls].length} ${t('lbl_samples')}`;
-      updateSampleCounts();
-      updateThumbStrips(id);
       setBlockStatus(cardEl, 'done');
-      evaluatePipelineState();
-      saveClassToIDB(cls); // persist new samples to IDB (debounced)
-      refreshDatasetInfo();
-      return;
+    } else {
+      log('warn', t('log_capture_aborted'));
+      setBlockStatus(cardEl, 'idle');
     }
+    // Whatever was grabbed before an abort is real data: show and persist it.
+    updateSampleCounts();
+    updateThumbStrips(id);
+    evaluatePipelineState();
+    if (captured > 0) saveClassToIDB(cls); // persist new samples to IDB (debounced)
+    refreshDatasetInfo();
+  }
+  function grab() {
+    // Stop when the camera or the block itself went away mid-burst.
+    if (!cameraStreams[id] || !vid.srcObject) { finish(false); return; }
+    if (captured >= spc) { finish(true); return; }
     // Draw current video frame
     ctx.drawImage(vid, 0, 0, res, res);
     const imgData = ctx.getImageData(0, 0, res, res);
     capturedSamples[cls].push(imgData);
     captured++;
-    if (statusEl) statusEl.textContent = `${classNames[cls]}: zbieranie ${captured}/${spc}...`;
+    if (statusEl) statusEl.textContent = t('capture_progress', classNames[cls], captured, spc);
     setTimeout(grab, 150);
   }
   grab();
@@ -2210,110 +2527,20 @@ function updateThumbStrips(cameraId) {
   });
 }
 
-// ===== AUGMENTATION WEB WORKER =====
-const WORKER_CODE = `
-self.onmessage = function(e) {
-  const { samples, multiplier, augType } = e.data;
-  const result = [];
-  // include originals
-  for (const s of samples) result.push(s);
-  
-  const target = samples.length * multiplier;
-  let added = 0;
-  let idx = 0;
-  
-  while (result.length < target) {
-const src = samples[idx % samples.length];
-const w = src.width, h = src.height;
-const buf = new Uint8ClampedArray(src.data);
-
-if (augType !== 'none') {
-  // Brightness jitter
-  const bj = 0.7 + Math.random() * 0.6;
-  for (let i=0;i<buf.length;i+=4) {
-buf[i] = Math.min(255, buf[i]*bj);
-buf[i+1] = Math.min(255, buf[i+1]*bj);
-buf[i+2] = Math.min(255, buf[i+2]*bj);
-  }
-  
-  // Horizontal flip (50%)
-  if (augType === 'all' && Math.random() > 0.5) {
-for (let row=0;row<h;row++) {
-  for (let col=0;col<Math.floor(w/2);col++) {
-    const a = (row*w+col)*4, b2 = (row*w+(w-1-col))*4;
-    for (let c=0;c<4;c++) {
-      const tmp=buf[a+c]; buf[a+c]=buf[b2+c]; buf[b2+c]=tmp;
-    }
-  }
-}
-  }
-
-  // Zoom + skew (affine transform). Each applied independently with 50%
-  // probability when augType === 'all'. Uses bilinear sampling. Out-of-source
-  // pixels are filled with the edge value (less artifact-prone than black).
-  if (augType === 'all') {
-const doZoom = Math.random() > 0.5;
-const doSkew = Math.random() > 0.5;
-if (doZoom || doSkew) {
-  const zoom  = doZoom ? (0.85 + Math.random() * 0.30) : 1.0;
-  const sX    = doSkew ? (Math.random() - 0.5) * 0.30 : 0;
-  const sY    = doSkew ? (Math.random() - 0.5) * 0.30 : 0;
-  const cx = w / 2, cy = h / 2;
-  const out = new Uint8ClampedArray(buf.length);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const dx = x - cx, dy = y - cy;
-      let sx = dx / zoom - sX * dy + cx;
-      let sy = dy / zoom - sY * dx + cy;
-      if (sx < 0) sx = 0; else if (sx > w - 1) sx = w - 1;
-      if (sy < 0) sy = 0; else if (sy > h - 1) sy = h - 1;
-      const x0 = sx | 0, y0 = sy | 0;
-      const x1 = x0 + 1 < w ? x0 + 1 : x0;
-      const y1 = y0 + 1 < h ? y0 + 1 : y0;
-      const fx = sx - x0, fy = sy - y0;
-      const w00 = (1 - fx) * (1 - fy);
-      const w10 = fx * (1 - fy);
-      const w01 = (1 - fx) * fy;
-      const w11 = fx * fy;
-      const i00 = (y0 * w + x0) * 4;
-      const i10 = (y0 * w + x1) * 4;
-      const i01 = (y1 * w + x0) * 4;
-      const i11 = (y1 * w + x1) * 4;
-      const di = (y * w + x) * 4;
-      out[di]     = buf[i00]     * w00 + buf[i10]     * w10 + buf[i01]     * w01 + buf[i11]     * w11;
-      out[di + 1] = buf[i00 + 1] * w00 + buf[i10 + 1] * w10 + buf[i01 + 1] * w01 + buf[i11 + 1] * w11;
-      out[di + 2] = buf[i00 + 2] * w00 + buf[i10 + 2] * w10 + buf[i01 + 2] * w01 + buf[i11 + 2] * w11;
-      out[di + 3] = 255;
-    }
-  }
-  buf.set(out);
-}
-  }
-}
-
-result.push({ data: buf, width: w, height: h });
-added++;
-idx++;
-
-if (added % 10 === 0) {
-  self.postMessage({ type: 'progress', pct: Math.round((result.length/target)*100) });
-}
-  }
-  // Transfer all buffers — avoids structured-clone copy of what can be tens
-  // of MB for larger datasets. The worker is done after this message anyway.
-  const buffers = [];
-  for (const r of result) buffers.push(r.data.buffer);
-  self.postMessage({ type: 'done', result, counts: samples.length }, buffers);
-};
-`;
-
-// ===== AUGMENTATION PREVIEW =====
-// Apply the same transforms the worker uses (brightness jitter, and for 'all'
-// horizontal flip + zoom + skew) to one ImageData, returning a new ImageData.
-// Kept in sync with WORKER_CODE so the preview reflects real augmentation.
-function augmentImageDataPreview(src, augType) {
+// ===== AUGMENTATION =====
+// The one augmentation routine, used by both the Web Worker (its source is
+// stringified into WORKER_CODE below) and the in-page preview. It must stay
+// self-contained: no references to outer scope, no closures, since the worker
+// copy runs in isolation. Returns a plain {data, width, height} record.
+//
+// Transforms: brightness jitter for any augType other than 'none'; for 'all'
+// also a 50% horizontal flip and, independently at 50% each, zoom and skew
+// (one affine pass with bilinear sampling; out-of-source pixels take the edge
+// value, which is less artifact-prone than black).
+function augmentImageData(src, augType) {
   const w = src.width, h = src.height;
   let buf = new Uint8ClampedArray(src.data);
+  if (augType === 'none') return { data: buf, width: w, height: h };
   // Brightness jitter
   const bj = 0.7 + Math.random() * 0.6;
   for (let i = 0; i < buf.length; i += 4) {
@@ -2356,8 +2583,36 @@ function augmentImageDataPreview(src, augType) {
       buf = out;
     }
   }
-  return new ImageData(buf, w, h);
+  return { data: buf, width: w, height: h };
 }
+
+// ===== AUGMENTATION WEB WORKER =====
+// The worker source is the augmentation function above plus a small message
+// shell: originals first, then augmented copies round-robin over the samples
+// until samples.length * multiplier records exist.
+const WORKER_CODE = augmentImageData.toString() + `
+self.onmessage = function(e) {
+  const { samples, multiplier, augType } = e.data;
+  const result = [];
+  for (const s of samples) result.push(s);
+  const target = samples.length * multiplier;
+  let added = 0;
+  let idx = 0;
+  while (result.length < target) {
+    result.push(augmentImageData(samples[idx % samples.length], augType));
+    added++;
+    idx++;
+    if (added % 10 === 0) {
+      self.postMessage({ type: 'progress', pct: Math.round((result.length / target) * 100) });
+    }
+  }
+  // Transfer all buffers - avoids a structured-clone copy of what can be tens
+  // of MB for larger datasets. The worker is done after this message anyway.
+  const buffers = [];
+  for (const r of result) buffers.push(r.data.buffer);
+  self.postMessage({ type: 'done', result, counts: samples.length }, buffers);
+};
+`;
 
 // Render an original sample plus a few augmented variants so students can see
 // exactly what augmentation does to their data before committing to it.
@@ -2369,10 +2624,12 @@ function previewAugmentation(id) {
   let sample = null;
   for (const arr of capturedSamples) { if (arr && arr.length) { sample = arr[0]; break; } }
   if (!sample) {
-    box.innerHTML = `<div class="aug-preview-empty">${lang === 'pl' ? 'Najpierw zbierz kilka próbek.' : 'Collect a few samples first.'}</div>`;
+    box.innerHTML = `<div class="aug-preview-empty">${t('aug_collect_first')}</div>`;
     return;
   }
-  const drawInto = (imgData, label) => {
+  const drawInto = (rec, label) => {
+    // augmentImageData returns a plain {data,width,height} record.
+    const imgData = rec instanceof ImageData ? rec : new ImageData(rec.data, rec.width, rec.height);
     const cv = document.createElement('canvas');
     cv.width = imgData.width; cv.height = imgData.height;
     cv.getContext('2d').putImageData(imgData, 0, 0);
@@ -2388,30 +2645,30 @@ function previewAugmentation(id) {
     return wrap;
   };
   box.innerHTML = '';
-  box.appendChild(drawInto(sample, lang === 'pl' ? 'oryginał' : 'original'));
+  box.appendChild(drawInto(sample, t('aug_original')));
   if (augType === 'none') {
     const note = document.createElement('div');
     note.className = 'aug-preview-empty';
-    note.textContent = lang === 'pl'
-      ? 'Augmentacja wyłączona — tylko oryginały.'
-      : 'Augmentation off — originals only.';
+    note.textContent = t('aug_off');
     box.appendChild(note);
     return;
   }
   const N = 4;
-  for (let i = 0; i < N; i++) box.appendChild(drawInto(augmentImageDataPreview(sample, augType), '#' + (i + 1)));
+  for (let i = 0; i < N; i++) box.appendChild(drawInto(augmentImageData(sample, augType), '#' + (i + 1)));
 }
 
 // ===== PREPARE DATA =====
+// Resolves true when preparedData is ready, false otherwise (runPipeline stops
+// on false).
 async function runPrepare(id) {
   const totalSamples = capturedSamples.reduce((s, a) => s + a.length, 0);
-  if (totalSamples === 0) { log('warn', t('log_no_data')); return; }
+  if (totalSamples === 0) { log('warn', t('log_no_data')); return false; }
 
   // Single-flight: parallel prepares would spawn competing workers whose 'done'
   // handlers race to overwrite preparedData.
   if (prepareInProgress) {
-    log('warn', lang === 'pl' ? 'Przygotowanie już trwa.' : 'Preparation is already running.');
-    return;
+    log('warn', t('warn_prep_running'));
+    return false;
   }
   prepareInProgress = true;
   const versionAtStart = datasetVersion;
@@ -2447,7 +2704,7 @@ async function runPrepare(id) {
     setBlockStatus(document.getElementById(id), 'done');
     evaluatePipelineState();
     prepareInProgress = false;
-    return;
+    return true;
   }
 
   const blob = new Blob([WORKER_CODE], { type: 'application/javascript' });
@@ -2457,25 +2714,25 @@ async function runPrepare(id) {
   return new Promise((resolve) => {
     // Tear down worker + blob URL + guard exactly once, whatever the outcome.
     let settled = false;
-    const cleanup = () => {
+    const cleanup = (ok) => {
       if (settled) return;
       settled = true;
       try { worker.terminate(); } catch (_) {}
       URL.revokeObjectURL(workerURL);
       prepareInProgress = false;
-      resolve();
+      resolve(!!ok);
     };
-    // Without these, a worker exception left the promise pending forever —
+    // Without these, a worker exception left the promise pending forever -
     // runPipeline would hang and the progress bar freeze with no error.
     worker.onerror = (err) => {
-      log('error', 'Prepare worker error: ' + (err && err.message ? err.message : 'unknown'));
+      log('error', t('err_prep_worker') + (err && err.message ? err.message : 'unknown'));
       setBlockStatus(document.getElementById(id), 'error');
-      cleanup();
+      cleanup(false);
     };
     worker.onmessageerror = () => {
-      log('error', 'Prepare worker: message decode failed');
+      log('error', t('err_prep_decode'));
       setBlockStatus(document.getElementById(id), 'error');
-      cleanup();
+      cleanup(false);
     };
     worker.onmessage = async (e) => {
       if (e.data.type === 'progress') {
@@ -2490,7 +2747,7 @@ async function runPrepare(id) {
           log('warn', t('log_prep_stale'));
           if (status) status.textContent = '';
           setBlockStatus(document.getElementById(id), 'idle');
-          cleanup();
+          cleanup(false);
           return;
         }
         const augmented = e.data.result;
@@ -2516,7 +2773,7 @@ async function runPrepare(id) {
         if (status) status.textContent = t('log_prep_done', n);
         setBlockStatus(document.getElementById(id), 'done');
         evaluatePipelineState();
-        cleanup();
+        cleanup(true);
       }
     };
     worker.postMessage({ samples: allSamples, multiplier, augType });
@@ -2524,11 +2781,13 @@ async function runPrepare(id) {
 }
 
 // ===== LOAD BASE MODEL =====
+// Returns true when the base model is available afterwards (runPipeline stops
+// on false).
 async function runLoadBaseModel(id) {
-  if (baseModel) { log('info', 'Base model already loaded'); setBlockStatus(document.getElementById(id), 'done'); return; }
+  if (baseModel) { log('info', t('info_base_already')); setBlockStatus(document.getElementById(id), 'done'); return true; }
   // Guard against a double-click racing two ~3 MB downloads (the second would
   // overwrite baseModel and leak the first GraphModel's weights).
-  if (baseModelLoading) { log('info', lang === 'pl' ? 'Model bazowy już się ładuje...' : 'Base model is already loading...'); return; }
+  if (baseModelLoading) { log('info', t('info_base_loading')); return false; }
   baseModelLoading = true;
   setBlockStatus(document.getElementById(id), 'running');
   log('step', t('log_model_loading'));
@@ -2543,13 +2802,15 @@ async function runLoadBaseModel(id) {
     });
 
     if (prog) prog.value = 100;
-    if (mstat) mstat.textContent = 'MobileNetV3-Small loaded ✓';
+    if (mstat) mstat.textContent = t('status_base_loaded');
     log('success', t('log_model_loaded'));
     setBlockStatus(document.getElementById(id), 'done');
     evaluatePipelineState();
+    return true;
   } catch (err) {
     log('error', t('log_model_err') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
+    return false;
   } finally {
     baseModelLoading = false;
   }
@@ -2561,6 +2822,37 @@ async function runLoadBaseModel(id) {
 
 // ===== TRAINING =====
 let lossHistory = [], accHistory = [];
+
+// The classifier head trained on frozen MobileNet features. Built here for
+// both Train and Evaluate so the hold-out verdict is about the same
+// architecture the deployed model uses.
+function buildHead(featSize, numClasses, lr) {
+  const head = tf.sequential({
+    layers: [
+      tf.layers.dense({ inputShape: [featSize], units: 128, activation: 'relu' }),
+      tf.layers.dropout({ rate: 0.3 }),
+      tf.layers.dense({ units: numClasses, activation: 'softmax' })
+    ]
+  });
+  head.compile({
+    optimizer: tf.train.adam(lr),
+    loss: 'categoricalCrossentropy',
+    metrics: ['accuracy']
+  });
+  return head;
+}
+
+// Hyperparameters from a Train block's inputs (its defaults when a field is
+// missing). Evaluate reads the placed Train block through this too, so the
+// hold-out verdict follows the settings the user is actually training with.
+function readTrainSettings(trainId) {
+  const val = (prefix) => document.getElementById(prefix + trainId)?.value;
+  return {
+    epochs: parseInt(val('ep-') || '15'),
+    lr: parseFloat(val('lr-') || '0.001'),
+    batchSize: parseInt(val('bs-') || '16')
+  };
+}
 
 // Narrate the training curve in plain language so students can read the chart.
 // Reacts to the loss trend and warns about the classic "100% accuracy on very
@@ -2575,15 +2867,13 @@ function updateTrainInterpretation(id, epoch, acc) {
   const flat = n >= 4 && Math.abs(lossHistory[n - 1] - lossHistory[n - 4]) < 0.01;
   if (acc >= 0.999 && totalSamples < 20) {
     tone = 'warn';
-    msg = lang === 'pl'
-      ? '⚠️ 100% dokładności przy małej liczbie próbek — model może zapamiętywać, a nie uczyć się. Dodaj więcej zdjęć.'
-      : '⚠️ 100% accuracy on few samples — the model may be memorising, not learning. Add more images.';
+    msg = t('interp_overfit');
   } else if (fallingFast) {
-    msg = lang === 'pl' ? '📉 Strata spada — model się uczy!' : '📉 Loss is dropping — the model is learning!';
+    msg = t('interp_falling');
   } else if (flat) {
-    msg = lang === 'pl' ? '➡️ Strata się wypłaszcza — bliski końca nauki.' : '➡️ Loss is flattening out — learning is levelling off.';
+    msg = t('interp_flat');
   } else {
-    msg = lang === 'pl' ? `Uczenie w toku — dokładność ${(acc * 100).toFixed(0)}%.` : `Learning in progress — accuracy ${(acc * 100).toFixed(0)}%.`;
+    msg = t('interp_progress', (acc * 100).toFixed(0));
   }
   el.textContent = msg;
   el.className = 'train-interp train-interp-' + tone;
@@ -2643,7 +2933,7 @@ function drawChart(canvasId) {
     });
   }
 
-  // Loss is unbounded — scale to its own min/max so the curve fills the chart.
+  // Loss is unbounded – scale to its own min/max so the curve fills the chart.
   const lossMax = lossHistory.length ? Math.max(...lossHistory) : 1;
   const lossMin = lossHistory.length ? Math.min(...lossHistory) : 0;
   const lossRange = (lossMax - lossMin) || 1;
@@ -2672,9 +2962,9 @@ function drawChart(canvasId) {
   const lastLoss = lossHistory[lossHistory.length - 1];
   const lastAcc = accHistory[accHistory.length - 1];
   ctx.fillStyle = '#DC2626';
-  ctx.fillText('loss' + (lastLoss != null ? ` ${lastLoss.toFixed(3)}` : ''), PAD_L + 4, 1);
+  ctx.fillText(t('chart_loss') + (lastLoss != null ? ` ${lastLoss.toFixed(3)}` : ''), PAD_L + 4, 1);
   ctx.fillStyle = '#059669';
-  ctx.fillText('acc' + (lastAcc != null ? ` ${(lastAcc * 100).toFixed(1)}%` : ''), PAD_L + 80, 1);
+  ctx.fillText(t('chart_acc') + (lastAcc != null ? ` ${(lastAcc * 100).toFixed(1)}%` : ''), PAD_L + 80, 1);
 }
 
 // Train pre-flight validation. Returns true if training should proceed.
@@ -2682,68 +2972,62 @@ async function validateTrainingData() {
   const counts = capturedSamples.map(arr => (arr || []).length);
   const classesWithSamples = counts.filter(n => n > 0).length;
   if (classesWithSamples < 2) {
-    const msg = lang === 'pl'
-      ? `Trening wymaga co najmniej 2 klas z próbkami (masz ${classesWithSamples}). Zbierz próbki dla dwóch lub więcej klas.`
-      : `Training needs at least 2 classes with samples (you have ${classesWithSamples}). Collect samples for two or more classes.`;
+    const msg = t('val_min_classes', classesWithSamples);
     showToast(msg, 'error');
     log('warn', msg);
     return false;
   }
-  const cont = lang === 'pl' ? 'Kontynuuj mimo to' : 'Continue anyway';
+  const cont = t('btn_continue_anyway');
   const MIN_PER_CLASS = 5;
   const tooFew = counts
     .map((n, i) => ({ n, name: classNames[i] }))
     .filter(c => c.n > 0 && c.n < MIN_PER_CLASS);
   if (tooFew.length > 0) {
     const list = tooFew.map(c => `"${c.name}" (${c.n})`).join(', ');
-    const msg = lang === 'pl'
-      ? `Niektóre klasy mają mniej niż ${MIN_PER_CLASS} próbek: ${list}. Modele potrzebują kilku przykładów na klasę. Kontynuować mimo to?`
-      : `Some classes have fewer than ${MIN_PER_CLASS} samples: ${list}. Models need several examples per class. Continue anyway?`;
+    const msg = t('val_too_few', MIN_PER_CLASS, list);
     if (!(await uiConfirm(msg, { okLabel: cont }))) return false;
   }
   const nonZero = counts.filter(n => n > 0);
   const max = Math.max(...nonZero);
   const min = Math.min(...nonZero);
   if (max >= 10 * min && max >= 20) {
-    const msg = lang === 'pl'
-      ? `Bardzo nierówny rozkład klas (od ${min} do ${max} próbek). Model nauczy się rozpoznawać klasę większościową. Kontynuować?`
-      : `Class imbalance is large (${min}–${max} samples). The model will favour the majority class. Continue?`;
+    const msg = t('val_imbalance', min, max);
     if (!(await uiConfirm(msg, { okLabel: cont }))) return false;
   }
   return true;
 }
 
+// Resolves true when a trained model is live afterwards, false on a guard,
+// cancel or error (runPipeline stops on false).
 async function runTraining(id) {
   if (!preparedData) {
     log('warn', t('log_no_data'));
     if (!placedBlocks.some(b => b.type === 'prepare-data')) {
       ensureBlockOnCanvas('prepare-data');
     }
-    return;
+    return false;
   }
   if (!baseModel) {
     log('warn', t('log_no_model_base'));
     if (!placedBlocks.some(b => b.type === 'pretrained-model')) {
       ensureBlockOnCanvas('pretrained-model');
     }
-    return;
+    return false;
   }
-  if (!(await validateTrainingData())) return;
+  if (!(await validateTrainingData())) return false;
 
   // Single-flight: a second concurrent run (double-click Train, or Run pipeline
   // while a manual train is in flight) would share trainingCancelled / the chart
   // histories / fullModel and corrupt all of them.
   if (trainingInProgress) {
-    log('warn', lang === 'pl' ? 'Trening już trwa.' : 'Training is already running.');
-    return;
+    log('warn', t('warn_train_running'));
+    return false;
   }
   trainingInProgress = true;
 
   trainingCancelled = false;
   lossHistory = []; accHistory = [];
-  const epochs = parseInt(document.getElementById('ep-' + id)?.value || '15');
-  const lr = parseFloat(document.getElementById('lr-' + id)?.value || '0.001');
-  const batchSize = parseInt(document.getElementById('bs-' + id)?.value || '16');
+  const { epochs, lr, batchSize } = readTrainSettings(id);
   const info = document.getElementById('train-info-' + id);
   const numClasses = preparedData.numClasses;
   const { xs: rawXs, ys: rawYs } = preparedData;
@@ -2760,9 +3044,9 @@ async function runTraining(id) {
 
   try {
     // ── STEP 1: Extract bottleneck features from frozen base model ──
-    // Always resize to 224×224 — MobileNetV3-Small requires that input size
+    // Always resize to 224×224 – MobileNetV3-Small requires that input size
     // regardless of the resolution the user chose when capturing samples.
-    log('info', lang === 'pl' ? `Ekstrakcja cech z ${rawXs.length} próbek...` : `Extracting features from ${rawXs.length} samples...`);
+    log('info', t('log_feat_extract', rawXs.length));
     // A prepared set without augmentation is the raw set in the same order,
     // so it shares the 'raw' cache entry with Evaluate.
     const featsTensor = await getCachedFeatures(
@@ -2772,9 +3056,7 @@ async function runTraining(id) {
       {
         shouldCancel: () => trainingCancelled,
         onProgress: (done, total) => {
-          if (info) info.textContent = lang === 'pl'
-            ? `Ekstrakcja cech: ${done}/${total}`
-            : `Feature extraction: ${done}/${total}`;
+          if (info) info.textContent = t('feat_progress', done, total);
         }
       });
     const featSize = featsTensor.shape[1];
@@ -2784,23 +3066,12 @@ async function runTraining(id) {
     ysTensor = tf.oneHot(idxTensor, numClasses);
     idxTensor.dispose();
 
-    log('info', lang === 'pl' ? `Cechy: ${rawXs.length}×${featSize}` : `Features: ${rawXs.length}×${featSize}`);
+    log('info', t('log_feat_shape', rawXs.length, featSize));
 
     // ── STEP 2: Train small classifier on bottleneck features ──
-    // The base model (GraphModel) cannot be fine-tuned in TF.js — it is always frozen.
+    // The base model (GraphModel) cannot be fine-tuned in TF.js - it is always frozen.
     // We train only the Dense head on the pre-extracted feature vectors.
-    classifier = tf.sequential({
-      layers: [
-        tf.layers.dense({ inputShape: [featSize], units: 128, activation: 'relu' }),
-        tf.layers.dropout({ rate: 0.3 }),
-        tf.layers.dense({ units: numClasses, activation: 'softmax' })
-      ]
-    });
-    classifier.compile({
-      optimizer: tf.train.adam(lr),
-      loss: 'categoricalCrossentropy',
-      metrics: ['accuracy']
-    });
+    classifier = buildHead(featSize, numClasses, lr);
 
     const startTime = Date.now();
     await classifier.fit(featsTensor, ysTensor, {
@@ -2817,7 +3088,7 @@ async function runTraining(id) {
           const perEpoch = elapsed / (epoch + 1);
           const remaining = Math.round((epochs - epoch - 1) * perEpoch);
           const acc = logs.acc || logs.accuracy || 0;
-          if (info) info.textContent = `Epoch ${epoch + 1}/${epochs} | ETA: ${remaining}s`;
+          if (info) info.textContent = t('train_eta', epoch + 1, epochs, remaining);
           const chartEl = document.getElementById('chart-' + id);
           if (chartEl) chartEl.setAttribute('aria-label', t('aria_chart', epoch + 1, logs.loss.toFixed(3), (acc * 100).toFixed(1)));
           updateTrainInterpretation(id, epoch, acc);
@@ -2844,7 +3115,7 @@ async function runTraining(id) {
     fullModel = classifier;
     inferModel = classifier;       // available immediately for same-session inference
     inferMetadata = modelMetadata; // so inference blocks see the right class labels
-    committed = true;              // ownership transferred — don't dispose in finally
+    committed = true;              // ownership transferred – don't dispose in finally
     // Free the previous head now that the live inference loop reads the new one.
     // Doing it here (not before fit) means a running inference camera has already
     // switched to `classifier` before the old model's weights are released.
@@ -2852,21 +3123,23 @@ async function runTraining(id) {
       try { prevModel.dispose(); } catch (_) {}
     }
 
-    log('info', lang === 'pl' ? 'Model gotowy...' : 'Model ready...');
+    log('info', t('log_model_ready'));
     log('success', t('log_train_done', finalAcc));
     setBlockStatus(document.getElementById(id), 'done');
     modelSaved = false; // freshly trained, not yet saved
     evaluatePipelineState();
     notifyModelTrained();
+    return true;
   } catch (err) {
     if (err.message === 'cancelled') {
       log('warn', t('log_train_cancel'));
       setBlockStatus(document.getElementById(id), 'idle');
     } else {
-      log('error', 'Training error: ' + err.message);
+      log('error', t('err_training') + err.message);
       console.error(err);
       setBlockStatus(document.getElementById(id), 'error');
     }
+    return false;
   } finally {
     // The label tensor is ours; the feature tensor stays in featureCache.
     if (ysTensor) ysTensor.dispose();
@@ -2880,7 +3153,7 @@ async function runTraining(id) {
 
 function stopTraining(id) {
   trainingCancelled = true;
-  log('warn', lang === 'pl' ? 'Zatrzymywanie po bieżącej epoce...' : 'Stopping after current epoch...');
+  log('warn', t('log_train_stopping'));
 }
 
 // ===== MODEL EVALUATION (train/test split) =====
@@ -2947,7 +3220,6 @@ async function getCachedFeatures(source, samples, ident, opts) {
   return feats;
 }
 
-let evaluateInProgress = false;
 async function runEvaluate(id) {
   // TRUE hold-out evaluation. Split samples 80/20 (stratified), train a FRESH
   // head on the 80% only, then test on the 20% the fresh head has never seen.
@@ -2963,9 +3235,7 @@ async function runEvaluate(id) {
   const counts = capturedSamples.map(a => (a || []).length);
   const usable = counts.filter(n => n >= 2).length;
   if (usable < 2) {
-    showToast(lang === 'pl'
-      ? 'Prawdziwy test wymaga min. 2 klas z co najmniej 2 próbkami (aby podzielić 80/20).'
-      : 'A true hold-out test needs at least 2 classes with 2+ samples each (to split 80/20).', 'warn');
+    showToast(t('eval_need_samples'), 'warn');
     return;
   }
   if (evaluateInProgress) return;
@@ -3006,13 +3276,19 @@ async function runEvaluate(id) {
     });
   }
 
-  const EVAL_EPOCHS = 20;
+  // Hyperparameters follow the placed Train block so the verdict is about the
+  // model the user is actually training; without one, the evaluate defaults.
+  const trainBlock = blocksByType['train-model'];
+  const { epochs, lr, batchSize } = trainBlock
+    ? readTrainSettings(trainBlock.id)
+    : { epochs: 20, lr: 0.001, batchSize: 16 };
+  log('info', t('log_eval_settings', epochs, lr, batchSize, !!trainBlock));
   let trainFeat = null, testFeat = null, ysTensor = null, classifier = null, trainProbT = null, testProbT = null;
   try {
-    setStatus(lang === 'pl' ? 'Ekstrakcja cech...' : 'Extracting features...');
+    setStatus(t('eval_extracting'));
     // Owned by featureCache (never disposed here); trainFeat/testFeat are ours.
     const allFeat = await getCachedFeatures('raw', flatSamples, 'raw', {
-      onProgress: (done, total) => setStatus((lang === 'pl' ? 'Ekstrakcja cech: ' : 'Extracting features: ') + done + '/' + total)
+      onProgress: (done, total) => setStatus(t('feat_progress', done, total))
     });
     trainFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(trainIdx, 'int32')));
     testFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(testIdx, 'int32')));
@@ -3022,42 +3298,34 @@ async function runEvaluate(id) {
     ysTensor = tf.oneHot(idxT, numClasses);
     idxT.dispose();
 
-    setStatus(lang === 'pl' ? 'Trening na 80% (świeży model)...' : 'Training on 80% (fresh model)...');
-    classifier = tf.sequential({
-      layers: [
-        tf.layers.dense({ inputShape: [featSize], units: 128, activation: 'relu' }),
-        tf.layers.dropout({ rate: 0.3 }),
-        tf.layers.dense({ units: numClasses, activation: 'softmax' })
-      ]
-    });
-    classifier.compile({ optimizer: tf.train.adam(0.001), loss: 'categoricalCrossentropy', metrics: ['accuracy'] });
+    setStatus(t('eval_training'));
+    classifier = buildHead(featSize, numClasses, lr);
     await classifier.fit(trainFeat, ysTensor, {
-      epochs: EVAL_EPOCHS, batchSize: 16, shuffle: true,
+      epochs, batchSize, shuffle: true,
       // Yield between epochs so the tab stays responsive and the status line
       // actually repaints.
       callbacks: {
         onEpochEnd: async (epoch) => {
-          setStatus(t('eval_epoch', epoch + 1, EVAL_EPOCHS));
+          setStatus(t('eval_epoch', epoch + 1, epochs));
           await tf.nextFrame();
         }
       }
     });
 
-    setStatus(lang === 'pl' ? 'Test na 20% (niewidziane)...' : 'Testing on 20% (unseen)...');
+    setStatus(t('eval_testing'));
     trainProbT = classifier.predict(trainFeat);
     testProbT = classifier.predict(testFeat);
     const trainProbs = await trainProbT.data();
     const testProbs = await testProbT.data();
 
-    const argmaxRow = (probs, row) => {
-      let m = 0; for (let k = 1; k < numClasses; k++) if (probs[row * numClasses + k] > probs[row * numClasses + m]) m = k; return m;
-    };
+    // Row `row` of a flat [N, numClasses] probability buffer.
+    const argmaxRow = (probs, row) => argmax(probs.subarray(row * numClasses, (row + 1) * numClasses));
     // Train accuracy is computed for the overfit verdict but not displayed.
     let trainCorrect = 0;
     for (let i = 0; i < trainLabels.length; i++) if (argmaxRow(trainProbs, i) === trainLabels[i]) trainCorrect++;
     const trainAcc = trainLabels.length ? trainCorrect / trainLabels.length : 0;
 
-    // Test confusion matrix + misclassified thumbnails — the 20% hold-out only.
+    // Test confusion matrix + misclassified thumbnails – the 20% hold-out only.
     const confusion = Array.from({ length: numClasses }, () => new Array(numClasses).fill(0));
     const misclassified = [];
     let correct = 0;
@@ -3073,13 +3341,11 @@ async function runEvaluate(id) {
     renderEvaluation(id, { confusion, acc, trainAcc, total: testLabels.length, misclassified, numClasses });
     setStatus('');
     setBlockStatus(document.getElementById(id), 'done');
-    log('success', lang === 'pl'
-      ? `Test na niewidzianych 20%: ${(acc * 100).toFixed(0)}% z ${testLabels.length} zdjęć`
-      : `Hold-out test on unseen 20%: ${(acc * 100).toFixed(0)}% of ${testLabels.length} images`);
+    log('success', t('log_eval_done', (acc * 100).toFixed(0), testLabels.length));
   } catch (err) {
-    log('error', 'Evaluation error: ' + err.message);
+    log('error', t('err_eval') + err.message);
     console.error(err);
-    setStatus((lang === 'pl' ? 'Błąd: ' : 'Error: ') + err.message);
+    setStatus(t('err_prefix') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   } finally {
     if (trainFeat) trainFeat.dispose();
@@ -3106,19 +3372,13 @@ function renderEvaluation(id, r) {
   let verdict, verdictClass;
   if (gap >= 0.25 && (r.trainAcc || 0) > 0.8) {
     verdictClass = 'warn';
-    verdict = lang === 'pl'
-      ? '⚠️ Model dobrze radzi sobie z danymi treningowymi, ale słabo z niewidzianymi (przeuczenie). Dodaj więcej różnorodnych zdjęć.'
-      : '⚠️ Great on training data but weak on unseen data (overfitting). Add more varied images.';
+    verdict = t('eval_verdict_overfit');
   } else if (r.acc >= 0.8) {
     verdictClass = 'ok';
-    verdict = lang === 'pl'
-      ? '✅ Model dobrze generalizuje — trafia na zdjęciach, których nigdy nie widział.'
-      : '✅ The model generalises well — it gets images it never saw right.';
+    verdict = t('eval_verdict_ok');
   } else {
     verdictClass = 'warn';
-    verdict = lang === 'pl'
-      ? '⚠️ Słaba skuteczność na niewidzianych danych — zbierz więcej lub wyraźniejsze próbki.'
-      : '⚠️ Weak on unseen data — collect more or clearer samples.';
+    verdict = t('eval_verdict_weak');
   }
 
   // Confusion matrix table.
@@ -3145,20 +3405,20 @@ function renderEvaluation(id, r) {
   let missHtml = '';
   const shown = r.misclassified.slice(0, 8);
   if (shown.length) {
-    missHtml = `<div class="eval-miss-title">${lang === 'pl' ? 'Błędy modelu:' : 'Model mistakes:'}</div><div class="eval-miss-grid" id="eval-miss-${id}"></div>`;
+    missHtml = `<div class="eval-miss-title">${t('eval_mistakes')}</div><div class="eval-miss-grid" id="eval-miss-${id}"></div>`;
   } else if (r.total > 0) {
-    missHtml = `<div class="eval-miss-title">${lang === 'pl' ? 'Brak błędów na zbiorze testowym 🎉' : 'No mistakes on the test set 🎉'}</div>`;
+    missHtml = `<div class="eval-miss-title">${t('eval_no_mistakes')}</div>`;
   }
 
   el.innerHTML = `
     <div class="eval-scores">
       <div class="eval-score eval-score-test">
         <div class="eval-score-val">${pct(r.acc)}</div>
-        <div class="eval-score-lbl">${lang === 'pl' ? `niewidziane (20%) — ${r.total} zdjęć` : `unseen (20%) — ${r.total} images`}</div>
+        <div class="eval-score-lbl">${t('eval_unseen_lbl', r.total)}</div>
       </div>
     </div>
     <div class="eval-verdict eval-verdict-${verdictClass}">${verdict}</div>
-    <div class="eval-matrix-title">${lang === 'pl' ? 'Macierz pomyłek (wiersz = prawda, kolumna = predykcja)' : 'Confusion matrix (row = truth, column = prediction)'}</div>
+    <div class="eval-matrix-title">${t('eval_matrix_title')}</div>
     ${matrix}
     ${missHtml}`;
 
@@ -3214,7 +3474,7 @@ async function runSaveIDB(id) {
     const el = document.getElementById('save-info-' + id);
     if (el) el.textContent = t('log_save_idb');
   } catch (err) {
-    log('error', 'Save error: ' + err.message);
+    log('error', t('err_save') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   }
 }
@@ -3226,7 +3486,7 @@ async function runDownload(id) {
   try {
     fullModel.userDefinedMetadata = modelMetadata;
     // Capture both models' topology + weights via custom IOHandlers (no DOM side-effects).
-    // Running in parallel is safe — each saves to its own closure variable.
+    // Running in parallel is safe – each saves to its own closure variable.
     const [classifierArt, baseArt] = await Promise.all([
       captureArtifacts(fullModel),
       captureArtifacts(baseModel),
@@ -3248,24 +3508,24 @@ async function runDownload(id) {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    log('success', (lang === 'pl' ? 'Model pobrany ✓ (' : 'Model downloaded ✓ (') + fname + ')');
+    log('success', t('log_model_downloaded', fname));
     modelSaved = true;
     evaluatePipelineState();
   } catch (err) {
-    log('error', 'Download error: ' + err.message);
+    log('error', t('err_download') + err.message);
   }
 }
 
 // ===== DEPLOY: EXPORT SELF-CONTAINED CLASSIFIER APP =====
 async function runDeployExport(id) {
   if (!fullModel || !baseModel) {
-    showToast(lang === 'pl' ? 'Najpierw wytrenuj model.' : 'Train a model first.', 'warn');
+    showToast(t('toast_train_first'), 'warn');
     return;
   }
   const statusEl = document.getElementById('deploy-status-' + id);
   const setStatus = (s) => { if (statusEl) statusEl.textContent = s; };
   setBlockStatus(document.getElementById(id), 'running');
-  setStatus(lang === 'pl' ? 'Pakowanie modelu (~6 MB)...' : 'Packaging model (~6 MB)...');
+  setStatus(t('deploy_packing'));
   try {
     fullModel.userDefinedMetadata = modelMetadata;
     const [classifierArt, baseArt] = await Promise.all([captureArtifacts(fullModel), captureArtifacts(baseModel)]);
@@ -3285,14 +3545,14 @@ async function runDeployExport(id) {
     a.href = url; a.download = 'klocki-classifier.html';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatus(lang === 'pl' ? 'Wyeksportowano ✓' : 'Exported ✓');
+    setStatus(t('deploy_exported'));
     setBlockStatus(document.getElementById(id), 'done');
-    log('success', lang === 'pl' ? 'Aplikacja wyeksportowana: klocki-classifier.html' : 'App exported: klocki-classifier.html');
-    showToast(lang === 'pl' ? 'Aplikacja wyeksportowana 🚀' : 'App exported 🚀', 'success', { duration: 3500 });
+    log('success', t('log_app_exported'));
+    showToast(t('toast_app_exported'), 'success', { duration: 3500 });
   } catch (err) {
-    log('error', 'Export error: ' + err.message);
+    log('error', t('err_export') + err.message);
     console.error(err);
-    setStatus((lang === 'pl' ? 'Błąd: ' : 'Error: ') + err.message);
+    setStatus(t('err_prefix') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   }
 }
@@ -3301,14 +3561,15 @@ async function runDeployExport(id) {
 // embedded as base64 + a camera UI. `<` in the embedded JSON is escaped so a
 // class name can't break out of the <script> block.
 function buildStandaloneAppHTML(bundle) {
-  const isPl = bundle.lang === 'pl';
+  // The exported page is frozen in the language it was exported from.
+  const X = STRINGS[bundle.lang] || STRINGS.pl;
   const dataJson = JSON.stringify(bundle).replace(/</g, '\\u003c');
-  const title = isPl ? 'Klasyfikator KlockiAI' : 'KlockiAI Classifier';
-  const startLbl = isPl ? '▶ Uruchom kamerę' : '▶ Start camera';
-  const madeWith = isPl ? 'Zrobione w KlockiAI' : 'Made with KlockiAI';
-  const loadingLbl = isPl ? 'Ładowanie modelu…' : 'Loading model…';
+  const title = X.export_title;
+  const startLbl = X.export_start;
+  const madeWith = X.export_made_with;
+  const loadingLbl = X.export_loading;
   return `<!DOCTYPE html>
-<html lang="${isPl ? 'pl' : 'en'}">
+<html lang="${STRINGS[bundle.lang] ? bundle.lang : 'pl'}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -3347,7 +3608,7 @@ let baseModel=null, headModel=null, stream=null, loopTimer=null, busy=false;
 async function load(){
   headModel = await tf.loadLayersModel({load:async()=>({modelTopology:BUNDLE.classifier.modelTopology,weightSpecs:BUNDLE.classifier.weightSpecs,weightData:b64ToBuf(BUNDLE.classifier.weightData),format:BUNDLE.classifier.format})});
   baseModel = await tf.loadGraphModel({load:async()=>({modelTopology:BUNDLE.base.modelTopology,weightSpecs:BUNDLE.base.weightSpecs,weightData:b64ToBuf(BUNDLE.base.weightData),format:BUNDLE.base.format})});
-  document.getElementById('status').textContent='${isPl ? 'Gotowe — uruchom kamerę' : 'Ready — start the camera'}';
+  document.getElementById('status').textContent='${X.export_ready}';
   const b=document.getElementById('btn'); b.disabled=false;
   // Build bar rows.
   const bars=document.getElementById('bars');
@@ -3357,7 +3618,7 @@ function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 async function start(){
   try{
     stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-  }catch(e){ try{ stream=await navigator.mediaDevices.getUserMedia({video:true}); }catch(e2){ document.getElementById('status').textContent='${isPl ? 'Brak dostępu do kamery' : 'No camera access'}'; return; } }
+  }catch(e){ try{ stream=await navigator.mediaDevices.getUserMedia({video:true}); }catch(e2){ document.getElementById('status').textContent='${X.export_no_camera}'; return; } }
   const vid=document.getElementById('vid'); vid.srcObject=stream; await vid.play();
   document.getElementById('btn').style.display='none';
   startLoop();
@@ -3376,7 +3637,7 @@ async function predict(){
     try{ const f=baseModel.predict(t); const p=headModel.predict(f); probs=await p.data(); f.dispose(); p.dispose(); } finally { t.dispose(); }
     let max=0; for(let i=1;i<probs.length;i++) if(probs[i]>probs[max]) max=i;
     for(let i=0;i<LABELS.length;i++){ const pc=Math.round((probs[i]||0)*100); document.getElementById('pct'+i).textContent=pc+'%'; document.getElementById('fill'+i).style.width=pc+'%'; }
-    const r=document.getElementById('result'); r.textContent=esc(LABELS[max])+' '+Math.round(probs[max]*100)+'%'; r.style.color=COLORS[max]||'#e2e8f0';
+    const r=document.getElementById('result'); r.textContent=LABELS[max]+' '+Math.round(probs[max]*100)+'%'; r.style.color=COLORS[max]||'#e2e8f0';
   }catch(e){ /* frame not ready yet */ }
   finally{ busy=false; }
 }
@@ -3395,20 +3656,20 @@ function pickModelFiles(id) {
   const inp = document.getElementById('file-model-' + id);
   if (!inp) return;
   // The 'change' handler is registered once in initBlockAfterPlace. Do NOT also
-  // assign inp.onchange here — that made every file pick run tryLoadModelFiles
+  // assign inp.onchange here – that made every file pick run tryLoadModelFiles
   // twice concurrently (parsing the file and building two models).
   inp.click();
 }
 
 async function tryLoadModelFiles(id) {
   const inp = document.getElementById('file-model-' + id);
-  if (!inp || !inp.files.length) { log('warn', lang === 'pl' ? 'Wybierz plik modelu' : 'Select model file first'); return; }
+  if (!inp || !inp.files.length) { log('warn', t('warn_pick_model_file')); return; }
   const allFiles = Array.from(inp.files);
   const jsonFile = allFiles.find(f => f.name.endsWith('.json'));
   // Checked before the single-flight guard: an early return after
   // modelFileLoading = true (outside try/finally) left the guard stuck.
-  if (!jsonFile) { log('warn', 'No .json file selected'); return; }
-  if (modelFileLoading) { log('info', lang === 'pl' ? 'Model już się wczytuje...' : 'A model is already loading...'); return; }
+  if (!jsonFile) { log('warn', t('warn_no_json')); return; }
+  if (modelFileLoading) { log('info', t('info_model_loading')); return; }
   modelFileLoading = true;
   // Capture the models we may replace so we can free them once the new ones are
   // live. A model still referenced by fullModel (a trained head kept for saving)
@@ -3421,7 +3682,7 @@ async function tryLoadModelFiles(id) {
     const jsonText = await jsonFile.text();
     const parsed = JSON.parse(jsonText);
     if (parsed.base && parsed.classifier) {
-      // ── Bundled format (klocki-full-model.json) — contains base + classifier ──
+      // ── Bundled format (klocki-full-model.json) – contains base + classifier ──
       // Load both models from the single file; no CDN access needed.
       inferModel = await tf.loadLayersModel({
         load: async () => ({
@@ -3439,7 +3700,7 @@ async function tryLoadModelFiles(id) {
           format: parsed.base.format,
         })
       });
-      log('info', lang === 'pl' ? 'Model bazowy wczytany z pliku ✓' : 'Base model loaded from file ✓');
+      log('info', t('log_base_from_file'));
       processLoadedMeta(id, parsed.metadata || {});
     } else {
       // ── Legacy: separate classifier .json + .bin files ──
@@ -3448,20 +3709,18 @@ async function tryLoadModelFiles(id) {
       inferModel = await tf.loadLayersModel(tf.io.browserFiles(files));
       processLoadedMeta(id, parsed.userDefinedMetadata || {});
       if (!baseModel) {
-        log('warn', lang === 'pl'
-          ? 'Pamiętaj: załaduj też model bazowy (blok "Model bazowy" lub "Wczytaj z przeglądarki")'
-          : 'Remember: also load the base model (Pretrained Model block or Load from Browser)');
+        log('warn', t('warn_load_base_too'));
       }
     }
     disposeIfUnused(prevInfer, inferModel, fullModel);
     disposeIfUnused(prevBase, baseModel, fullModel);
     if (prevBase !== baseModel) disposeFeatureCache();
     setBlockStatus(document.getElementById(id), 'done');
-    log('success', t('log_upload_done', classNames.join(', ')));
-    modelSaved = true; // loaded from disk → already exists somewhere
+    log('success', t('log_upload_done', inferLabels().join(', ')));
+    modelSaved = true; // loaded from disk -> already exists somewhere
     evaluatePipelineState();
   } catch (err) {
-    log('error', 'Upload error: ' + err.message);
+    log('error', t('err_upload') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   } finally {
     modelFileLoading = false;
@@ -3480,29 +3739,27 @@ async function runLoadIDB(id) {
   const sel = document.getElementById('idb-select-' + id);
   const name = sel ? sel.value : '';
   if (!name) {
-    log('warn', lang === 'pl' ? 'Wybierz model z listy (kliknij ↺ aby odświeżyć)' : 'Select a model from the list (click ↺ to refresh)');
+    log('warn', t('warn_pick_from_list'));
     return;
   }
-  if (modelFileLoading) { log('info', lang === 'pl' ? 'Model już się wczytuje...' : 'A model is already loading...'); return; }
+  if (modelFileLoading) { log('info', t('info_model_loading')); return; }
   modelFileLoading = true;
   const prevInfer = inferModel;
   const prevBase = baseModel;
   setBlockStatus(document.getElementById(id), 'running');
-  log('step', 'Loading from IndexedDB: ' + name + '...');
+  log('step', t('log_idb_load', name));
   try {
     inferModel = await tf.loadLayersModel('indexeddb://ml-blocks-' + name);
     try {
       baseModel = await tf.loadGraphModel(BASE_MODEL_IDB_KEY);
-      log('info', lang === 'pl' ? 'Model bazowy wczytany z przeglądarki ✓' : 'Base model loaded from browser ✓');
+      log('info', t('log_base_from_browser'));
     } catch (_) {
       // Backward compat: older saves stored a backbone copy per model name.
       try {
         baseModel = await tf.loadGraphModel('indexeddb://ml-blocks-base-' + name);
-        log('info', lang === 'pl' ? 'Model bazowy wczytany z przeglądarki ✓' : 'Base model loaded from browser ✓');
+        log('info', t('log_base_from_browser'));
       } catch (_2) {
-        log('warn', lang === 'pl'
-          ? 'Brak modelu bazowego w przeglądarce — załaduj blok "Model bazowy" z CDN'
-          : 'Base model not in browser — load the Pretrained Model block from CDN');
+        log('warn', t('warn_base_not_in_browser'));
       }
     }
     const metaStr = localStorage.getItem('ml-blocks-meta-' + name) || localStorage.getItem('ml-blocks-meta');
@@ -3512,11 +3769,11 @@ async function runLoadIDB(id) {
     disposeIfUnused(prevBase, baseModel, fullModel);
     if (prevBase !== baseModel) disposeFeatureCache();
     setBlockStatus(document.getElementById(id), 'done');
-    log('success', t('log_upload_done', meta.classLabels ? meta.classLabels.join(', ') : '—'));
+    log('success', t('log_upload_done', meta.classLabels ? meta.classLabels.join(', ') : '–'));
     modelSaved = true;
     evaluatePipelineState();
   } catch (err) {
-    log('error', 'IDB load error: ' + err.message);
+    log('error', t('err_idb_load') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   } finally {
     modelFileLoading = false;
@@ -3551,21 +3808,15 @@ function processLoadedMeta(id, meta) {
       warn.classList.remove('show');
     }
   }
-  if (meta.classLabels) {
-    for (let i = 0; i < meta.classLabels.length; i++) {
-      classNames[i] = meta.classLabels[i];
-      // Keep classColors / capturedSamples aligned so a model with more classes
-      // than the current session doesn't render undefined-coloured result bars.
-      if (!classColors[i]) classColors[i] = CLASS_COLORS[i % CLASS_COLORS.length];
-      if (!capturedSamples[i]) capturedSamples[i] = [];
-    }
-  }
+  // The loaded labels are NOT written into classNames: the prediction UI reads
+  // them through inferLabels(), so a 2-label model in a 4-class session shows
+  // two classes there while the training side keeps its own four.
   const el = document.getElementById('meta-' + id);
   if (el) {
     el.innerHTML = `
-  <b>${t('lbl_classes')}:</b> ${classNames.map(escapeHtml).join(', ')}<br>
-  <b>${t('lbl_accuracy')}:</b> ${meta.trainingAccuracy ? (meta.trainingAccuracy * 100).toFixed(1) + '%' : '—'}<br>
-  <b>${t('lbl_timestamp')}:</b> ${meta.timestamp ? new Date(meta.timestamp).toLocaleString() : '—'}
+  <b>${t('lbl_classes')}:</b> ${inferLabels().map(escapeHtml).join(', ')}<br>
+  <b>${t('lbl_accuracy')}:</b> ${meta.trainingAccuracy ? (meta.trainingAccuracy * 100).toFixed(1) + '%' : '–'}<br>
+  <b>${t('lbl_timestamp')}:</b> ${meta.timestamp ? new Date(meta.timestamp).toLocaleString() : '–'}
 `;
   }
 }
@@ -3580,8 +3831,30 @@ let inferVideoEl = null;
 let predHistory = [];
 let frozenFrame = false;
 
+// Index of the largest value in an array / typed array (0 for an empty one).
+function argmax(arr) {
+  let m = 0;
+  for (let i = 1; i < arr.length; i++) if (arr[i] > arr[m]) m = i;
+  return m;
+}
+
+// Labels shown by the prediction-side UI (result line, bars, XAI). A model
+// trained this session follows the live class names, so renames propagate;
+// a model loaded from file/browser carries its own labels, which may be
+// fewer than the session's classes and must not be written into classNames
+// (that left phantom classes in the Labels block and confusion matrix).
+function inferLabels() {
+  const loaded = inferModel && inferModel !== fullModel;
+  const meta = inferMetadata;
+  if (loaded && meta && Array.isArray(meta.classLabels) && meta.classLabels.length) return meta.classLabels;
+  return classNames;
+}
+function inferColor(i) {
+  return classColors[i] || CLASS_COLORS[i % CLASS_COLORS.length];
+}
+
 // ===== ZERO-SHOT INFERENCE (FULL CLASSIFIER) =====
-// Uses MobileNetV3-Small's original 1001-class ImageNet softmax head — a real
+// Uses MobileNetV3-Small's original 1001-class ImageNet softmax head – a real
 // classifier, not feature-vector activations. Loaded lazily on first start so
 // users who never open the block don't pay the download cost.
 let zsStreams = {}; // id -> MediaStream
@@ -3589,7 +3862,8 @@ let zsIntervals = {}; // id -> setInterval handle
 let zeroShotModel = null;
 let zeroShotModelLoading = null;
 
-// Compact ImageNet top-1000 label list (first 100 for brevity — app loads full list lazily)
+// Full 1001-entry ImageNet label list (line 0 = background), fetched lazily on
+// the first zero-shot start; falls back to index strings when offline.
 const IMAGENET_LABELS_URL = 'https://storage.googleapis.com/download.tensorflow.org/data/ImageNetLabels.txt';
 let imagenetLabels = null;
 
@@ -3602,7 +3876,7 @@ async function loadImagenetLabels() {
     imagenetLabels = text.trim().split('\n');
     return imagenetLabels;
   } catch (e) {
-    // fallback — return index strings
+    // fallback – return index strings
     imagenetLabels = Array.from({ length: 1001 }, (_, i) => `class_${i}`);
     return imagenetLabels;
   }
@@ -3611,9 +3885,7 @@ async function loadImagenetLabels() {
 async function loadZeroShotModel(statusEl) {
   if (zeroShotModel) return zeroShotModel;
   if (zeroShotModelLoading) return zeroShotModelLoading;
-  log('step', lang === 'pl'
-    ? '\u0141adowanie pe\u0142nego klasyfikatora MobileNetV3 (1001 klas)...'
-    : 'Loading full MobileNetV3 classifier (1001 classes)...');
+  log('step', t('log_zs_loading'));
   zeroShotModelLoading = tf.loadGraphModel(CLASSIFIER_MODEL_URL, {
     onProgress: (frac) => {
       if (statusEl) statusEl.textContent = Math.round(frac * 100) + '%';
@@ -3621,9 +3893,7 @@ async function loadZeroShotModel(statusEl) {
   }).then(m => {
     zeroShotModel = m;
     zeroShotModelLoading = null;
-    log('success', lang === 'pl'
-      ? 'Klasyfikator zero-shot za\u0142adowany \u2713'
-      : 'Zero-shot classifier loaded \u2713');
+    log('success', t('log_zs_loaded'));
     return m;
   }).catch(err => {
     zeroShotModelLoading = null;
@@ -3640,7 +3910,7 @@ async function startZeroShot(id) {
   try {
     setBlockStatus(document.getElementById(id), 'running');
     if (!zeroShotModel) {
-      if (statusEl) statusEl.textContent = lang === 'pl' ? 'Pobieranie modelu...' : 'Downloading model...';
+      if (statusEl) statusEl.textContent = t('zs_downloading');
       await loadZeroShotModel(statusEl);
     }
     if (statusEl) statusEl.textContent = '';
@@ -3654,10 +3924,10 @@ async function startZeroShot(id) {
     const interval = fpsEl ? parseInt(fpsEl.value) : 200;
     if (zsIntervals[id]) clearInterval(zsIntervals[id]);
     zsIntervals[id] = setInterval(() => runZeroShot(id), interval);
-    log('success', lang === 'pl' ? 'Zero-shot uruchomiony' : 'Zero-shot started');
+    log('success', t('log_zs_started'));
   } catch (err) {
     if (statusEl) statusEl.textContent = err.message || '';
-    log('error', (lang === 'pl' ? 'B\u0142\u0105d zero-shot: ' : 'Zero-shot error: ') + err.message);
+    log('error', t('err_zs') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   } finally {
     cameraOpening['zs-' + id] = false;
@@ -3668,7 +3938,7 @@ function stopZeroShot(id) {
   if (zsIntervals[id]) { clearInterval(zsIntervals[id]); delete zsIntervals[id]; }
   if (zsStreams[id]) { zsStreams[id].getTracks().forEach(t => t.stop()); delete zsStreams[id]; }
   setBlockStatus(document.getElementById(id), 'idle');
-  log('info', lang === 'pl' ? 'Zero-shot zatrzymany' : 'Zero-shot stopped');
+  log('info', t('log_zs_stopped'));
 }
 
 // Top-5 result rows are built once per results element and patched per tick.
@@ -3711,7 +3981,7 @@ async function runZeroShot(id) {
   zsBusy[id] = true;
   const labels = imagenetLabels;
   // Declared outside try so a throw in predict/softmax/data() still frees them
-  // — this runs up to 10x/s, so a leak here compounds fast.
+  // – this runs up to 10x/s, so a leak here compounds fast.
   let tensor = null, logitsTensor = null, probsTensor = null;
   try {
     tensor = tf.tidy(() =>
@@ -3725,7 +3995,7 @@ async function runZeroShot(id) {
     logitsTensor = zeroShotModel.predict(tensor);
     probsTensor = tf.softmax(logitsTensor);
     const probs = await probsTensor.data();
-    // Partial top-5 selection — single linear pass instead of allocating
+    // Partial top-5 selection – single linear pass instead of allocating
     // 1001 wrapper objects + full sort every frame.
     const K = 5;
     const topV = new Float32Array(K).fill(-Infinity);
@@ -3751,7 +4021,7 @@ async function runZeroShot(id) {
         rows[k].fill.style.width = pct + '%';
       }
     }
-  } catch (e) { /* silent — frame may not be ready yet */ }
+  } catch (e) { /* silent – frame may not be ready yet */ }
   finally {
     if (tensor) tensor.dispose();
     if (logitsTensor) logitsTensor.dispose();
@@ -3765,7 +4035,7 @@ async function startInferCamera(id) {
   cameraOpening['infer'] = true;
   try {
     if (inferCameraStream) inferCameraStream.getTracks().forEach(t => t.stop());
-    // Clear any leftover freeze from a previous session — otherwise the
+    // Clear any leftover freeze from a previous session – otherwise the
     // inference loop early-returns forever and predictions never resume.
     frozenFrame = false;
     const stream = await getCameraStream();
@@ -3775,7 +4045,7 @@ async function startInferCamera(id) {
     if (vid) { vid.srcObject = inferCameraStream; vid.play().catch(() => {}); }
     inferVideoEl = vid;
     setBlockStatus(document.getElementById(id), 'running');
-    log('success', t('log_camera_start') + ' (inference)');
+    log('success', t('log_infer_camera_start'));
     // Start inference loop
     const fpsEl = document.getElementById('fps-' + id);
     const interval = fpsEl ? parseInt(fpsEl.value) : 100;
@@ -3793,9 +4063,15 @@ async function startInferCamera(id) {
 function stopInferCamera(id) {
   if (inferInterval) { clearInterval(inferInterval); inferInterval = null; }
   if (inferCameraStream) { inferCameraStream.getTracks().forEach(t => t.stop()); inferCameraStream = null; }
+  // Detach the dead stream from the <video> (mirrors removeBlock) so XAI cannot
+  // pick up a frozen last frame from a camera that is no longer running.
+  const vid = document.getElementById('vid-' + id);
+  if (vid) vid.srcObject = null;
+  if (inferVideoEl && inferVideoEl !== vid) inferVideoEl.srcObject = null;
+  inferVideoEl = null;
   frozenFrame = false;
   setBlockStatus(document.getElementById(id), 'idle');
-  log('info', 'Inference camera stopped');
+  log('info', t('log_infer_camera_stopped'));
   evaluatePipelineState();
 }
 
@@ -3809,7 +4085,8 @@ function ensurePredictBarsDOM(predictBlock, classCount, threshold) {
   if (!barsEl) return null;
 
   const thrPct = (threshold * 100).toFixed(1);
-  const thrLabel = lang === 'pl' ? 'próg' : 'threshold';
+  const thrLabel = t('lbl_threshold');
+  const labels = inferLabels();
 
   // Threshold marker line + per-class rows
   const frag = document.createDocumentFragment();
@@ -3831,8 +4108,8 @@ function ensurePredictBarsDOM(predictBlock, classCount, threshold) {
     lbl.className = 'pred-label';
     const name = document.createElement('span');
     name.style.fontWeight = '600';
-    name.style.color = classColors[i];
-    name.textContent = classNames[i];
+    name.style.color = inferColor(i);
+    name.textContent = labels[i];
     const pct = document.createElement('span');
     pct.style.color = 'var(--c-muted)';
     pct.textContent = '0.0%';
@@ -3843,7 +4120,7 @@ function ensurePredictBarsDOM(predictBlock, classCount, threshold) {
     track.className = 'pred-track';
     const fill = document.createElement('div');
     fill.className = 'pred-fill';
-    fill.style.background = classColors[i];
+    fill.style.background = inferColor(i);
     fill.style.width = '0%';
     track.appendChild(fill);
 
@@ -3865,9 +4142,10 @@ function updatePredictBars(ui, predictions, threshold) {
   if (newThrPct !== ui.thrPct) {
     ui.thrPct = newThrPct;
     ui.thrEl.style.setProperty('--thr', newThrPct + '%');
-    ui.thrSpan.textContent = `${lang === 'pl' ? 'próg' : 'threshold'} ${newThrPct}%`;
+    ui.thrSpan.textContent = `${t('lbl_threshold')} ${newThrPct}%`;
     for (const r of ui.rows) r.row.style.setProperty('--thr', newThrPct + '%');
   }
+  const labels = inferLabels();
   for (let i = 0; i < ui.rows.length; i++) {
     const p = predictions[i];
     const pctTxt = (p * 100).toFixed(1);
@@ -3875,11 +4153,11 @@ function updatePredictBars(ui, predictions, threshold) {
     r.fill.style.width = pctTxt + '%';
     r.fill.classList.toggle('below', p < threshold);
     r.pct.textContent = pctTxt + '%';
-    // Class names can change (rename) — keep label in sync cheaply.
-    if (r.name.textContent !== classNames[i]) {
-      r.name.textContent = classNames[i];
-      r.name.style.color = classColors[i];
-      r.fill.style.background = classColors[i];
+    // Class names can change (rename, model swap) - keep label in sync cheaply.
+    if (r.name.textContent !== labels[i]) {
+      r.name.textContent = labels[i];
+      r.name.style.color = inferColor(i);
+      r.fill.style.background = inferColor(i);
     }
   }
 }
@@ -3916,14 +4194,10 @@ async function runInference(camId) {
     predTensor = inferModel.predict(features);
     const predictions = await predTensor.data();
 
-    // argmax + confidence in one pass — avoids spread + indexOf.
-    let maxIdx = 0;
-    for (let i = 1; i < predictions.length; i++) {
-      if (predictions[i] > predictions[maxIdx]) maxIdx = i;
-    }
+    const maxIdx = argmax(predictions);
     const confidence = predictions[maxIdx];
 
-    // Update merged show-results block — patch DOM nodes built once.
+    // Update merged show-results block - patch DOM nodes built once.
     const predictBlock = blocksByType['show-results'];
     if (predictBlock) {
       const thresh = parseFloat(document.getElementById('thr-' + predictBlock.id)?.value || '0.7');
@@ -3932,12 +4206,12 @@ async function runInference(camId) {
       const result = document.getElementById('pred-result-' + predictBlock.id);
       if (result) {
         if (confidence >= thresh) {
-          result.textContent = `${classNames[maxIdx]} \u2014 ${(confidence * 100).toFixed(1)}%`;
-          result.style.color = classColors[maxIdx];
-          result.style.borderLeft = `4px solid ${classColors[maxIdx]}`;
+          result.textContent = `${inferLabels()[maxIdx]} – ${(confidence * 100).toFixed(1)}%`;
+          result.style.color = inferColor(maxIdx);
+          result.style.borderLeft = `4px solid ${inferColor(maxIdx)}`;
           result.style.fontStyle = '';
         } else {
-          result.textContent = lang === 'pl' ? 'poni\u017cej progu pewno\u015bci' : 'below confidence threshold';
+          result.textContent = t('pred_below_threshold');
           result.style.color = 'var(--c-muted)';
           result.style.borderLeft = '';
           result.style.fontStyle = 'italic';
@@ -3974,7 +4248,7 @@ async function runInference(camId) {
 
 // ===== XAI / HEATMAP GENERATOR =====
 // Method: occlusion sensitivity. For every patch in a grid, replace the patch
-// pixels with a BLURRED version of the same patch (not solid grey — grey
+// pixels with a BLURRED version of the same patch (not solid grey – grey
 // introduces synthetic edges the model never saw during training). Compare
 // the predicted class probability to the baseline; the drop is positive
 // evidence ("this region supports the answer"), the rise is negative evidence
@@ -3986,43 +4260,52 @@ let xaiRunning = false;
 function stopXAI(id) {
   if (!xaiRunning) return;
   xaiCancelled = true;
-  log('warn', lang === 'pl' ? 'Zatrzymywanie analizy XAI...' : 'Stopping XAI analysis...');
+  log('warn', t('log_xai_stopping'));
+}
+
+// Headline shared by the occlusion and saliency paths: what the model sees and
+// how sure it is, in plain language.
+function renderXAIHeadline(resultEl, baseClass, baseConf) {
+  if (!resultEl) return;
+  const lbl = inferLabels()[baseClass];
+  const pct = (baseConf * 100).toFixed(0);
+  const sure = baseConf >= 0.85 ? t('xai_sure_high') : baseConf >= 0.6 ? t('xai_sure_mid') : t('xai_sure_low');
+  resultEl.innerHTML = `<span style="color:${inferColor(baseClass)}">🔍 ${t('xai_sees')} „${escapeHtml(lbl)}" ${pct}%</span> <span style="font-weight:400;color:var(--c-muted);font-style:normal">(${sure})</span>`;
 }
 
 async function runXAI(id) {
   if (xaiRunning) return; // single-flight
   if (!inferModel) {
-    log('warn', lang === 'pl' ? 'Najpierw załaduj lub wytrenuj model!' : 'Load or train a model first!');
+    log('warn', t('warn_xai_no_model'));
     return;
   }
   if (!baseModel) {
-    log('error', lang === 'pl' ? 'Brak modelu bazowego! Załaduj blok "Model bazowy".' : 'Base model not loaded — load the Pretrained Model block first.');
+    log('error', t('err_xai_no_base'));
     return;
   }
 
   const resultEl = document.getElementById('xai-result-' + id);
-  if (resultEl) resultEl.innerHTML = lang === 'pl'
-    ? '<span style="color:var(--c-eval)">Analizuję... (nie ruszaj kamery)</span>'
-    : '<span style="color:var(--c-eval)">Analyzing... (keep camera still)</span>';
-
   const vid = inferVideoEl || document.querySelector('video[id^="vid-"]');
   if (!vid || !vid.srcObject) {
-    if (resultEl) resultEl.textContent = lang === 'pl' ? 'Uruchom "Kamera: Predykcja"' : 'Start "Camera: Prediction" first';
+    if (resultEl) resultEl.textContent = t('xai_start_camera');
     return;
   }
-
-  const detailEl = document.getElementById('xai-detail-' + id);
-  const detailText = document.getElementById('xai-detail-text-' + id);
-  const thumbCv = document.getElementById('xai-thumb-' + id);
-  const progEl = document.getElementById('xai-prog-' + id);
-  if (detailEl) detailEl.style.display = 'none';
-  if (progEl) { progEl.style.display = 'block'; progEl.value = 0; }
-
   const canvas = document.getElementById('xai-vid-' + id);
   const overlay = document.getElementById('xai-overlay-' + id);
   if (!canvas || !overlay) return;
 
+  // All guards passed: only now touch the progress bar, so an early return
+  // above cannot leave it visible at 0.
+  const detailEl = document.getElementById('xai-detail-' + id);
+  const detailText = document.getElementById('xai-detail-text-' + id);
+  const thumbCv = document.getElementById('xai-thumb-' + id);
+  const progEl = document.getElementById('xai-prog-' + id);
+  if (resultEl) resultEl.innerHTML = `<span style="color:var(--c-eval)">${t('xai_analyzing')}</span>`;
+  if (detailEl) detailEl.style.display = 'none';
+  if (progEl) { progEl.style.display = 'block'; progEl.value = 0; }
+
   const inputSize = (inferMetadata && inferMetadata.inputSize) || 224;
+  const labels = inferLabels();
   const block = document.getElementById(id);
   setBlockStatus(block, 'running');
   xaiRunning = true;
@@ -4077,12 +4360,12 @@ async function runXAI(id) {
     tInput.dispose();
     features.dispose();
     predTensor.dispose();
-    baseClass = Array.from(basePreds).reduce((best, v, i) => v > basePreds[best] ? i : best, 0);
+    baseClass = argmax(basePreds);
     baseConf = basePreds[baseClass];
   }
 
   // ── 3b. Method branch: saliency vs occlusion ──
-  // Saliency uses |grad of class score w.r.t. input pixels| — one forward +
+  // Saliency uses |grad of class score w.r.t. input pixels| – one forward +
   // one backward pass through both models. Much faster than occlusion when it
   // works, but TFJS GraphModels imported from Kaggle don't always support
   // backprop through every op. On failure we fall through to occlusion.
@@ -4095,9 +4378,7 @@ async function runXAI(id) {
       resultEl, detailEl, detailText, thumbCv, progEl, block
     });
     if (ok) return; // finally clause cleans up xaiRunning, etc.
-    log('warn', lang === 'pl'
-      ? 'Saliency niedostępny dla tego modelu — przełączam na okluzję'
-      : 'Saliency unavailable for this model — falling back to occlusion');
+    log('warn', t('warn_saliency_fallback'));
   }
 
   const patchSizeEl = document.getElementById('xai-patch-' + id);
@@ -4163,18 +4444,12 @@ async function runXAI(id) {
   renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY);
 
   // Find the most-supportive patch (largest positive importance)
-  let bestIdx = 0;
-  for (let i = 1; i < heatmap.length; i++) {
-    if (heatmap[i] > heatmap[bestIdx]) bestIdx = i;
-  }
+  const bestIdx = argmax(heatmap);
   const bestX = (bestIdx % gridW) * STRIDE;
   const bestY = Math.floor(bestIdx / gridW) * STRIDE;
   const bestDrop = heatmap[bestIdx];
   const counterPreds = patchPreds[bestIdx] || basePreds;
-  let counterClass = 0;
-  for (let i = 1; i < counterPreds.length; i++) {
-    if (counterPreds[i] > counterPreds[counterClass]) counterClass = i;
-  }
+  const counterClass = argmax(counterPreds);
 
   // Outline the single most-important region so "the model looked HERE" is
   // unmistakable, on top of the heatmap.
@@ -4182,16 +4457,8 @@ async function runXAI(id) {
     drawXAIFocusBox(overlay, bestX, bestY, PATCH_SIZE, scaleX, scaleY);
   }
 
-  const lbl = classNames[baseClass];
-  const pct = (baseConf * 100).toFixed(0);
   // Headline: clear plain-language statement of the decision + how sure.
-  if (resultEl) {
-    const sees = lang === 'pl' ? 'Model widzi' : 'The model sees';
-    const sure = baseConf >= 0.85 ? (lang === 'pl' ? 'jest pewny' : 'confident')
-      : baseConf >= 0.6 ? (lang === 'pl' ? 'raczej pewny' : 'fairly sure')
-      : (lang === 'pl' ? 'niepewny' : 'unsure');
-    resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">🔍 ${sees} „${escapeHtml(lbl)}" ${pct}%</span> <span style="font-weight:400;color:var(--c-muted);font-style:normal">(${sure})</span>`;
-  }
+  renderXAIHeadline(resultEl, baseClass, baseConf);
 
   if (thumbCv && bestDrop > 0.001) {
     thumbCv.width = 64; thumbCv.height = 64;
@@ -4201,20 +4468,13 @@ async function runXAI(id) {
   }
   if (detailEl && detailText && bestDrop > 0.001) {
     const dropPct = (bestDrop * 100).toFixed(0);
-    const counterLbl = classNames[counterClass];
-    const baseLbl = classNames[baseClass];
+    const counterLbl = labels[counterClass];
+    const baseLbl = labels[baseClass];
     // Plain-language "why": what it focused on (thumbnail beside), and what
     // would change its mind.
-    let txt;
-    if (counterClass !== baseClass) {
-      txt = lang === 'pl'
-        ? `Najważniejszy dowód to zaznaczony fragment (obok). Bez niego pewność „${baseLbl}" spada o ${dropPct} pkt i model uznałby to za „${counterLbl}".`
-        : `The key evidence is the highlighted patch (shown left). Without it, "${baseLbl}" confidence falls ${dropPct} points and the model would call this "${counterLbl}".`;
-    } else {
-      txt = lang === 'pl'
-        ? `Najważniejszy dowód to zaznaczony fragment (obok). Bez niego pewność „${baseLbl}" spada o ${dropPct} pkt.`
-        : `The key evidence is the highlighted patch (shown left). Without it, "${baseLbl}" confidence falls ${dropPct} points.`;
-    }
+    const txt = counterClass !== baseClass
+      ? t('xai_detail_counter', baseLbl, dropPct, counterLbl)
+      : t('xai_detail_same', baseLbl, dropPct);
     detailText.textContent = txt;
     detailEl.style.display = 'block';
     // Per-class delta breakdown for the most-important patch.
@@ -4232,11 +4492,11 @@ async function runXAI(id) {
         const arrow = deltaPP > 0.05 ? '&uarr;' : deltaPP < -0.05 ? '&darr;' : '&middot;';
         const color = deltaPP > 0.05 ? '#16A34A' : deltaPP < -0.05 ? '#DC2626' : '#94A3B8';
         rows.push(`<div class="xai-class-row">
-  <span class="xai-class-dot" style="background:${classColors[i]}"></span>
-  <span class="xai-class-name" title="${escapeHtml(classNames[i])}">${escapeHtml(classNames[i])}</span>
+  <span class="xai-class-dot" style="background:${inferColor(i)}"></span>
+  <span class="xai-class-name" title="${escapeHtml(labels[i])}">${escapeHtml(labels[i])}</span>
   <span class="xai-class-track">
     <span class="xai-bar-base" style="width:${(b*100).toFixed(1)}%"></span>
-    <span class="xai-bar-occ" style="width:${(o*100).toFixed(1)}%;background:${classColors[i]}"></span>
+    <span class="xai-bar-occ" style="width:${(o*100).toFixed(1)}%;background:${inferColor(i)}"></span>
   </span>
   <span class="xai-class-delta" style="color:${color}">${arrow}&nbsp;${Math.abs(deltaPP).toFixed(1)}pp</span>
 </div>`);
@@ -4245,15 +4505,15 @@ async function runXAI(id) {
     }
   }
 
-  log('eval', `XAI: "${classNames[baseClass]}" ${(baseConf * 100).toFixed(1)}% top patch drop=${(bestDrop * 100).toFixed(1)}pp${counterClass !== baseClass ? ' -> ' + classNames[counterClass] : ''}`);
+  log('eval', `XAI: "${labels[baseClass]}" ${(baseConf * 100).toFixed(1)}% top patch drop=${(bestDrop * 100).toFixed(1)}pp${counterClass !== baseClass ? ' -> ' + labels[counterClass] : ''}`);
   setBlockStatus(block, 'done');
   } catch (err) {
     if (err.message === 'cancelled') {
-      log('warn', 'XAI cancelled');
-      if (resultEl) resultEl.textContent = lang === 'pl' ? 'Przerwano' : 'Cancelled';
+      log('warn', t('log_xai_cancelled'));
+      if (resultEl) resultEl.textContent = t('xai_cancelled_short');
       setBlockStatus(block, 'idle');
     } else {
-      log('error', 'XAI error: ' + err.message);
+      log('error', t('err_xai') + err.message);
       console.error(err);
       setBlockStatus(block, 'error');
     }
@@ -4294,7 +4554,7 @@ function renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY
     if (a > maxAbs) maxAbs = a;
   }
 
-  // Dark vignette behind the colors — dims the image uniformly so the
+  // Dark vignette behind the colors – dims the image uniformly so the
   // red/blue regions stand out clearly even on bright video frames.
   octx.fillStyle = 'rgba(0,0,0,0.45)';
   octx.fillRect(0, 0, overlay.width, overlay.height);
@@ -4308,12 +4568,12 @@ function renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY
       const v = heatmap[y * gridW + x] / maxAbs;
       const mag = Math.abs(v);
       if (mag < 0.07) continue; // show more patches, suppress only near-zero
-      // Alpha scales from 0.50 at the cutoff to 1.0 at full magnitude —
+      // Alpha scales from 0.50 at the cutoff to 1.0 at full magnitude –
       // high-importance regions are fully opaque and unmissable.
       const alpha = 0.50 + mag * 0.50;
       octx.fillStyle = v > 0
-        ? `rgba(255,40,40,${alpha.toFixed(3)})`   // red — supports prediction
-        : `rgba(30,100,255,${alpha.toFixed(3)})`; // blue — distractor
+        ? `rgba(255,40,40,${alpha.toFixed(3)})`   // red – supports prediction
+        : `rgba(30,100,255,${alpha.toFixed(3)})`; // blue – distractor
       octx.fillRect(
         x * STRIDE * scaleX,
         y * STRIDE * scaleY,
@@ -4336,7 +4596,7 @@ async function runXAISaliency(p) {
   if (progEl) progEl.value = 30;
 
   // Compute |gradient of class score w.r.t. input| via tf.grad. The score is
-  // probs[baseClass] — taking just the predicted class, so the saliency
+  // probs[baseClass] – taking just the predicted class, so the saliency
   // answers "which input pixels most affect *this specific class's* output?".
   let saliency2D = null;
   try {
@@ -4380,7 +4640,7 @@ async function runXAISaliency(p) {
       for (let x = 0; x < inputSize; x++) {
         const v = Math.min(1, arr[y][x] / max);
         if (v < 0.04) continue; // skip noise floor
-        const alpha = Math.pow(v, 0.35); // gamma boost — weak gradients visible
+        const alpha = Math.pow(v, 0.35); // gamma boost – weak gradients visible
         const i = (y * inputSize + x) * 4;
         imgData.data[i]     = 255;
         imgData.data[i + 1] = 40;
@@ -4391,7 +4651,7 @@ async function runXAISaliency(p) {
     offCtx.putImageData(imgData, 0, 0);
     const octx = overlay.getContext('2d');
     octx.clearRect(0, 0, overlay.width, overlay.height);
-    // Dark base matches the occlusion heatmap style — dims the video so
+    // Dark base matches the occlusion heatmap style – dims the video so
     // the bright red saliency regions are immediately obvious.
     octx.fillStyle = 'rgba(0,0,0,0.45)';
     octx.fillRect(0, 0, overlay.width, overlay.height);
@@ -4401,15 +4661,7 @@ async function runXAISaliency(p) {
     octx.filter = 'none';
 
     // Headline result + thumbnail of the most-important region
-    if (resultEl) {
-      const lbl = classNames[baseClass];
-      const pct = (baseConf * 100).toFixed(0);
-      const sees = lang === 'pl' ? 'Model widzi' : 'The model sees';
-      const sure = baseConf >= 0.85 ? (lang === 'pl' ? 'jest pewny' : 'confident')
-        : baseConf >= 0.6 ? (lang === 'pl' ? 'raczej pewny' : 'fairly sure')
-        : (lang === 'pl' ? 'niepewny' : 'unsure');
-      resultEl.innerHTML = `<span style="color:${classColors[baseClass]}">🔍 ${sees} „${escapeHtml(lbl)}" ${pct}%</span> <span style="font-weight:400;color:var(--c-muted);font-style:normal">(${sure})</span>`;
-    }
+    renderXAIHeadline(resultEl, baseClass, baseConf);
     if (thumbCv) {
       const half = 32; // 64×64 thumb centred on hottest pixel
       const sx = Math.max(0, Math.min(inputSize - half * 2, argX - half));
@@ -4420,17 +4672,14 @@ async function runXAISaliency(p) {
       tctx.drawImage(canvas, sx, sy, half * 2, half * 2, 0, 0, 64, 64);
     }
     if (detailEl && detailText) {
-      const lbl = classNames[baseClass];
-      detailText.textContent = lang === 'pl'
-        ? `Podświetlone piksele najmocniej wpływają na decyzję „${lbl}" — to na nie model patrzył najbardziej.`
-        : `The highlighted pixels most affect the "${lbl}" decision — these are what the model paid the most attention to.`;
+      detailText.textContent = t('xai_saliency_detail', inferLabels()[baseClass]);
       detailEl.style.display = 'block';
-      // Saliency is a single-pass method — no per-class deltas. Hide the row.
+      // Saliency is a single-pass method – no per-class deltas. Hide the row.
       const classesEl = document.getElementById('xai-classes-' + p.id);
       if (classesEl) classesEl.innerHTML = '';
     }
     if (progEl) progEl.value = 100;
-    log('eval', `XAI saliency: "${classNames[baseClass]}" ${(baseConf * 100).toFixed(1)}% argmax=(${argX},${argY})`);
+    log('eval', `XAI saliency: "${inferLabels()[baseClass]}" ${(baseConf * 100).toFixed(1)}% argmax=(${argX},${argY})`);
     setBlockStatus(block, 'done');
     return true;
   } catch (err) {
@@ -4466,7 +4715,7 @@ function freezeFrame(id) {
     btn.setAttribute('aria-pressed', frozenFrame ? 'true' : 'false');
     btn.textContent = t(frozenFrame ? 'btn_unfreeze_frame' : 'btn_freeze_frame');
   }
-  log('info', frozenFrame ? '❄️ Frame frozen' : '▶ Resumed');
+  log('info', t(frozenFrame ? 'log_frame_frozen' : 'log_frame_resumed'));
 }
 
 // ===== FLOW BAR PHASE ACTIVATION =====
@@ -4479,12 +4728,12 @@ function clearFlowPhase() {
   document.querySelectorAll('.flow-pill').forEach(pill => pill.classList.remove('active'));
 }
 
-// One-click "save to browser" — usable from the post-train toast without the
+// One-click "save to browser" – usable from the post-train toast without the
 // user having to find the Save Model block. Reuses a placed block's name field
 // if present, otherwise a sensible default.
 async function quickSaveModel() {
   if (!fullModel || !baseModel) {
-    showToast(lang === 'pl' ? 'Brak wytrenowanego modelu do zapisania.' : 'No trained model to save.', 'warn', { duration: 3000 });
+    showToast(t('toast_no_model_to_save'), 'warn', { duration: 3000 });
     return;
   }
   const saveBlock = placedBlocks.find(b => b.type === 'save-model');
@@ -4502,14 +4751,14 @@ async function quickSaveModel() {
     if (saveBlock && saveBlock.card) setBlockStatus(saveBlock.card, 'done');
     evaluatePipelineState();
     log('success', t('log_save_idb'));
-    showToast(lang === 'pl' ? `Zapisano jako „${name}"` : `Saved as "${name}"`, 'success', { duration: 3000 });
+    showToast(t('toast_saved_as', name), 'success', { duration: 3000 });
   } catch (err) {
-    log('error', 'Save error: ' + err.message);
-    showToast((lang === 'pl' ? 'Błąd zapisu: ' : 'Save error: ') + err.message, 'error');
+    log('error', t('err_save') + err.message);
+    showToast(t('err_save') + err.message, 'error');
   }
 }
 
-// Show a "trained — now save" toast with a one-click Save action, and pulse the
+// Show a "trained – now save" toast with a one-click Save action, and pulse the
 // Save Model block if present.
 function notifyModelTrained() {
   const saveBlocks = placedBlocks.filter(b => b.type === 'save-model');
@@ -4520,11 +4769,11 @@ function notifyModelTrained() {
     }
   });
   showToast(
-    lang === 'pl' ? '✅ Model gotowy — zapisz go, zanim zamkniesz kartę!' : '✅ Model trained — save it before closing the tab!',
+    t('toast_model_trained'),
     'success',
     {
       duration: 9000,
-      actionLabel: lang === 'pl' ? '💾 Zapisz teraz' : '💾 Save now',
+      actionLabel: t('btn_save_now'),
       onAction: quickSaveModel
     }
   );
@@ -4532,8 +4781,8 @@ function notifyModelTrained() {
 
 // Lightweight bottom-right toast notifications. Multiple stack vertically.
 // Toast with optional action button(s). opts:
-//   { kind, duration, actionLabel, onAction }  — single action
-//   or { kind, duration, actions: [{label, onClick, primary}] } — multiple.
+//   { kind, duration, actionLabel, onAction }  – single action
+//   or { kind, duration, actions: [{label, onClick, primary}] } – multiple.
 // Clicking an action dismisses the toast and runs its handler.
 function showToast(text, kind, opts) {
   opts = opts || {};
@@ -4614,15 +4863,15 @@ function restoreFocus(el) {
   if (el && typeof el.focus === 'function' && document.contains(el)) el.focus();
 }
 
-// Promise-based confirm dialog — a non-blocking replacement for window.confirm()
+// Promise-based confirm dialog – a non-blocking replacement for window.confirm()
 // that matches the app's visual language and is bilingual. Resolves true/false.
 function uiConfirm(message, opts) {
   opts = opts || {};
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay confirm-overlay';
-    const okLabel = opts.okLabel || (lang === 'pl' ? 'Potwierdź' : 'Confirm');
-    const cancelLabel = opts.cancelLabel || (lang === 'pl' ? 'Anuluj' : 'Cancel');
+    const okLabel = opts.okLabel || t('btn_confirm');
+    const cancelLabel = opts.cancelLabel || t('btn_cancel');
     const box = document.createElement('div');
     box.className = 'modal-box confirm-box';
     box.setAttribute('role', 'dialog');
@@ -4670,7 +4919,6 @@ window.addEventListener('beforeunload', (e) => {
 // Pipeline-wide readiness evaluation. Sets the .done class on each phase pill
 // based on global pipeline state. Called from every mutation path so the
 // flowbar always reflects what the user has accomplished.
-let modelSaved = false;
 function evaluatePipelineState() {
   const hasData = capturedSamples.some(a => a && a.length > 0);
   const hasLabels = classNames.length >= 2 && classNames.every(n => (n || '').trim().length > 0);
@@ -4683,7 +4931,7 @@ function evaluatePipelineState() {
     deploy: modelSaved,
     infer: !!inferModel
   };
-  // Cached NodeList — set in DOMContentLoaded, reused on every state change.
+  // Cached NodeList – set in DOMContentLoaded, reused on every state change.
   const pills = _flowPillEls || (_flowPillEls = document.querySelectorAll('.flow-pill'));
   for (let i = 0; i < pills.length; i++) {
     const pill = pills[i];
@@ -4693,48 +4941,45 @@ function evaluatePipelineState() {
   if (typeof refreshAllPrereqStrips === 'function') refreshAllPrereqStrips();
   if (typeof refreshEmptyState === 'function') refreshEmptyState();
 }
-const BLOCK_PHASE_MAP = {
-  'camera-input': 'data', 'label-classes': 'label',
-  'prepare-data': 'prep', 'pretrained-model': 'model',
-  'train-model': 'train', 'save-model': 'deploy',
-  'upload-model': 'data', 'camera-infer': 'data',
-  'show-results': 'infer', 'evaluate': 'infer', 'deploy-export': 'deploy'
-};
 
 // ===== PIPELINE RUNNER =====
 async function runPipeline() {
   // Single-flight: a second Run while one is in flight would drive two prepares
   // and two trainings over the same shared state.
   if (pipelineRunning) {
-    log('warn', lang === 'pl' ? 'Pipeline już działa.' : 'Pipeline is already running.');
+    log('warn', t('warn_pipeline_running'));
     return;
   }
   pipelineRunning = true;
   try {
   // Run in canonical pipeline order (matches the connector lines and badges),
-  // not by physical x-position — so a block dropped anywhere still runs in the
+  // not by physical x-position – so a block dropped anywhere still runs in the
   // right order.
   const sorted = pipelineSorted();
-  log('step', '=== Pipeline Start ===');
+  log('step', t('log_pipeline_start'));
 
+  let completed = true;
   for (const b of sorted) {
     const id = b.id;
     // Activate flow bar phase
-    setFlowPhase(BLOCK_PHASE_MAP[b.type] || 'data');
+    setFlowPhase(blockMeta(b.type).phase);
     // Highlight the block (and the connector leading into it) that's running.
     const card = document.getElementById(id);
     if (card) card.classList.add('block-running');
     document.getElementById('pipeline-connectors')?.classList.add('pipe-active');
 
+    // Each runnable step reports success; a failed step stops the pipeline
+    // instead of letting the next step run on missing state.
+    let ok = true;
     switch (b.type) {
       case 'prepare-data':
-        await runPrepare(id);
+        ok = await runPrepare(id);
         break;
       case 'pretrained-model':
-        await runLoadBaseModel(id);
+        ok = await runLoadBaseModel(id);
         break;
       case 'train-model':
-        await runTraining(id);
+        ok = await runTraining(id);
         break;
     }
     if (card) card.classList.remove('block-running');
@@ -4743,13 +4988,17 @@ async function runPipeline() {
       const ann = document.getElementById('ann-' + id);
       if (ann) ann.textContent = getEduAnnotation(b.type) || '';
     }
+    if (!ok) {
+      log('warn', t('log_pipeline_stopped', blockTitle(b.type)));
+      completed = false;
+      break;
+    }
     await tf.nextFrame();
   }
-  clearFlowPhase();
-  document.getElementById('pipeline-connectors')?.classList.remove('pipe-active');
-  log('success', '=== Pipeline Done ===');
+  if (completed) log('success', t('log_pipeline_done'));
   } finally {
     pipelineRunning = false;
+    clearFlowPhase();
     document.querySelectorAll('.block-running').forEach(c => c.classList.remove('block-running'));
     document.getElementById('pipeline-connectors')?.classList.remove('pipe-active');
   }
@@ -4825,17 +5074,17 @@ function renderGuideSteps() {
   ).join('');
 }
 
-// ===== QUICK START — Pre-populate canvas =====
+// ===== QUICK START – Pre-populate canvas =====
 function quickStartTraining() {
   const types = ['camera-input', 'label-classes', 'prepare-data', 'pretrained-model', 'train-model', 'save-model'];
   types.forEach((type, i) => placeBlock(type, 16 + i * 296, 40));
-  log('step', lang === 'pl' ? 'Szybki start: bloki treningowe dodane!' : 'Quick start: training blocks placed!');
+  log('step', t('log_qs_train'));
 }
 
 function quickStartInference() {
   const types = ['upload-model', 'camera-infer', 'show-results'];
   types.forEach((type, i) => placeBlock(type, 16 + i * 296, 40));
-  log('step', lang === 'pl' ? 'Szybki start: bloki predykcji dodane!' : 'Quick start: inference blocks placed!');
+  log('step', t('log_qs_infer'));
 }
 
 // Toggle the empty-state placeholder when the canvas has zero blocks.
@@ -4846,23 +5095,18 @@ function refreshEmptyState() {
 }
 
 // ===== PIPELINE ORDER VISUALIZATION =====
-// Canonical pipeline order — matches the side panel top-to-bottom (training
+// Canonical pipeline order – matches the side panel top-to-bottom (training
 // then prediction). Order badges, connector lines AND the Run order all follow
 // this, so the flow is always logically correct no matter where a block is
 // dropped on the canvas. Blocks of the same rank fall back to left-to-right.
-const PIPELINE_ORDER = {
-  'camera-input': 0, 'label-classes': 1, 'prepare-data': 2, 'pretrained-model': 3,
-  'train-model': 4, 'save-model': 5, 'evaluate': 6, 'deploy-export': 7,
-  'upload-model': 8, 'camera-infer': 9, 'show-results': 10,
-  'zero-shot': 11, 'explain-ai': 12, 'model-explorer': 13
-};
+// Both come from BLOCK_META; unknown types sort last, into the prediction group.
 function pipelineRank(type) {
-  return (PIPELINE_ORDER[type] === undefined) ? 99 : PIPELINE_ORDER[type];
+  return blockMeta(type).rank;
 }
-// Two independent pipelines: training (ranks 0–7) and prediction (8+). Badges,
+// Two independent pipelines: training (0) and prediction (1). Badges,
 // connectors and the tidy layout treat them separately.
 function pipelineGroup(type) {
-  return pipelineRank(type) < 8 ? 0 : 1;
+  return blockMeta(type).group === 'train' ? 0 : 1;
 }
 // Blocks in canonical pipeline order (rank first, x as tiebreaker).
 function pipelineSorted() {
@@ -4899,7 +5143,7 @@ function tidyUpCanvas() {
   if (!placedBlocks.length) return;
   const canvas = document.getElementById('canvas');
   const COL_W = 300, START_X = 16, START_Y = 24, ROW_GAP = 28, GROUP_GAP = 56;
-  // How many columns fit in the visible canvas — wrap so a long pipeline never
+  // How many columns fit in the visible canvas – wrap so a long pipeline never
   // forces horizontal scrolling.
   const avail = (canvas ? canvas.clientWidth : 1200) - START_X;
   const cols = Math.max(1, Math.floor(avail / COL_W));
@@ -4932,7 +5176,7 @@ function tidyUpCanvas() {
   layoutGrid(infer, train.length ? trainBottom + GROUP_GAP : START_Y);
   persistCanvasState();
   updatePipelineOrder();
-  showToast(lang === 'pl' ? 'Uporządkowano bloki' : 'Blocks tidied up', 'info', { duration: 2500 });
+  showToast(t('toast_tidied'), 'info', { duration: 2500 });
 }
 
 function drawPipelineConnectors(sorted) {
@@ -4955,7 +5199,7 @@ function drawPipelineConnectors(sorted) {
   let paths = '';
   const HEADER_MID = 24;
   for (let i = 0; i < sorted.length - 1; i++) {
-    // Training and prediction are separate pipelines — don't draw a line from
+    // Training and prediction are separate pipelines – don't draw a line from
     // the last training block to the first prediction block.
     if (pipelineGroup(sorted[i].type) !== pipelineGroup(sorted[i + 1].type)) continue;
     const a = document.getElementById(sorted[i].id);
@@ -4984,7 +5228,7 @@ function drawPipelineConnectors(sorted) {
 }
 
 // ===== EDU MODE =====
-// (CSS class applied on DOMContentLoaded — document.body may not exist yet
+// (CSS class applied on DOMContentLoaded – document.body may not exist yet
 //  if this script runs before <body>.)
 
 // ===== INIT =====
@@ -5013,7 +5257,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.addEventListener('keydown', handleGlobalShortcut);
 
-  // Quick start if EDU mode — but ONLY when the canvas is empty. restoreCanvasState()
+  // Quick start if EDU mode – but ONLY when the canvas is empty. restoreCanvasState()
   // above may have already rebuilt a saved pipeline; adding another one on every
   // reload made the block count grow without bound (6 → 12 → 18 …).
   if (eduMode && placedBlocks.length === 0) {
@@ -5026,7 +5270,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(showGuide, 600);
   }
 
-  log('step', lang === 'pl' ? 'KlockiAI gotowy — przeciągnij bloki na tablicę!' : 'KlockiAI ready — drag blocks onto the canvas!');
+  log('step', t('log_ready'));
   log('info', 'TensorFlow.js ' + (tf.version?.tfjs || tf.version || ''));
   // Wait for TF.js to fully initialize WebGL backend before reading it
   tf.ready().then(() => {

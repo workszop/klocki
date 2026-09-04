@@ -368,7 +368,7 @@ select {
   background-attachment: local
 }
 
-/* Pipeline connector layer — painted behind the block cards. */
+/* Pipeline connector layer – painted behind the block cards. */
 #pipeline-connectors {
   position: absolute;
   top: 0;
@@ -1509,7 +1509,7 @@ canvas.chart-canvas {
 }
 
 /* Small screens: the three fixed-width panels (sidebar 260 + canvas + log 320)
-   don't fit side by side, and everything is overflow:hidden — so on a phone the
+   don't fit side by side, and everything is overflow:hidden – so on a phone the
    canvas collapses to nothing and the log panel is pushed off-screen with no way
    to reach it. Stack the workspace vertically and let the page scroll instead. */
 @media(max-width:860px) {
@@ -1536,7 +1536,7 @@ canvas.chart-canvas {
     height: 180px;
     flex-shrink: 0
   }
-  /* Log panel is now below the canvas, not to its right — pin the trash zone
+  /* Log panel is now below the canvas, not to its right – pin the trash zone
      to the true bottom-right corner. */
   #trash-zone {
     right: 16px
@@ -1619,7 +1619,7 @@ canvas.chart-canvas {
   opacity: .65
 }
 
-/* Position the text at the threshold via padding-left calc — keeps it readable
+/* Position the text at the threshold via padding-left calc – keeps it readable
    on narrow blocks even when threshold is at extremes. */
 .pred-thr-label > span {
   position: absolute;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MobileNet V3 Small — Architecture Explorer</title>
+    <title>MobileNet V3 Small – Architecture Explorer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -24,6 +24,10 @@
             --radius-lg: 12px;
             --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
             --transition: 150ms ease;
+            /* Explicit top-bar height: the sticky panel offsets below derive from
+               it, so the bar and the layout can never disagree (the old
+               hardcoded 65px left the bottom of the left panel unreachable). */
+            --topbar-h: 80px;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -40,8 +44,9 @@
         ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 10px; }
         /* LAYOUT */
         .top-bar {
+            height: var(--topbar-h);
             border-bottom: 1px solid var(--border);
-            padding: 18px 32px;
+            padding: 0 32px;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -74,14 +79,14 @@
         .status-dot.ready { background: #10b981; }
         .status-dot.error { background: #ef4444; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-        .main { display: grid; grid-template-columns: 380px 1fr; min-height: calc(100vh - 65px); }
+        .main { display: grid; grid-template-columns: 380px 1fr; min-height: calc(100vh - var(--topbar-h)); }
         /* LEFT PANEL */
         .left-panel {
             border-right: 1px solid var(--border);
             overflow-y: auto;
-            height: calc(100vh - 65px);
+            height: calc(100vh - var(--topbar-h));
             position: sticky;
-            top: 65px;
+            top: var(--topbar-h);
         }
         .panel-section { padding: 24px; border-bottom: 1px solid var(--border); }
         .panel-title {
@@ -113,7 +118,7 @@
             position: relative;
         }
         .progress-wrap.visible { display: block; }
-        /* Indeterminate shimmer — no fake percentage */
+        /* Indeterminate shimmer - no fake percentage */
         .progress-bar {
             height: 100%;
             background: var(--accent);
@@ -370,15 +375,15 @@
             <div class="panel-title" data-i18n="p_stats">Model Stats</div>
             <div class="stat-grid">
                 <div class="stat-card">
-                    <div class="stat-value" id="stat-params">—</div>
+                    <div class="stat-value" id="stat-params">–</div>
                     <div class="stat-label" data-i18n="s_params">Parameters</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="stat-layers">—</div>
+                    <div class="stat-value" id="stat-layers">–</div>
                     <div class="stat-label" data-i18n="s_layers">Layers</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="stat-input">—</div>
+                    <div class="stat-value" id="stat-input">–</div>
                     <div class="stat-label" data-i18n="s_input">Input Size</div>
                 </div>
                 <div class="stat-card">
@@ -399,11 +404,11 @@
             <div class="panel-title" data-i18n="p_perf">Performance</div>
             <div class="stat-grid">
                 <div class="stat-card">
-                    <div class="stat-value" id="stat-time">—</div>
+                    <div class="stat-value" id="stat-time">–</div>
                     <div class="stat-label" data-i18n="s_time">Inference (ms)</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="stat-backend">—</div>
+                    <div class="stat-value" id="stat-backend">–</div>
                     <div class="stat-label" data-i18n="s_backend">Backend</div>
                 </div>
             </div>
@@ -423,10 +428,10 @@
                 <h3>MobileNet V3 Small</h3>
                 <p data-i18n="mi_desc">Optimized for mobile/edge inference using Neural Architecture Search (NAS) + NetAdapt. Features hard-swish activation, squeeze-and-excitation modules, and depthwise separable convolutions.</p>
                 <div class="model-info-stats">
-                    <div><strong>2.5M</strong>Parameters</div>
-                    <div><strong>~6MB</strong>Download</div>
-                    <div><strong>224×224</strong>Input</div>
-                    <div><strong>67.4%</strong>Top-1 Acc.</div>
+                    <div><strong>2.5M</strong><span data-i18n="mi_params">Parameters</span></div>
+                    <div><strong>~6MB</strong><span data-i18n="mi_download">Download</span></div>
+                    <div><strong>224×224</strong><span data-i18n="mi_input">Input</span></div>
+                    <div><strong>67.4%</strong><span data-i18n="mi_top1">Top-1 Acc.</span></div>
                 </div>
             </div>
             <div class="section-header">
@@ -439,7 +444,7 @@
                 </div>
             </div>
             <div class="detail-panel" id="detail-panel" style="display:none">
-                <div class="detail-title" id="detail-title">Layer Details</div>
+                <div class="detail-title" id="detail-title" data-i18n="detail_title">Layer Details</div>
                 <div class="detail-grid" id="detail-grid"></div>
                 <div style="margin-top:12px;font-size:12px;color:var(--text-body)" id="detail-desc"></div>
             </div>
@@ -456,8 +461,8 @@
                         <rect width="18" height="18" x="3" y="3" rx="2"/>
                         <circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
                     </svg>
-                    <h3>No feature maps yet</h3>
-                    <p>Load the model and run inference on an image to visualize intermediate activations.</p>
+                    <h3 data-i18n="fm_empty_title">No feature maps yet</h3>
+                    <p data-i18n="fm_empty_text">Load the model and run inference on an image to visualize intermediate activations.</p>
                 </div>
             </div>
         </div>
@@ -465,42 +470,42 @@
         <div id="tab-about" class="tab-content">
             <div class="section-header">
                 <h2 data-i18n="h_about">About MobileNet V3</h2>
-                <p>A deep dive into the design decisions behind this efficient architecture.</p>
+                <p data-i18n="about_sub">A deep dive into the design decisions behind this efficient architecture.</p>
             </div>
             <div style="display:grid;gap:20px">
                 <div class="detail-panel" style="display:block">
-                    <div class="detail-title">Key Innovations</div>
+                    <div class="detail-title" data-i18n="about_innov_title">Key Innovations</div>
                     <div style="font-size:13px;color:var(--text-body);line-height:1.8">
-                        <p style="margin-bottom:8px"><strong style="color:var(--text-heading)">Depthwise Separable Convolutions</strong> — Factorizes standard conv into depthwise + pointwise, reducing computation by ~8–9×.</p>
-                        <p style="margin-bottom:8px"><strong style="color:var(--text-heading)">Inverted Residuals (Bottleneck)</strong> — Expands channels, applies depthwise conv, then projects back down. Residual connects the narrow ends.</p>
-                        <p style="margin-bottom:8px"><strong style="color:var(--text-heading)">Squeeze-and-Excitation (SE)</strong> — Recalibrates channel-wise feature responses by modeling inter-channel dependencies.</p>
-                        <p style="margin-bottom:8px"><strong style="color:var(--text-heading)">Hard-Swish Activation</strong> — Approximation of swish (x·σ(x)) that's computationally cheaper: x · ReLU6(x+3)/6.</p>
-                        <p><strong style="color:var(--text-heading)">Neural Architecture Search</strong> — Backbone found by NAS; final layers refined by NetAdapt to balance accuracy vs latency.</p>
+                        <p style="margin-bottom:8px" data-i18n="about_innov_1"><strong style="color:var(--text-heading)">Depthwise Separable Convolutions</strong> – Factorizes standard conv into depthwise + pointwise, reducing computation by ~8–9×.</p>
+                        <p style="margin-bottom:8px" data-i18n="about_innov_2"><strong style="color:var(--text-heading)">Inverted Residuals (Bottleneck)</strong> – Expands channels, applies depthwise conv, then projects back down. Residual connects the narrow ends.</p>
+                        <p style="margin-bottom:8px" data-i18n="about_innov_3"><strong style="color:var(--text-heading)">Squeeze-and-Excitation (SE)</strong> – Recalibrates channel-wise feature responses by modeling inter-channel dependencies.</p>
+                        <p style="margin-bottom:8px" data-i18n="about_innov_4"><strong style="color:var(--text-heading)">Hard-Swish Activation</strong> – Approximation of swish (x·σ(x)) that's computationally cheaper: x · ReLU6(x+3)/6.</p>
+                        <p data-i18n="about_innov_5"><strong style="color:var(--text-heading)">Neural Architecture Search</strong> – Backbone found by NAS; final layers refined by NetAdapt to balance accuracy vs latency.</p>
                     </div>
                 </div>
                 <div class="detail-panel" style="display:block">
-                    <div class="detail-title">Architecture Notation</div>
+                    <div class="detail-title" data-i18n="about_notation_title">Architecture Notation</div>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px">
-                        <span class="badge" style="background:#dbeafe;color:#1e40af">INPUT — RGB image 224×224</span>
-                        <span class="badge" style="background:#fce7f3;color:#9d174d">STEM — Initial conv+BN+act</span>
-                        <span class="badge" style="background:#d1fae5;color:#065f46">BNECK — Bottleneck block</span>
-                        <span class="badge" style="background:#ede9fe;color:#4c1d95">SE — Squeeze &amp; Excitation</span>
-                        <span class="badge" style="background:#fef3c7;color:#78350f">HEAD — Classifier head</span>
-                        <span class="badge" style="background:#fee2e2;color:#991b1b">OUTPUT — 1000 class logits</span>
+                        <span class="badge" style="background:#dbeafe;color:#1e40af" data-i18n="badge_input">INPUT – RGB image 224×224</span>
+                        <span class="badge" style="background:#fce7f3;color:#9d174d" data-i18n="badge_stem">STEM – Initial conv+BN+act</span>
+                        <span class="badge" style="background:#d1fae5;color:#065f46" data-i18n="badge_bneck">BNECK – Bottleneck block</span>
+                        <span class="badge" style="background:#ede9fe;color:#4c1d95" data-i18n="badge_se">SE – Squeeze &amp; Excitation</span>
+                        <span class="badge" style="background:#fef3c7;color:#78350f" data-i18n="badge_head">HEAD – Classifier head</span>
+                        <span class="badge" style="background:#fee2e2;color:#991b1b" data-i18n="badge_output">OUTPUT – 1000 class logits</span>
                     </div>
                     <div style="margin-top:12px;font-size:12px;color:var(--text-body)">
-                        <p><strong>exp</strong> = expansion factor | <strong>k</strong> = kernel size | <strong>s</strong> = stride | <strong>SE</strong> = has squeeze-excitation | <strong>HS</strong> = hard-swish activation</p>
+                        <p data-i18n="about_legend"><strong>exp</strong> = expansion factor | <strong>k</strong> = kernel size | <strong>s</strong> = stride | <strong>SE</strong> = has squeeze-excitation | <strong>HS</strong> = hard-swish activation</p>
                     </div>
                 </div>
                 <div class="detail-panel" style="display:block">
-                    <div class="detail-title">Comparison</div>
+                    <div class="detail-title" data-i18n="about_cmp_title">Comparison</div>
                     <table style="width:100%;border-collapse:collapse;font-size:13px">
                         <thead>
                             <tr style="background:var(--bg-section)">
-                                <th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em">Model</th>
-                                <th style="padding:10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.05em">Top-1</th>
-                                <th style="padding:10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.05em">Params</th>
-                                <th style="padding:10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.05em">MAdds</th>
+                                <th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em" data-i18n="cmp_model">Model</th>
+                                <th style="padding:10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.05em" data-i18n="cmp_top1">Top-1</th>
+                                <th style="padding:10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.05em" data-i18n="cmp_params">Params</th>
+                                <th style="padding:10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.05em" data-i18n="cmp_madds">MAdds</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -526,7 +531,7 @@
 // MobileNet V3 Small Architecture Definition
 // =====================================================================
 const ARCH = [
-    { id: 'input',  type: 'input',  tag: 'INPUT',  name: 'RGB Image',        detail: '3 channels, normalized [0,1]',         shape: '224×224×3',  params: '—',         desc: 'Input image normalized to [0,1]. MobileNet V3 expects 224×224 RGB.' },
+    { id: 'input',  type: 'input',  tag: 'INPUT',  name: 'RGB Image',        detail: '3 channels, normalized [0,1]',         shape: '224×224×3',  params: '–',         desc: 'Input image normalized to [0,1]. MobileNet V3 expects 224×224 RGB.' },
     { id: 'stem',   type: 'stem',   tag: 'STEM',   name: 'Conv2D + BN + HS', detail: '16 filters, 3×3, stride 2',            shape: '112×112×16', params: '928',       desc: 'Stem conv: 3×3 with 16 output channels, stride 2, BatchNorm, hard-swish. Halves spatial dimensions.' },
     { id: 'b1',     type: 'bneck',  tag: 'BNECK',  name: 'Bottleneck 1',     detail: 'exp=1, k=3×3, s=2, ReLU, SE',         shape: '56×56×16',   params: '608',       desc: 'Inverted residual. Expansion=1 (no expansion), stride 2, ReLU, with Squeeze-and-Excitation.' },
     { id: 'b2',     type: 'bneck',  tag: 'BNECK',  name: 'Bottleneck 2',     detail: 'exp=4.5, k=3×3, s=2, ReLU',           shape: '28×28×24',   params: '3,864',     desc: 'Expansion 4.5, stride 2, ReLU, no SE. Output grows to 24ch.' },
@@ -546,62 +551,136 @@ const ARCH = [
 ];
 const TAG_CLASSES = { input:'tag-input', stem:'tag-stem', bneck:'tag-bneck', head:'tag-head', output:'tag-output' };
 // Escape strings interpolated into innerHTML (label text comes from an external
-// list — escape it defensively).
+// list – escape it defensively).
 function escapeHtmlX(s) {
     return String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 // =====================================================================
-// i18n — shares the 'ml-blocks-lang' key with the main KlockiAI app.
+// i18n – shares the 'ml-blocks-lang' key with the main KlockiAI app.
 // =====================================================================
+// Values may be HTML (the About tab keeps its <strong> markup) or functions of
+// runtime arguments, like STRINGS in app.js.
 const STRINGS_EXP = {
     en: {
+        title_page: 'MobileNet V3 Small – Architecture Explorer',
         sub: 'Architecture Explorer & Live Inference',
         p_model: 'Model', p_image: 'Image Input', p_stats: 'Model Stats', p_pred: 'Predictions', p_perf: 'Performance',
         btn_load: 'Load MobileNet V3 Small', btn_run: 'Run Inference', btn_demo: 'Use Sample Image',
+        btn_loading: 'Loading…', btn_loaded: 'Model Loaded', btn_retry: 'Retry Load', btn_running: 'Running…',
         up_text: 'Drop image or click to browse', up_hint: 'PNG, JPG, WebP supported',
         s_params: 'Parameters', s_layers: 'Layers', s_input: 'Input Size', s_classes: 'Classes', s_time: 'Inference (ms)', s_backend: 'Backend',
         pred_empty: 'Run inference to see results',
         tab_arch: 'Architecture', tab_feat: 'Feature Maps', tab_about: 'About',
         mi_desc: 'Optimized for mobile/edge inference using Neural Architecture Search (NAS) + NetAdapt. Features hard-swish activation, squeeze-and-excitation modules, and depthwise separable convolutions.',
+        mi_params: 'Parameters', mi_download: 'Download', mi_input: 'Input', mi_top1: 'Top-1 Acc.',
         h_layers: 'Layer Architecture', h_layers_sub: 'Click any layer to see details. Showing the complete MobileNet V3 Small block structure.',
+        detail_title: 'Layer Details',
+        d_type: 'Type', d_shape: 'Output Shape', d_params: 'Parameters', d_op: 'Operation',
+        rt_params: (p) => `${p} params`,
         h_feat: 'Feature Map Visualization',
+        h_feat_sub: 'A <strong>schematic</strong> of how spatial detail collapses as depth increases, plus the model\'s <strong>real</strong> 1024-dim embedding at the bottom. The per-stage grids are illustrative (the graph model doesn\'t expose named intermediate tensors); the final embedding is a genuine forward pass. Load a model and run inference to populate.',
+        fm_empty_title: 'No feature maps yet',
+        fm_empty_text: 'Load the model and run inference on an image to visualize intermediate activations.',
+        rt_extracting: 'Extracting feature maps…',
+        rt_more: (n) => `+${n} more`,
+        rt_channels: (c, h, w) => `${c} channels · ${h}×${w} spatial · schematic`,
+        rt_emb_title: 'Final Embedding (real pretrained activations)',
+        rt_emb_sub: '1024-dim feature vector',
+        rt_emb_note: 'Each pixel = one embedding dimension. Color = activation strength.',
+        rt_error: 'Error: ', rt_fm_error: 'Feature map error: ',
         h_about: 'About MobileNet V3',
-        st_notloaded: 'Not loaded', st_loading: 'Downloading model…', st_ready: 'Model ready', st_ready2: 'Ready — start the camera', st_fail: 'Load failed',
+        about_sub: 'A deep dive into the design decisions behind this efficient architecture.',
+        about_innov_title: 'Key Innovations',
+        about_innov_1: '<strong style="color:var(--text-heading)">Depthwise Separable Convolutions</strong> – Factorizes standard conv into depthwise + pointwise, reducing computation by ~8–9×.',
+        about_innov_2: '<strong style="color:var(--text-heading)">Inverted Residuals (Bottleneck)</strong> – Expands channels, applies depthwise conv, then projects back down. Residual connects the narrow ends.',
+        about_innov_3: '<strong style="color:var(--text-heading)">Squeeze-and-Excitation (SE)</strong> – Recalibrates channel-wise feature responses by modeling inter-channel dependencies.',
+        about_innov_4: '<strong style="color:var(--text-heading)">Hard-Swish Activation</strong> – Approximation of swish (x·σ(x)) that\'s computationally cheaper: x · ReLU6(x+3)/6.',
+        about_innov_5: '<strong style="color:var(--text-heading)">Neural Architecture Search</strong> – Backbone found by NAS; final layers refined by NetAdapt to balance accuracy vs latency.',
+        about_notation_title: 'Architecture Notation',
+        badge_input: 'INPUT – RGB image 224×224', badge_stem: 'STEM – Initial conv+BN+act', badge_bneck: 'BNECK – Bottleneck block',
+        badge_se: 'SE – Squeeze &amp; Excitation', badge_head: 'HEAD – Classifier head', badge_output: 'OUTPUT – 1000 class logits',
+        about_legend: '<strong>exp</strong> = expansion factor | <strong>k</strong> = kernel size | <strong>s</strong> = stride | <strong>SE</strong> = has squeeze-excitation | <strong>HS</strong> = hard-swish activation',
+        about_cmp_title: 'Comparison',
+        cmp_model: 'Model', cmp_top1: 'Top-1', cmp_params: 'Params', cmp_madds: 'MAdds',
+        st_notloaded: 'Not loaded', st_loading: 'Downloading model…', st_ready: 'Model ready', st_fail: 'Load failed',
         dl_weights: 'Downloading weights (~6 MB), please wait…', dl_ready: 'Model ready!'
     },
     pl: {
+        title_page: 'MobileNet V3 Small – Eksplorator architektury',
         sub: 'Eksplorator architektury i predykcja na żywo',
         p_model: 'Model', p_image: 'Obraz wejściowy', p_stats: 'Statystyki modelu', p_pred: 'Predykcje', p_perf: 'Wydajność',
         btn_load: 'Załaduj MobileNet V3 Small', btn_run: 'Uruchom predykcję', btn_demo: 'Użyj przykładowego obrazu',
+        btn_loading: 'Ładowanie…', btn_loaded: 'Model załadowany', btn_retry: 'Spróbuj ponownie', btn_running: 'Przetwarzanie…',
         up_text: 'Upuść obraz lub kliknij, aby wybrać', up_hint: 'Obsługa PNG, JPG, WebP',
         s_params: 'Parametry', s_layers: 'Warstwy', s_input: 'Rozmiar wejścia', s_classes: 'Klasy', s_time: 'Predykcja (ms)', s_backend: 'Backend',
         pred_empty: 'Uruchom predykcję, aby zobaczyć wyniki',
         tab_arch: 'Architektura', tab_feat: 'Mapy cech', tab_about: 'O modelu',
         mi_desc: 'Zoptymalizowany do inferencji na urządzeniach mobilnych dzięki Neural Architecture Search (NAS) + NetAdapt. Wykorzystuje hard-swish, moduły squeeze-and-excitation i separowalne konwolucje głębokościowe.',
+        mi_params: 'Parametry', mi_download: 'Pobieranie', mi_input: 'Wejście', mi_top1: 'Dokł. Top-1',
         h_layers: 'Architektura warstw', h_layers_sub: 'Kliknij warstwę, aby zobaczyć szczegóły. Pokazano pełną strukturę bloków MobileNet V3 Small.',
+        detail_title: 'Szczegóły warstwy',
+        d_type: 'Typ', d_shape: 'Kształt wyjścia', d_params: 'Parametry', d_op: 'Operacja',
+        rt_params: (p) => `${p} param.`,
         h_feat: 'Wizualizacja map cech',
+        h_feat_sub: '<strong>Schemat</strong> tego, jak szczegóły przestrzenne zanikają wraz z głębokością sieci, oraz <strong>prawdziwe</strong> 1024-wymiarowe osadzenie modelu na dole. Siatki poszczególnych etapów są poglądowe (model grafowy nie udostępnia nazwanych tensorów pośrednich); końcowe osadzenie pochodzi z rzeczywistego przejścia przez sieć. Załaduj model i uruchom predykcję, aby je wypełnić.',
+        fm_empty_title: 'Brak map cech',
+        fm_empty_text: 'Załaduj model i uruchom predykcję na obrazie, aby zobaczyć pośrednie aktywacje.',
+        rt_extracting: 'Wyodrębnianie map cech…',
+        rt_more: (n) => `+${n} więcej`,
+        rt_channels: (c, h, w) => `${c} kanałów · ${h}×${w} przestrzennie · schemat`,
+        rt_emb_title: 'Końcowe osadzenie (prawdziwe aktywacje wytrenowanego modelu)',
+        rt_emb_sub: 'wektor cech 1024-wym.',
+        rt_emb_note: 'Każdy piksel = jeden wymiar osadzenia. Kolor = siła aktywacji.',
+        rt_error: 'Błąd: ', rt_fm_error: 'Błąd map cech: ',
         h_about: 'O modelu MobileNet V3',
-        st_notloaded: 'Nie załadowano', st_loading: 'Pobieranie modelu…', st_ready: 'Model gotowy', st_ready2: 'Gotowe — uruchom kamerę', st_fail: 'Błąd ładowania',
+        about_sub: 'Dokładne omówienie decyzji projektowych stojących za tą wydajną architekturą.',
+        about_innov_title: 'Najważniejsze innowacje',
+        about_innov_1: '<strong style="color:var(--text-heading)">Separowalne konwolucje głębokościowe</strong> – rozbijają standardową konwolucję na głębokościową + punktową, zmniejszając liczbę obliczeń ok. 8–9×.',
+        about_innov_2: '<strong style="color:var(--text-heading)">Odwrócone bloki rezydualne (bottleneck)</strong> – rozszerzają kanały, stosują konwolucję głębokościową, a potem rzutują z powrotem w dół. Połączenie rezydualne łączy wąskie końce.',
+        about_innov_3: '<strong style="color:var(--text-heading)">Squeeze-and-Excitation (SE)</strong> – przeskalowuje odpowiedzi poszczególnych kanałów, modelując zależności między nimi.',
+        about_innov_4: '<strong style="color:var(--text-heading)">Aktywacja hard-swish</strong> – tańsze obliczeniowo przybliżenie funkcji swish (x·σ(x)): x · ReLU6(x+3)/6.',
+        about_innov_5: '<strong style="color:var(--text-heading)">Neural Architecture Search</strong> – szkielet sieci znaleziony przez NAS; końcowe warstwy dostrojone przez NetAdapt, aby zrównoważyć dokładność i opóźnienie.',
+        about_notation_title: 'Oznaczenia architektury',
+        badge_input: 'INPUT – obraz RGB 224×224', badge_stem: 'STEM – początkowa konwolucja+BN+aktywacja', badge_bneck: 'BNECK – blok bottleneck',
+        badge_se: 'SE – Squeeze &amp; Excitation', badge_head: 'HEAD – głowica klasyfikatora', badge_output: 'OUTPUT – logity 1000 klas',
+        about_legend: '<strong>exp</strong> = współczynnik rozszerzenia | <strong>k</strong> = rozmiar jądra | <strong>s</strong> = krok | <strong>SE</strong> = ma squeeze-excitation | <strong>HS</strong> = aktywacja hard-swish',
+        about_cmp_title: 'Porównanie',
+        cmp_model: 'Model', cmp_top1: 'Top-1', cmp_params: 'Parametry', cmp_madds: 'MAdds',
+        st_notloaded: 'Nie załadowano', st_loading: 'Pobieranie modelu…', st_ready: 'Model gotowy', st_fail: 'Błąd ładowania',
         dl_weights: 'Pobieranie wag (~6 MB), proszę czekać…', dl_ready: 'Model gotowy!'
     }
 };
-let expLang = (localStorage.getItem('ml-blocks-lang') === 'pl') ? 'pl' : 'en';
-function expT(key) { return (STRINGS_EXP[expLang] && STRINGS_EXP[expLang][key]) || STRINGS_EXP.en[key] || key; }
-// Translate a hardcoded English runtime string by reverse-lookup of its key.
-function dynT(enText) {
-    for (const k in STRINGS_EXP.en) if (STRINGS_EXP.en[k] === enText) return expT(k);
-    return enText;
+// Same default as the main app (Polish); a corrupted stored value falls back too.
+let expLang = localStorage.getItem('ml-blocks-lang') || 'pl';
+if (!STRINGS_EXP[expLang]) expLang = 'pl';
+function expT(key, ...args) {
+    const val = (STRINGS_EXP[expLang] && STRINGS_EXP[expLang][key]) || STRINGS_EXP.en[key] || key;
+    return typeof val === 'function' ? val(...args) : val;
+}
+// Icons for the two stateful buttons; the label is a data-i18n span so a
+// language switch re-translates it (a bare innerHTML write lost the span).
+const ICONS = {
+    spin: '<svg class="icon-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>',
+    check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>',
+    bolt: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
+};
+function setBtn(btn, icon, key) {
+    btn.innerHTML = `${ICONS[icon]} <span data-i18n="${key}">${expT(key)}</span>`;
 }
 function applyExpLang() {
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const k = el.getAttribute('data-i18n');
         if (STRINGS_EXP[expLang] && STRINGS_EXP[expLang][k] != null) el.innerHTML = expT(k);
     });
+    document.title = expT('title_page');
     const btn = document.getElementById('exp-lang');
     if (btn) btn.textContent = expLang === 'pl' ? 'EN' : 'PL';
     document.documentElement.lang = expLang;
+    // The detail grid is rendered from JS; redraw it for the selected layer.
+    if (currentLayer) selectLayer(currentLayer);
 }
 function toggleExpLang() {
     expLang = expLang === 'pl' ? 'en' : 'pl';
@@ -625,6 +704,7 @@ const IMAGENET_LABELS_URL = 'https://storage.googleapis.com/download.tensorflow.
 let model = null;          // { classifier, feature } once loaded
 let imagenetLabels = null; // index-aligned 1001-entry list (index 0 = background)
 let currentImage = null;
+let currentLayer = null;   // ARCH entry shown in the detail panel
 // =====================================================================
 // Arch rendering
 // =====================================================================
@@ -639,7 +719,7 @@ function renderArchitecture() {
             flow.appendChild(conn);
         }
         const block = document.createElement('div');
-        block.className = `arch-block group-${layer.type}`;
+        block.className = 'arch-block';
         block.id = `block-${layer.id}`;
         block.onclick = () => selectLayer(layer);
         block.innerHTML = `
@@ -650,24 +730,29 @@ function renderArchitecture() {
             </div>
             <div>
                 <div class="block-shape">${layer.shape}</div>
-                <div class="block-params">${layer.params !== '—' ? layer.params + ' params' : '—'}</div>
+                <div class="block-params">${layer.params !== '–' ? expT('rt_params', layer.params) : '–'}</div>
             </div>`;
         flow.appendChild(block);
     });
 }
 function selectLayer(layer) {
+    const isSame = currentLayer === layer;
+    currentLayer = layer;
     document.querySelectorAll('.arch-block').forEach(b => b.classList.remove('selected'));
     document.getElementById(`block-${layer.id}`).classList.add('selected');
     const panel = document.getElementById('detail-panel');
     panel.style.display = 'block';
-    document.getElementById('detail-title').textContent = layer.name;
+    const titleEl = document.getElementById('detail-title');
+    titleEl.textContent = layer.name;
+    titleEl.removeAttribute('data-i18n'); // now holds the layer name, not the placeholder
     document.getElementById('detail-desc').textContent = layer.desc;
     document.getElementById('detail-grid').innerHTML = `
-        <div class="detail-item"><label>Type</label><span>${layer.tag}</span></div>
-        <div class="detail-item"><label>Output Shape</label><span>${layer.shape}</span></div>
-        <div class="detail-item"><label>Parameters</label><span>${layer.params}</span></div>
-        <div class="detail-item"><label>Operation</label><span>${layer.detail}</span></div>`;
-    panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
+        <div class="detail-item"><label data-i18n="d_type">${expT('d_type')}</label><span>${layer.tag}</span></div>
+        <div class="detail-item"><label data-i18n="d_shape">${expT('d_shape')}</label><span>${layer.shape}</span></div>
+        <div class="detail-item"><label data-i18n="d_params">${expT('d_params')}</label><span>${layer.params}</span></div>
+        <div class="detail-item"><label data-i18n="d_op">${expT('d_op')}</label><span>${layer.detail}</span></div>`;
+    // A language re-render of the same layer must not scroll the page.
+    if (!isSame) panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
 }
 // =====================================================================
 // Model loading via @tensorflow-models/mobilenet CDN
@@ -675,13 +760,14 @@ function selectLayer(layer) {
 async function loadModel() {
     const btn = document.getElementById('load-btn');
     btn.disabled = true;
-    btn.innerHTML = `<svg class="icon-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Loading…`;
-    setStatus('loading', 'Downloading model…');
+    setBtn(btn, 'spin', 'btn_loading');
+    setStatus('loading', 'st_loading');
     const progressWrap = document.getElementById('progress-wrap');
     const progressBar  = document.getElementById('progress-bar');
     const progressLabel = document.getElementById('progress-label');
     progressWrap.classList.add('visible');
-    progressLabel.textContent = dynT('Downloading weights (~6 MB), please wait…');
+    progressLabel.textContent = expT('dl_weights');
+    progressLabel.setAttribute('data-i18n', 'dl_weights');
     try {
         // Load both real V3-Small graph models + the ImageNet label list.
         const [classifier, feature, labelsText] = await Promise.all([
@@ -701,30 +787,36 @@ async function loadModel() {
         });
         progressBar.style.width = '100%';
         progressBar.classList.add('done');
-        progressLabel.textContent = dynT('Model ready!');
+        progressLabel.textContent = expT('dl_ready');
+        progressLabel.setAttribute('data-i18n', 'dl_ready');
         const backend = tf.getBackend();
         document.getElementById('stat-backend').textContent = backend.toUpperCase();
         document.getElementById('stat-params').textContent = '2.5M';
         document.getElementById('stat-layers').textContent = '17';
         document.getElementById('stat-input').textContent = '224²';
-        setStatus('ready', 'Model ready');
+        setStatus('ready', 'st_ready');
         document.getElementById('demo-btn').disabled = false;
         if (currentImage) document.getElementById('classify-btn').disabled = false;
-        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Model Loaded`;
+        setBtn(btn, 'check', 'btn_loaded');
         btn.style.background = '#10b981';
         setTimeout(() => progressWrap.classList.remove('visible'), 2500);
     } catch(e) {
-        setStatus('error', 'Load failed');
+        setStatus('error', 'st_fail');
         progressLabel.textContent = '⚠ ' + e.message;
+        progressLabel.removeAttribute('data-i18n');
         btn.disabled = false;
-        btn.innerHTML = 'Retry Load';
+        setBtn(btn, 'download', 'btn_retry');
         btn.style.background = '';
         console.error(e);
     }
 }
-function setStatus(state, text) {
+// `key` is a STRINGS_EXP key; kept on the element so a language switch
+// re-translates the current status.
+function setStatus(state, key) {
     document.getElementById('status-dot').className = 'status-dot ' + state;
-    document.getElementById('status-text').textContent = dynT(text);
+    const el = document.getElementById('status-text');
+    el.textContent = expT(key);
+    el.setAttribute('data-i18n', key);
 }
 // =====================================================================
 // Image handling
@@ -746,7 +838,7 @@ function setPreviewImage(src) {
     img.style.display = 'block';
 }
 function loadDemoImage() {
-    // Inline base64 tiny sample images — no network request
+    // Inline base64 tiny sample images – no network request
     // We draw a colored canvas instead
     const canvas = document.createElement('canvas');
     canvas.width = 224; canvas.height = 224;
@@ -773,11 +865,11 @@ async function classify() {
     if (!model || !currentImage) return;
     const btn = document.getElementById('classify-btn');
     btn.disabled = true;
-    btn.innerHTML = `<svg class="icon-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Running…`;
+    setBtn(btn, 'spin', 'btn_running');
     try {
         const start = performance.now();
         // Real V3-Small classification: preprocess to [1,224,224,3] in [0,1]
-        // (the graph model normalizes exactly this way — no extra scaling), run
+        // (the graph model normalizes exactly this way – no extra scaling), run
         // the classifier, softmax the logits, take the top 5.
         const probs = tf.tidy(() => {
             const input = tf.browser.fromPixels(currentImage)
@@ -804,10 +896,10 @@ async function classify() {
         await visualizeFeatureMaps();
     } catch(e) {
         console.error(e);
-        document.getElementById('predictions').innerHTML = `<div style="font-size:12px;color:#ef4444">Error: ${e.message}</div>`;
+        document.getElementById('predictions').innerHTML = `<div style="font-size:12px;color:#ef4444">${expT('rt_error')}${escapeHtmlX(e.message)}</div>`;
     } finally {
         btn.disabled = false;
-        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Run Inference`;
+        setBtn(btn, 'bolt', 'btn_run');
     }
 }
 // =====================================================================
@@ -815,7 +907,7 @@ async function classify() {
 // =====================================================================
 async function visualizeFeatureMaps() {
     const container = document.getElementById('fmap-container');
-    container.innerHTML = '<div style="font-size:13px;color:var(--text-body)">Extracting feature maps…</div>';
+    container.innerHTML = `<div style="font-size:13px;color:var(--text-body)">${expT('rt_extracting')}</div>`;
     try {
         const imgTensor = tf.tidy(() =>
             tf.browser.fromPixels(currentImage)
@@ -824,7 +916,7 @@ async function visualizeFeatureMaps() {
         );
         // Real 1024-dim embedding from the V3-Small feature-vector model. The
         // input is normalized to [0,1] exactly once (the graph model expects
-        // that), so this is a genuine forward pass — not a near-black image.
+        // that), so this is a genuine forward pass – not a near-black image.
         const embedding = model.feature.predict(imgTensor);
         imgTensor.dispose();
         // Illustrative spatial maps (see buildStageMaps): the graph model doesn't
@@ -867,12 +959,12 @@ async function visualizeFeatureMaps() {
                 canvasesToInsert.push({ uid, canvas });
             }
             tensor.dispose();
-            const extra = C > showN ? `<div class="fmap-item"><div class="fmap-canvas" style="display:flex;align-items:center;justify-content:center;font-size:9px;color:#aaa;background:var(--bg-section)">+${C-showN} more</div></div>` : '';
+            const extra = C > showN ? `<div class="fmap-item"><div class="fmap-canvas" style="display:flex;align-items:center;justify-content:center;font-size:9px;color:#aaa;background:var(--bg-section)">${expT('rt_more', C - showN)}</div></div>` : '';
             html += `
                 <div style="margin-bottom:28px">
                     <div style="font-size:12px;font-weight:700;color:var(--text-heading);margin-bottom:10px;display:flex;align-items:center;gap:8px">
                         ${label}
-                        <span style="font-size:10px;font-weight:400;color:var(--text-body)">${C} channels · ${H}×${W} spatial · schematic</span>
+                        <span style="font-size:10px;font-weight:400;color:var(--text-body)">${expT('rt_channels', C, H, W)}</span>
                     </div>
                     <div class="fmap-grid">${items.join('')}${extra}</div>
                 </div>`;
@@ -895,11 +987,11 @@ async function visualizeFeatureMaps() {
         const embSection = `
             <div style="margin-bottom:28px">
                 <div style="font-size:12px;font-weight:700;color:var(--text-heading);margin-bottom:10px">
-                    Final Embedding (real pretrained activations)
-                    <span style="font-size:10px;font-weight:400;color:var(--text-body)">1024-dim feature vector</span>
+                    <span data-i18n="rt_emb_title">${expT('rt_emb_title')}</span>
+                    <span style="font-size:10px;font-weight:400;color:var(--text-body)" data-i18n="rt_emb_sub">${expT('rt_emb_sub')}</span>
                 </div>
                 <div id="emb-canvas-slot"></div>
-                <div style="font-size:11px;color:var(--text-body);margin-top:6px">Each pixel = one embedding dimension. Color = activation strength.</div>
+                <div style="font-size:11px;color:var(--text-body);margin-top:6px" data-i18n="rt_emb_note">${expT('rt_emb_note')}</div>
             </div>`;
         container.innerHTML = html + embSection;
         canvasesToInsert.forEach(({uid, canvas}) => {
@@ -908,7 +1000,7 @@ async function visualizeFeatureMaps() {
         });
         document.getElementById('emb-canvas-slot').appendChild(embCanvas);
     } catch(e) {
-        container.innerHTML = `<div style="font-size:12px;color:#ef4444">Feature map error: ${e.message}</div>`;
+        container.innerHTML = `<div style="font-size:12px;color:#ef4444">${expT('rt_fm_error')}${escapeHtmlX(e.message)}</div>`;
         console.error(e);
     }
 }
