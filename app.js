@@ -25,6 +25,20 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
+// ===== SEEDED PRNG =====
+// mulberry32: tiny seeded generator returning floats in [0, 1). Used where a
+// reproducible shuffle is wanted (evaluate hold-out split).
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // ===== BUNDLE HELPERS =====
 // Chunked encoding — avoids O(n²) string concat for multi-MB weight buffers.
 function arrayBufferToBase64(buffer) {
@@ -125,6 +139,8 @@ const STRINGS = {
     btn_export_dataset: '⬇ Pobierz dataset',
     btn_clear_dataset: '🗑 Usuń z pamięci',
     btn_load_dataset: '📂 Wczytaj dataset',
+    confirm_clear_canvas: 'Wyczyścić obszar roboczy? Bloki i wczytane modele zostaną usunięte. Dataset pozostanie w pamięci przeglądarki.',
+    confirm_clear_canvas_model: 'Wytrenowany model nie został jeszcze zapisany i zostanie utracony. Wyczyścić obszar roboczy? Dataset pozostanie w pamięci przeglądarki.',
     empty_title: 'Pusty obszar roboczy',
     empty_subtitle: 'Kliknij lub przeciągnij blok z lewej strony albo użyj szablonu',
     empty_qs_train: '🎓 Szybki start: Trening',
@@ -205,6 +221,8 @@ const STRINGS = {
     btn_export_dataset: '⬇ Download dataset',
     btn_clear_dataset: '🗑 Delete from storage',
     btn_load_dataset: '📂 Load dataset',
+    confirm_clear_canvas: 'Clear the workspace? Blocks and loaded models will be removed. The dataset stays in browser storage.',
+    confirm_clear_canvas_model: 'The trained model has not been saved yet and will be lost. Clear the workspace? The dataset stays in browser storage.',
     empty_title: 'Empty workspace',
     empty_subtitle: 'Click or drag a block from the left, or use a template',
     empty_qs_train: '🎓 Quick start: Training',
@@ -1691,7 +1709,7 @@ function cardDragStart(e, id) {
     const inTrash = p.clientX >= tr.left && p.clientX <= tr.right &&
       p.clientY >= tr.top && p.clientY <= tr.bottom;
     if (inTrash && !eduMode) {
-      removeBlock(id);
+      confirmRemoveBlock(id);
     } else {
       const b = placedBlocks.find(b => b.id === id);
       if (b) {
@@ -1793,7 +1811,18 @@ function removeBlock(id) {
   updatePipelineOrder();
 }
 
-function clearCanvas() {
+async function clearCanvas() {
+  const hasSamples = capturedSamples.some(a => a && a.length > 0);
+  if ((fullModel && !modelSaved) || hasSamples || placedBlocks.length > 0) {
+    const msg = (fullModel && !modelSaved) ? t('confirm_clear_canvas_model') : t('confirm_clear_canvas');
+    const ok = await uiConfirm(msg, { okLabel: t('btn_clear'), danger: true });
+    if (!ok) return;
+  }
+  // Flush (not drop) debounced dataset writes: the dataset survives a canvas
+  // clear by design, so a capture from the last 600 ms must still reach IDB.
+  const pendingClasses = Object.keys(_saveDebounceTimers).map(Number);
+  cancelAllPendingSaves();
+  pendingClasses.forEach(i => saveClassToIDB(i, true));
   // Stop any running camera/inference streams attached to soon-to-be-removed blocks
   Object.keys(cameraStreams).forEach(id => {
     try { cameraStreams[id].getTracks().forEach(t => t.stop()); } catch (_) {}
@@ -1814,9 +1843,10 @@ function clearCanvas() {
   placedBlocks.forEach(b => { if (b.card) b.card.remove(); });
   placedBlocks = [];
   blocksByType = {};
-  classNames = ['Klasa 1', 'Klasa 2'];
-  classColors = CLASS_COLORS.slice(0, 2);
-  capturedSamples = [[], []];
+  // classNames / classColors / capturedSamples are intentionally kept: the
+  // Dataset sidebar section and the IDB store outlive the canvas, and
+  // datasetLoadedFromIDB stays true, so the in-memory arrays must remain the
+  // authoritative copy. Use "Delete from storage" to drop the dataset.
   baseModel = null;
   fullModel = null;
   inferModel = null;
@@ -1828,6 +1858,7 @@ function clearCanvas() {
   evaluatePipelineState();
   refreshEmptyState();
   persistCanvasState();
+  refreshDatasetInfo();
   const svg = document.getElementById('pipeline-connectors');
   if (svg) svg.innerHTML = '';
 }
@@ -2737,9 +2768,13 @@ async function runEvaluate(id) {
   for (let c = 0; c < numClasses; c++) {
     const arr = (capturedSamples[c] || []).slice();
     if (arr.length < 2) { arr.forEach(s => { trainSamples.push(s); trainLabels.push(c); }); continue; }
-    // Deterministic index-based shuffle so the split is stable across clicks.
+    // Deterministic seeded Fisher-Yates so the split is stable across clicks
+    // but still a real per-class permutation (the old index-only formula gave
+    // one fixed pattern for every class, so the same capture indices were
+    // always held out).
+    const rng = mulberry32(arr.length * 1000 + c);
     for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(((i * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff * (i + 1));
+      const j = Math.floor(rng() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     const nTest = Math.max(1, Math.round(arr.length * 0.2));
@@ -3106,6 +3141,11 @@ function pickModelFiles(id) {
 async function tryLoadModelFiles(id) {
   const inp = document.getElementById('file-model-' + id);
   if (!inp || !inp.files.length) { log('warn', lang === 'pl' ? 'Wybierz plik modelu' : 'Select model file first'); return; }
+  const allFiles = Array.from(inp.files);
+  const jsonFile = allFiles.find(f => f.name.endsWith('.json'));
+  // Checked before the single-flight guard: an early return after
+  // modelFileLoading = true (outside try/finally) left the guard stuck.
+  if (!jsonFile) { log('warn', 'No .json file selected'); return; }
   if (modelFileLoading) { log('info', lang === 'pl' ? 'Model już się wczytuje...' : 'A model is already loading...'); return; }
   modelFileLoading = true;
   // Capture the models we may replace so we can free them once the new ones are
@@ -3113,9 +3153,6 @@ async function tryLoadModelFiles(id) {
   // is never disposed here.
   const prevInfer = inferModel;
   const prevBase = baseModel;
-  const allFiles = Array.from(inp.files);
-  const jsonFile = allFiles.find(f => f.name.endsWith('.json'));
-  if (!jsonFile) { log('warn', 'No .json file selected'); return; }
   setBlockStatus(document.getElementById(id), 'running');
   log('step', t('log_upload_start'));
   try {
@@ -4245,7 +4282,10 @@ function uiConfirm(message, opts) {
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     const close = (val) => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(val); };
-    const onKey = (e) => { if (e.key === 'Escape') close(false); if (e.key === 'Enter') close(true); };
+    // Enter is left to the focused button's native click (OK gets focus below);
+    // a document-level Enter handler fired before the click and resolved true
+    // even when Cancel was focused.
+    const onKey = (e) => { if (e.key === 'Escape') close(false); };
     box.querySelector('.confirm-ok').onclick = () => close(true);
     box.querySelector('.confirm-cancel').onclick = () => close(false);
     overlay.onclick = (e) => { if (e.target === overlay) close(false); };
