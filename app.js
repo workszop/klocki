@@ -159,6 +159,15 @@ const STRINGS = {
     prereq_label_classes: 'Min. 2 klasy',
     prereq_heading: 'Wymagania:',
     prereq_all_satisfied: 'Gotowe do uruchomienia',
+    title_run: 'Uruchom cały pipeline (Ctrl+Enter)', title_edu: 'Tryb nauczania (E)', title_tidy: 'Uporządkuj bloki (T)',
+    title_guide: 'Przewodnik (?)', title_clear: 'Wyczyść tablicę', title_lang: 'Przełącz na angielski (L)',
+    title_log_clear: 'Wyczyść log',
+    aria_remove_block: 'Usuń blok', aria_refresh_models: 'Odśwież listę modeli',
+    aria_class_name: (n) => `Nazwa klasy ${n}`,
+    aria_chart_idle: 'Wykres treningu: brak danych',
+    aria_chart: (ep, loss, acc) => `Wykres treningu: epoka ${ep}, strata ${loss}, dokładność ${acc}%`,
+    btn_unfreeze_frame: 'Wznów klatkę',
+    guide_shortcuts: 'Skróty: ? przewodnik, Esc zamknij, Ctrl+Enter uruchom, T uporządkuj, L język, E tryb Edu',
     guide_steps: [
       { title: 'Krok 1 — Kamera', desc: 'Dodaj blok "Kamera — Dane" na tablicę. Uruchom kamerę i zbieraj zdjęcia dla każdej klasy, klikając "Zbierz próbki".' },
       { title: 'Krok 2 — Etykiety', desc: 'Dodaj blok "Etykiety klas" i nazwij swoje kategorie, np. "Pies", "Kot", "Inne". Wybierz aktywną klasę przed zbieraniem.' },
@@ -245,6 +254,15 @@ const STRINGS = {
     prereq_label_classes: 'Min. 2 classes',
     prereq_heading: 'Needs:',
     prereq_all_satisfied: 'Ready to run',
+    title_run: 'Run the whole pipeline (Ctrl+Enter)', title_edu: 'Teaching mode (E)', title_tidy: 'Tidy up blocks (T)',
+    title_guide: 'Guide (?)', title_clear: 'Clear canvas', title_lang: 'Switch to Polish (L)',
+    title_log_clear: 'Clear log',
+    aria_remove_block: 'Remove block', aria_refresh_models: 'Refresh model list',
+    aria_class_name: (n) => `Class name ${n}`,
+    aria_chart_idle: 'Training chart: no data yet',
+    aria_chart: (ep, loss, acc) => `Training chart: epoch ${ep}, loss ${loss}, accuracy ${acc}%`,
+    btn_unfreeze_frame: 'Resume Frame',
+    guide_shortcuts: 'Shortcuts: ? guide, Esc close, Ctrl+Enter run, T tidy up, L language, E Edu mode',
     guide_steps: [
       { title: 'Step 1 — Camera', desc: 'Add the "Camera — Input" block to the canvas. Start the camera and collect images for each class by clicking "Collect Samples".' },
       { title: 'Step 2 — Labels', desc: 'Add the "Label Classes" block and name your categories, e.g. "Dog", "Cat", "Other". Select the active class before collecting.' },
@@ -340,6 +358,16 @@ function applyLang() {
     const val = S[k];
     if (val) el.textContent = val;
   });
+  // Tooltips and accessible names for terse/icon-only controls.
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const val = S[el.getAttribute('data-i18n-title')];
+    if (val) el.title = val;
+  });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    const val = S[el.getAttribute('data-i18n-aria')];
+    if (val) el.setAttribute('aria-label', val);
+  });
+  document.documentElement.lang = lang;
   document.getElementById('btn-lang').textContent = lang === 'pl' ? 'EN' : 'PL';
   // Re-render dynamic block content. Titles refresh cheaply for every block;
   // the block BODY (buttons, param labels, hints) is baked at build time from
@@ -1228,7 +1256,7 @@ function buildBlockHTML(type, id) {
   <span class="bk-title" data-block-title="${id}">${title}</span>
   <span class="bk-badge">${phase}</span>
   <span class="bk-status">${t('status_idle')}</span>
-  <button class="bk-close" onclick="confirmRemoveBlock('${id}')" onmousedown="event.stopPropagation()" title="${lang === 'pl' ? 'Usuń blok' : 'Remove block'}">✕</button>
+  <button class="bk-close" onclick="confirmRemoveBlock('${id}')" onmousedown="event.stopPropagation()" title="${t('aria_remove_block')}" aria-label="${t('aria_remove_block')}">✕</button>
 </div>
 <div class="bk-body">${renderBlockBody(type, id)}</div>
 <div class="block-annotation" id="ann-${id}"></div>`;
@@ -1298,14 +1326,14 @@ function renderLabelRows(id) {
     const uploadTip = lang === 'pl' ? 'Wgraj zdjęcia' : 'Upload photos';
     rows += `<div class="class-row">
 <div class="class-color-dot" style="background:${classColors[i]}"></div>
-<input class="class-name-input" id="cn-${id}-${i}" value="${escapeHtml(classNames[i])}"
+<input class="class-name-input" id="cn-${id}-${i}" value="${escapeHtml(classNames[i])}" aria-label="${t('aria_class_name', i + 1)}"
   oninput="updateClassNamesEverywhere(this)" placeholder="${lang === 'pl' ? 'nazwa klasy...' : 'class name...'}">
 <span class="class-count" id="cc-${id}-${i}">${(capturedSamples[i] || []).length} ${t('lbl_samples')}</span>
 <button style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${classColors[i]};color:#fff" onclick="labelCapture(${i})">${lang === 'pl' ? 'zbierz' : 'capture'}</button>
 <input type="file" id="photo-up-${id}-${i}" accept="image/*" multiple style="display:none" onchange="uploadPhotosToClass(${i}, this)">
-<button class="class-delete-btn" onclick="document.getElementById('photo-up-${id}-${i}').click()" title="${uploadTip}">📁</button>
-<button class="class-delete-btn" onclick="clearClassSamples(${i})" title="${clearTip}">⌫</button>
-${canDelete ? `<button class="class-delete-btn class-delete-class-btn" onclick="deleteClass(${i})" title="${deleteTip}">🗑</button>` : ''}
+<button class="class-delete-btn" onclick="document.getElementById('photo-up-${id}-${i}').click()" title="${uploadTip}" aria-label="${uploadTip}">📁</button>
+<button class="class-delete-btn" onclick="clearClassSamples(${i})" title="${clearTip}" aria-label="${clearTip}">⌫</button>
+${canDelete ? `<button class="class-delete-btn class-delete-class-btn" onclick="deleteClass(${i})" title="${deleteTip}" aria-label="${deleteTip}">🗑</button>` : ''}
 </div>
 <div id="thumbs-label-${i}-${id}" class="thumb-strip"></div>`;
   }
@@ -1530,9 +1558,9 @@ ${makeParam(t('param_lr'), `<select id="lr-${id}">
 ${makeParam(t('param_batch'), `<select id="bs-${id}">
   <option value="8">8</option><option value="16" selected>16</option><option value="32">32</option>
 </select>`)}
-<canvas class="chart-canvas" id="chart-${id}" height="80"></canvas>
-<div id="train-info-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">—</div>
-<div id="train-interp-${id}" class="train-interp"></div>
+<canvas class="chart-canvas" id="chart-${id}" height="80" role="img" aria-label="${t('aria_chart_idle')}"></canvas>
+<div id="train-info-${id}" aria-live="polite" style="font-size:10px;color:var(--c-muted);text-align:center">–</div>
+<div id="train-interp-${id}" class="train-interp" aria-live="polite"></div>
 <div style="display:flex;gap:6px;margin-top:4px">
 ${makeBtn(t('btn_train'), `runTraining('${id}')`, 'var(--c-train)')}
 ${makeBtn(t('btn_stop_train'), `stopTraining('${id}')`, '#64748B')}
@@ -1556,7 +1584,7 @@ ${makeBtn(t('btn_pick_files'), `pickModelFiles('${id}')`, 'var(--c-data)')}
   <select id="idb-select-${id}" style="flex:1;font-size:12px;padding:4px 6px;border-radius:4px;border:1px solid var(--c-border);background:var(--c-bg)">
     <option value="" disabled selected>${t('lbl_no_saved_models')}</option>
   </select>
-  <button class="bk-btn" style="background:#64748B;padding:4px 8px;font-size:13px;width:auto" onclick="refreshIDBList('${id}')">↺</button>
+  <button class="bk-btn" style="background:#64748B;padding:4px 8px;font-size:13px;width:auto" onclick="refreshIDBList('${id}')" title="${t('aria_refresh_models')}" aria-label="${t('aria_refresh_models')}">↺</button>
 </div>
 ${makeBtn(t('btn_load_idb'), `runLoadIDB('${id}')`, '#64748B')}
 <div id="meta-${id}" style="font-size:10px;color:var(--c-muted);margin-top:4px;line-height:1.8">—</div>`;
@@ -1579,7 +1607,7 @@ function buildZeroShotBody(id) {
 <div style="font-size:10px;color:var(--c-muted);line-height:1.6;padding:4px 0 6px;border-bottom:1px solid var(--c-border);margin-bottom:6px">${note}</div>
 <div class="video-wrap"><video class="bk-video" id="zsvid-${id}" autoplay playsinline muted></video></div>
 ${makeParam('FPS', `<select id="zsfps-${id}"><option value="1000">1</option><option value="200" selected>5</option><option value="100">10</option></select>`)}
-<div id="zs-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;min-height:14px"></div>
+<div id="zs-status-${id}" aria-live="polite" style="font-size:10px;color:var(--c-muted);text-align:center;min-height:14px"></div>
 <div id="zs-results-${id}" style="margin-top:6px"></div>
 <div style="display:flex;gap:6px;margin-top:4px">
 ${makeBtn(lang === 'pl' ? 'Uruchom' : 'Start', `startZeroShot('${id}')`, 'var(--c-model)')}
@@ -1601,7 +1629,7 @@ ${makeParam(t('param_threshold'), `<select id="thr-${id}">
   <option value="0.8">80%</option><option value="0.9">90%</option>
 </select>`)}
 <canvas id="hist-chart-${id}" class="chart-canvas" height="60"></canvas>
-${makeBtn(t('btn_freeze_frame'), `freezeFrame('${id}')`, '#64748B')}`;
+<button class="bk-btn" id="freeze-btn-${id}" style="background:#64748B" aria-pressed="${frozenFrame ? 'true' : 'false'}" onclick="freezeFrame('${id}')">${t(frozenFrame ? 'btn_unfreeze_frame' : 'btn_freeze_frame')}</button>`;
 }
 
 function buildExplainAIBody(id) {
@@ -1670,7 +1698,7 @@ function buildEvaluateBody(id) {
   return `
 <div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:4px">${hint}</div>
 ${makeBtn(lang === 'pl' ? '▶ Oceń model' : '▶ Evaluate model', `runEvaluate('${id}')`, 'var(--c-eval)')}
-<div id="eval-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">—</div>
+<div id="eval-status-${id}" aria-live="polite" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">–</div>
 <div id="eval-results-${id}" class="eval-results"></div>`;
 }
 
@@ -1681,7 +1709,7 @@ function buildDeployExportBody(id) {
   return `
 <div style="font-size:11px;color:var(--c-muted);line-height:1.5;padding-bottom:4px">${hint}</div>
 ${makeBtn(lang === 'pl' ? '🚀 Eksportuj aplikację' : '🚀 Export app', `runDeployExport('${id}')`, 'var(--c-deploy)')}
-<div id="deploy-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">—</div>`;
+<div id="deploy-status-${id}" aria-live="polite" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">–</div>`;
 }
 
 
@@ -2790,6 +2818,8 @@ async function runTraining(id) {
           const remaining = Math.round((epochs - epoch - 1) * perEpoch);
           const acc = logs.acc || logs.accuracy || 0;
           if (info) info.textContent = `Epoch ${epoch + 1}/${epochs} | ETA: ${remaining}s`;
+          const chartEl = document.getElementById('chart-' + id);
+          if (chartEl) chartEl.setAttribute('aria-label', t('aria_chart', epoch + 1, logs.loss.toFixed(3), (acc * 100).toFixed(1)));
           updateTrainInterpretation(id, epoch, acc);
           log('data', t('log_train_epoch', epoch + 1, logs.loss, acc));
           await tf.nextFrame();
@@ -3094,7 +3124,7 @@ function renderEvaluation(id, r) {
   // Confusion matrix table.
   const maxCell = Math.max(1, ...r.confusion.flat());
   let head = '<th></th>' + classNames.slice(0, r.numClasses).map((n, i) =>
-    `<th title="${escapeHtml(n)}"><span class="eval-dot" style="background:${classColors[i]}"></span></th>`).join('');
+    `<th title="${escapeHtml(n)}"><span class="sr-only">${escapeHtml(n)}</span><span class="eval-dot" style="background:${classColors[i]}"></span></th>`).join('');
   let rows = '';
   for (let tr = 0; tr < r.numClasses; tr++) {
     let cells = `<th class="eval-rowhead" title="${escapeHtml(classNames[tr])}"><span class="eval-dot" style="background:${classColors[tr]}"></span>${escapeHtml((classNames[tr] || '').slice(0, 8))}</th>`;
@@ -4431,6 +4461,11 @@ function drawHistChart(id) {
 
 function freezeFrame(id) {
   frozenFrame = !frozenFrame;
+  const btn = document.getElementById('freeze-btn-' + id);
+  if (btn) {
+    btn.setAttribute('aria-pressed', frozenFrame ? 'true' : 'false');
+    btn.textContent = t(frozenFrame ? 'btn_unfreeze_frame' : 'btn_freeze_frame');
+  }
   log('info', frozenFrame ? '❄️ Frame frozen' : '▶ Resumed');
 }
 
@@ -4506,6 +4541,8 @@ function showToast(text, kind, opts) {
   if (!stack) {
     stack = document.createElement('div');
     stack.id = 'toast-stack';
+    stack.setAttribute('role', 'status');
+    stack.setAttribute('aria-live', 'polite');
     document.body.appendChild(stack);
   }
   const el = document.createElement('div');
@@ -4520,6 +4557,7 @@ function showToast(text, kind, opts) {
   const dismiss = () => {
     if (dismissed) return;
     dismissed = true;
+    clearTimeout(timer);
     el.classList.remove('show');
     setTimeout(() => el.remove(), 400);
   };
@@ -4537,8 +4575,43 @@ function showToast(text, kind, opts) {
   }
   stack.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
-  setTimeout(dismiss, opts.duration || 5500);
+  // Auto-dismiss pauses while the pointer or keyboard focus is on the toast, so
+  // an action button ("Save now") cannot vanish under the user's cursor.
+  let timer = null, remaining = opts.duration || 5500, startedAt = 0, hovered = false, focused = false;
+  const startTimer = () => {
+    if (dismissed || timer || hovered || focused) return;
+    startedAt = Date.now();
+    timer = setTimeout(dismiss, remaining);
+  };
+  const pauseTimer = () => {
+    if (!timer) return;
+    clearTimeout(timer);
+    timer = null;
+    remaining = Math.max(1000, remaining - (Date.now() - startedAt));
+  };
+  el.addEventListener('mouseenter', () => { hovered = true; pauseTimer(); });
+  el.addEventListener('mouseleave', () => { hovered = false; startTimer(); });
+  el.addEventListener('focusin', () => { focused = true; pauseTimer(); });
+  el.addEventListener('focusout', (e) => { if (el.contains(e.relatedTarget)) return; focused = false; startTimer(); });
+  startTimer();
   return dismiss;
+}
+
+// ─── Dialog focus helpers ───
+let _confirmSeq = 0;
+const FOCUSABLE_SEL = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+// Keep Tab / Shift+Tab cycling inside `box` while a modal is open.
+function trapTabKey(e, box) {
+  if (e.key !== 'Tab' || !box) return;
+  const items = Array.from(box.querySelectorAll(FOCUSABLE_SEL)).filter(el => !el.disabled && el.offsetParent !== null);
+  if (!items.length) { e.preventDefault(); return; }
+  const first = items[0], last = items[items.length - 1];
+  const active = document.activeElement;
+  if (e.shiftKey && (active === first || !box.contains(active))) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (active === last || !box.contains(active))) { e.preventDefault(); first.focus(); }
+}
+function restoreFocus(el) {
+  if (el && typeof el.focus === 'function' && document.contains(el)) el.focus();
 }
 
 // Promise-based confirm dialog — a non-blocking replacement for window.confirm()
@@ -4552,19 +4625,31 @@ function uiConfirm(message, opts) {
     const cancelLabel = opts.cancelLabel || (lang === 'pl' ? 'Anuluj' : 'Cancel');
     const box = document.createElement('div');
     box.className = 'modal-box confirm-box';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-modal', 'true');
+    box.setAttribute('aria-describedby', 'confirm-msg-' + (++_confirmSeq));
+    const returnFocus = document.activeElement;
     box.innerHTML = `
-      <div class="confirm-msg">${escapeHtml(message)}</div>
+      <div class="confirm-msg" id="confirm-msg-${_confirmSeq}">${escapeHtml(message)}</div>
       <div class="confirm-actions">
         <button class="confirm-cancel">${escapeHtml(cancelLabel)}</button>
         <button class="confirm-ok${opts.danger ? ' confirm-ok-danger' : ''}">${escapeHtml(okLabel)}</button>
       </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
-    const close = (val) => { overlay.remove(); document.removeEventListener('keydown', onKey); resolve(val); };
+    const close = (val) => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+      restoreFocus(returnFocus);
+      resolve(val);
+    };
     // Enter is left to the focused button's native click (OK gets focus below);
     // a document-level Enter handler fired before the click and resolved true
     // even when Cancel was focused.
-    const onKey = (e) => { if (e.key === 'Escape') close(false); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') close(false);
+      else if (e.key === 'Tab') trapTabKey(e, box);
+    };
     box.querySelector('.confirm-ok').onclick = () => close(true);
     box.querySelector('.confirm-cancel').onclick = () => close(false);
     overlay.onclick = (e) => { if (e.target === overlay) close(false); };
@@ -4671,17 +4756,54 @@ async function runPipeline() {
 }
 
 // ===== GUIDE MODAL =====
+let _guideReturnFocus = null;
 function showGuide() {
   const modal = document.getElementById('guide-modal');
-  if (modal) modal.classList.remove('hidden');
+  if (!modal) return;
+  if (modal.classList.contains('hidden')) _guideReturnFocus = document.activeElement;
+  modal.classList.remove('hidden');
   // Sync the "don't show again" checkbox with the stored preference.
   const chk = document.getElementById('chk-no-guide');
   if (chk) chk.checked = localStorage.getItem('ml-blocks-no-guide') === '1';
   renderGuideSteps();
+  const closeBtn = modal.querySelector('.modal-close-btn');
+  if (closeBtn) closeBtn.focus();
 }
 function closeGuide() {
   const modal = document.getElementById('guide-modal');
   if (modal) modal.classList.add('hidden');
+  restoreFocus(_guideReturnFocus);
+  _guideReturnFocus = null;
+}
+function isGuideOpen() {
+  const modal = document.getElementById('guide-modal');
+  return !!modal && !modal.classList.contains('hidden');
+}
+
+// ===== KEYBOARD SHORTCUTS =====
+// Document-level: ? guide, Esc close guide, Ctrl+Enter run, T tidy, L language,
+// E edu mode. Ignored while typing in a field or while a confirm dialog is open.
+function isTypingTarget(el) {
+  if (!el || !el.tagName) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+function handleGlobalShortcut(e) {
+  if (isGuideOpen()) {
+    if (e.key === 'Escape') { e.preventDefault(); closeGuide(); }
+    else if (e.key === 'Tab') trapTabKey(e, document.querySelector('#guide-modal .modal-box'));
+    return;
+  }
+  if (document.querySelector('.confirm-overlay')) return;
+  if (isTypingTarget(e.target)) return;
+  if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); runPipeline(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  switch (e.key) {
+    case '?': e.preventDefault(); showGuide(); break;
+    case 't': case 'T': e.preventDefault(); tidyUpCanvas(); break;
+    case 'l': case 'L': e.preventDefault(); toggleLang(); break;
+    case 'e': case 'E': e.preventDefault(); toggleEduMode(); break;
+  }
 }
 function saveGuidePrefs() {
   const chk = document.getElementById('chk-no-guide');
@@ -4885,7 +5007,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Palette blocks can be added by a plain click (in addition to drag-and-drop).
   document.querySelectorAll('.palette-block').forEach(el => {
     el.addEventListener('click', () => paletteAddBlock(el));
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); paletteAddBlock(el); }
+    });
   });
+  document.addEventListener('keydown', handleGlobalShortcut);
 
   // Quick start if EDU mode — but ONLY when the canvas is empty. restoreCanvasState()
   // above may have already rebuilt a saved pipeline; adding another one on every
