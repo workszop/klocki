@@ -139,6 +139,7 @@ const STRINGS = {
     btn_export_dataset: '⬇ Pobierz dataset',
     btn_clear_dataset: '🗑 Usuń z pamięci',
     btn_load_dataset: '📂 Wczytaj dataset',
+    log_prep_stale: 'Dane zmieniły się w trakcie przygotowania - uruchom "Przygotuj dane" ponownie.',
     confirm_clear_canvas: 'Wyczyścić obszar roboczy? Bloki i wczytane modele zostaną usunięte. Dataset pozostanie w pamięci przeglądarki.',
     confirm_clear_canvas_model: 'Wytrenowany model nie został jeszcze zapisany i zostanie utracony. Wyczyścić obszar roboczy? Dataset pozostanie w pamięci przeglądarki.',
     empty_title: 'Pusty obszar roboczy',
@@ -221,6 +222,7 @@ const STRINGS = {
     btn_export_dataset: '⬇ Download dataset',
     btn_clear_dataset: '🗑 Delete from storage',
     btn_load_dataset: '📂 Load dataset',
+    log_prep_stale: 'Data changed during preparation - run "Prepare Data" again.',
     confirm_clear_canvas: 'Clear the workspace? Blocks and loaded models will be removed. The dataset stays in browser storage.',
     confirm_clear_canvas_model: 'The trained model has not been saved yet and will be lost. Clear the workspace? The dataset stays in browser storage.',
     empty_title: 'Empty workspace',
@@ -250,6 +252,8 @@ const STRINGS = {
 
 // ===== STATE =====
 let lang = localStorage.getItem('ml-blocks-lang') || 'pl';
+// A corrupted stored value would make S undefined and t() throw at init.
+if (!STRINGS[lang]) lang = 'pl';
 let S = STRINGS[lang];
 let placedBlocks = [];
 let blockIdCounter = 0;
@@ -273,6 +277,13 @@ let classNames = ['Klasa 1', 'Klasa 2'];
 let classColors = CLASS_COLORS.slice(0, 2);
 let capturedSamples = [[], []]; // per class, array of ImageData — dynamic
 let preparedData = null; // {xs, ys}
+// Bumped on every sample/class change. runPrepare records it on entry and
+// discards a worker result produced from an older snapshot.
+let datasetVersion = 0;
+function invalidatePreparedData() {
+  preparedData = null;
+  datasetVersion++;
+}
 let baseModel = null;
 let fullModel = null;
 let trainingCancelled = false;
@@ -521,6 +532,9 @@ function cancelAllPendingSaves() {
 // Actually encode + persist one class. Returns a promise that resolves when the
 // IDB write commits, so callers that need durability (import, delete) can await.
 async function writeClassToIDB(classIdx) {
+  // A write racing the initial load would store only the samples captured so
+  // far and drop the ones still being decoded from IDB for that class.
+  if (datasetLoadPromise) await datasetLoadPromise;
   const db = await openDatasetDB();
   const samples = capturedSamples[classIdx] || [];
   const jpegData = await Promise.all(samples.map(imgData => imageDataToJPEG(imgData)));
@@ -539,7 +553,7 @@ function saveClassToIDB(classIdx, immediate) {
   if (!classIdx && classIdx !== 0) return Promise.resolve();
   // Any change to the captured samples invalidates the prepared training
   // snapshot — otherwise training silently runs on stale data.
-  preparedData = null;
+  invalidatePreparedData();
   clearTimeout(_saveDebounceTimers[classIdx]);
   const delay = immediate ? 0 : 600;
   return new Promise(resolve => {
@@ -722,6 +736,9 @@ async function exportDataset() {
 async function importDataset(input) {
   if (!input || !input.files || !input.files[0]) return;
   const file = input.files[0];
+  // Let an in-flight IDB load finish first, otherwise it would resurrect the
+  // old classes on top of the imported ones.
+  if (datasetLoadPromise) await datasetLoadPromise;
   log('step', lang === 'pl' ? 'Wczytywanie datasetu z pliku...' : 'Loading dataset from file...');
   try {
     const text = await file.text();
@@ -735,7 +752,9 @@ async function importDataset(input) {
     const newColors = [];
     const newSamples = [];
     for (const cls of bundle.classes) {
-      newNames.push(cls.name || (lang === 'pl' ? 'Klasa' : 'Class'));
+      // Coerce: a non-string name would persist and later throw on .trim().
+      const name = String(cls.name ?? '').trim();
+      newNames.push(name || (lang === 'pl' ? 'Klasa' : 'Class'));
       // Accept stored color or assign next pool color
       const usedSoFar = new Set(newColors);
       newColors.push(cls.color && CLASS_COLORS.includes(cls.color) && !usedSoFar.has(cls.color)
@@ -798,7 +817,10 @@ function refreshDatasetInfo() {
   el.textContent = `${total} ${lang === 'pl' ? 'próbek' : 'samples'} — ${perClass}`;
 }
 
-function confirmClearDataset() {
+async function confirmClearDataset() {
+  // Wait for an in-flight IDB load: clearing mid-load would leave zombie data
+  // in memory that the load then reports as restored.
+  if (datasetLoadPromise) await datasetLoadPromise;
   const totalSamples = capturedSamples.flat().length;
   if (totalSamples === 0) {
     showToast(lang === 'pl' ? 'Brak próbek do usunięcia.' : 'No samples to delete.', 'info', { duration: 2500 });
@@ -815,7 +837,7 @@ function confirmClearDataset() {
   classNames = lang === 'pl' ? ['Klasa 1', 'Klasa 2'] : ['Class 1', 'Class 2'];
   classColors = CLASS_COLORS.slice(0, 2);
   capturedSamples = [[], []];
-  preparedData = null;
+  invalidatePreparedData();
   refreshLabelAndCameraBlocks();
   updateClassNamesEverywhere();
   evaluatePipelineState();
@@ -833,7 +855,7 @@ function confirmClearDataset() {
         classNames = snapshot.names;
         classColors = snapshot.colors;
         capturedSamples = snapshot.samples;
-        preparedData = null;
+        invalidatePreparedData();
         cancelAllPendingSaves();
         await clearDatasetStore();
         for (let i = 0; i < classNames.length; i++) await writeClassToIDB(i);
@@ -899,7 +921,11 @@ function restoreCanvasState() {
   if (!state || !Array.isArray(state.blocks)) return;
   canvasStateRestoring = true;
   try {
-    if (Array.isArray(state.classNames) && state.classNames.length >= 2) {
+    // Only accept a well-formed list of >= 2 strings; anything else (e.g. a
+    // number persisted from a bad import) falls back to the defaults.
+    const validNames = Array.isArray(state.classNames) && state.classNames.length >= 2 &&
+      state.classNames.every(n => typeof n === 'string');
+    if (validNames) {
       classNames = state.classNames.slice();
       if (Array.isArray(state.classColors) && state.classColors.length === classNames.length) {
         classColors = state.classColors.slice();
@@ -1058,6 +1084,7 @@ function ensureBlockOnCanvas(type) {
 
 // ===== BLOCK STATUS =====
 function setBlockStatus(card, status) {
+  if (!card) return; // block removed while an async action was in flight
   card.className = card.className.replace(/status-\w+/, '') + ` status-${status}`;
   const chip = card.querySelector('.bk-status');
   if (chip) {
@@ -1180,7 +1207,7 @@ function renderLabelRows(id) {
     rows += `<div class="class-row">
 <div class="class-color-dot" style="background:${classColors[i]}"></div>
 <input class="class-name-input" id="cn-${id}-${i}" value="${escapeHtml(classNames[i])}"
-  oninput="classNames[${i}]=this.value;updateClassNamesEverywhere()" placeholder="${lang === 'pl' ? 'nazwa klasy...' : 'class name...'}">
+  oninput="updateClassNamesEverywhere(this)" placeholder="${lang === 'pl' ? 'nazwa klasy...' : 'class name...'}">
 <span class="class-count" id="cc-${id}-${i}">${(capturedSamples[i] || []).length} ${t('lbl_samples')}</span>
 <button style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${classColors[i]};color:#fff" onclick="labelCapture(${i})">${lang === 'pl' ? 'zbierz' : 'capture'}</button>
 <input type="file" id="photo-up-${id}-${i}" accept="image/*" multiple style="display:none" onchange="uploadPhotosToClass(${i}, this)">
@@ -1224,7 +1251,7 @@ async function uploadPhotosToClass(classIdx, input) {
     }
   }
   if (added) {
-    preparedData = null;              // dataset changed → snapshot stale
+    invalidatePreparedData();              // dataset changed → snapshot stale
     saveClassToIDB(classIdx);
     refreshLabelAndCameraBlocks();
     updateSampleCounts();
@@ -1274,7 +1301,7 @@ async function deleteClass(classIdx) {
   capturedSamples.splice(classIdx, 1);
 
   // Stale — training with deleted class would corrupt ys tensor
-  preparedData = null;
+  invalidatePreparedData();
 
   // Remove from IDB and repack remaining keys
   await deleteClassFromIDB(classIdx);
@@ -1293,7 +1320,7 @@ async function deleteClass(classIdx) {
         classNames.splice(snapshot.idx, 0, snapshot.name);
         classColors.splice(snapshot.idx, 0, snapshot.color);
         capturedSamples.splice(snapshot.idx, 0, snapshot.samples);
-        preparedData = null;
+        invalidatePreparedData();
         cancelAllPendingSaves();
         await clearDatasetStore();
         for (let i = 0; i < classNames.length; i++) await writeClassToIDB(i);
@@ -1851,7 +1878,7 @@ async function clearCanvas() {
   fullModel = null;
   inferModel = null;
   inferMetadata = null;
-  preparedData = null;
+  invalidatePreparedData();
   modelSaved = false;
   modelMetadata = null;
   log('warn', 'Canvas cleared');
@@ -1872,13 +1899,19 @@ function updateSampleCounts() {
     el.textContent = `${n} ${t('lbl_samples')}`;
   });
 }
-function updateClassNamesEverywhere() {
-  // Sync class name inputs across all label blocks
+// `source` is the class-name input that fired (optional). Only that input is
+// read; every other cn-* input is written from classNames. Reading all inputs
+// let a second Labels block's stale value overwrite the edit just made.
+function updateClassNamesEverywhere(source) {
+  const classIdxOf = (el) => { const parts = el.id.split('-'); return parseInt(parts[parts.length - 1]); };
+  if (source && source.id) {
+    const cls = classIdxOf(source);
+    if (cls >= 0 && cls < classNames.length) classNames[cls] = source.value;
+  }
   document.querySelectorAll('[id^="cn-"]').forEach(el => {
-    const parts = el.id.split('-');
-    const cls = parseInt(parts[parts.length - 1]);
-    classNames[cls] = el.value;
-    el.value = classNames[cls];
+    if (el === source) return;
+    const cls = classIdxOf(el);
+    if (cls < classNames.length && el.value !== classNames[cls]) el.value = classNames[cls];
   });
   // Fully rebuild capture buttons so new classes appear automatically
   placedBlocks.filter(b => b.type === 'camera-input').forEach(b => {
@@ -1902,6 +1935,13 @@ let cameraStreams = {};
 // rapid clicks both pass the existing-stream check and open two streams — the
 // first is overwritten and never stopped (camera LED stays on).
 let cameraOpening = {};
+
+function isBlockPlaced(id) {
+  return placedBlocks.some(b => b.id === id);
+}
+function stopStream(stream) {
+  try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+}
 
 async function getCameraStream() {
   const bail = e => e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError';
@@ -1934,6 +1974,7 @@ async function blockStartCamera(id) {
       cameraStreams[id].getTracks().forEach(t => t.stop());
     }
     const stream = await getCameraStream();
+    if (!isBlockPlaced(id)) { stopStream(stream); return; } // removed during the permission prompt
     cameraStreams[id] = stream;
     const vid = document.getElementById('vid-' + id);
     if (vid) { vid.srcObject = stream; vid.play().catch(() => {}); }
@@ -2239,6 +2280,7 @@ async function runPrepare(id) {
     return;
   }
   prepareInProgress = true;
+  const versionAtStart = datasetVersion;
 
   setBlockStatus(document.getElementById(id), 'running');
   log('step', t('log_prep_start'));
@@ -2290,6 +2332,17 @@ async function runPrepare(id) {
         if (prog) prog.value = e.data.pct;
         if (status) status.textContent = e.data.pct + '%';
       } else if (e.data.type === 'done') {
+        // Samples changed while the worker ran (capture, upload, delete...):
+        // the snapshot is stale, so leave preparedData null instead of
+        // overwriting the invalidation with old data.
+        if (datasetVersion !== versionAtStart) {
+          console.warn('runPrepare: dataset changed during preparation, result discarded');
+          log('warn', t('log_prep_stale'));
+          if (status) status.textContent = '';
+          setBlockStatus(document.getElementById(id), 'idle');
+          cleanup();
+          return;
+        }
         const augmented = e.data.result;
         const n = augmented.length;
         if (prog) prog.value = 100;
@@ -3382,6 +3435,7 @@ async function startZeroShot(id) {
     if (statusEl) statusEl.textContent = '';
     loadImagenetLabels();
     const stream = await getCameraStream();
+    if (!isBlockPlaced(id)) { stopStream(stream); return; } // removed during the permission prompt
     zsStreams[id] = stream;
     const vid = document.getElementById('zsvid-' + id);
     if (vid) { vid.srcObject = stream; vid.play().catch(() => {}); }
@@ -3474,7 +3528,9 @@ async function startInferCamera(id) {
     // Clear any leftover freeze from a previous session — otherwise the
     // inference loop early-returns forever and predictions never resume.
     frozenFrame = false;
-    inferCameraStream = await getCameraStream();
+    const stream = await getCameraStream();
+    if (!isBlockPlaced(id)) { stopStream(stream); return; } // removed during the permission prompt
+    inferCameraStream = stream;
     const vid = document.getElementById('vid-' + id);
     if (vid) { vid.srcObject = inferCameraStream; vid.play().catch(() => {}); }
     inferVideoEl = vid;
