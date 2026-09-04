@@ -387,15 +387,28 @@ select {
   border: 1.5px solid rgba(0, 0, 0, .15)
 }
 
-/* Currently-executing block during a pipeline run. */
+/* Currently-executing block during a pipeline run. The pulsing ring is a
+   separate ::after layer animating opacity/transform only (compositor-side);
+   animating box-shadow repainted the whole card every frame. */
 .block-card.block-running {
-  box-shadow: 0 0 0 3px #DC2626, 6px 6px 0 #1a1a2e;
+  outline: 3px solid #DC2626;
+  outline-offset: 0
+}
+
+.block-card.block-running::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 20px;
+  border: 3px solid #DC2626;
+  pointer-events: none;
+  will-change: opacity, transform;
   animation: block-pulse 1s ease-in-out infinite
 }
 
 @keyframes block-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(220, 38, 38, .5), 6px 6px 0 #1a1a2e }
-  50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, .9), 6px 6px 0 #1a1a2e }
+  0%, 100% { opacity: .35; transform: scale(1) }
+  50% { opacity: .9; transform: scale(1.015) }
 }
 
 #canvas-inner {
@@ -1239,8 +1252,7 @@ video.bk-video {
   z-index: 500;
   display: flex;
   align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(4px)
+  justify-content: center
 }
 
 .modal-overlay.hidden {

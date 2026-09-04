@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MobileNet V3 Small — Architecture Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <!-- defer: every tf.* call lives inside click handlers, so parsing need not block on the ~1 MB library. -->
+    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <style>
         :root {
             --bg-main: #FFFFFF;
@@ -615,6 +618,9 @@ function toggleExpLang() {
 // matches what actually powers their model.
 const V3_CLASSIFIER_URL = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-classification/versions/1/model.json?tfjs-format=file';
 const V3_FEATURE_URL    = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-feature-vector/versions/1/model.json?tfjs-format=file';
+// Same backbone the main app stores once when a model is saved to the browser
+// (BASE_MODEL_IDB_KEY in app.js). Tried first to skip the ~2.5 MB download.
+const BASE_MODEL_IDB_KEY = 'indexeddb://ml-blocks-base-v1';
 const IMAGENET_LABELS_URL = 'https://storage.googleapis.com/download.tensorflow.org/data/ImageNetLabels.txt';
 let model = null;          // { classifier, feature } once loaded
 let imagenetLabels = null; // index-aligned 1001-entry list (index 0 = background)
@@ -682,7 +688,7 @@ async function loadModel() {
             tf.loadGraphModel(V3_CLASSIFIER_URL, {
                 onProgress: (frac) => { progressBar.style.width = Math.round(frac * 80) + '%'; }
             }),
-            tf.loadGraphModel(V3_FEATURE_URL),
+            tf.loadGraphModel(BASE_MODEL_IDB_KEY).catch(() => tf.loadGraphModel(V3_FEATURE_URL)),
             fetch(IMAGENET_LABELS_URL).then(r => r.text())
         ]);
         imagenetLabels = labelsText.trim().split('\n');
@@ -834,10 +840,12 @@ async function visualizeFeatureMaps() {
             const [C, H, W] = shape;
             const showN = Math.min(C, 16);
             const items = [];
+            // One GPU readback for the whole [C,H,W] tensor, then plain typed-array
+            // views per channel (row-major, so channel c is one contiguous H*W run).
+            const all = await tensor.data();
+            const plane = H * W;
             for (let c = 0; c < showN; c++) {
-                const slice = tf.tidy(() => tensor.slice([c,0,0],[1,-1,-1]).squeeze());
-                const data = await slice.data();
-                slice.dispose();
+                const data = all.subarray(c * plane, (c + 1) * plane);
                 const canvas = document.createElement('canvas');
                 canvas.width = W; canvas.height = H;
                 canvas.className = 'fmap-canvas';

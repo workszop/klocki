@@ -140,6 +140,9 @@ const STRINGS = {
     btn_clear_dataset: '🗑 Usuń z pamięci',
     btn_load_dataset: '📂 Wczytaj dataset',
     log_prep_stale: 'Dane zmieniły się w trakcie przygotowania - uruchom "Przygotuj dane" ponownie.',
+    log_feat_cached: 'Cechy wzięte z pamięci podręcznej (dane bez zmian).',
+    log_save_bad_name: 'Nazwa modelu nie może zaczynać się od "base-".',
+    eval_epoch: (e, n) => `Trening na 80% (świeży model): epoka ${e}/${n}`,
     confirm_clear_canvas: 'Wyczyścić obszar roboczy? Bloki i wczytane modele zostaną usunięte. Dataset pozostanie w pamięci przeglądarki.',
     confirm_clear_canvas_model: 'Wytrenowany model nie został jeszcze zapisany i zostanie utracony. Wyczyścić obszar roboczy? Dataset pozostanie w pamięci przeglądarki.',
     empty_title: 'Pusty obszar roboczy',
@@ -223,6 +226,9 @@ const STRINGS = {
     btn_clear_dataset: '🗑 Delete from storage',
     btn_load_dataset: '📂 Load dataset',
     log_prep_stale: 'Data changed during preparation - run "Prepare Data" again.',
+    log_feat_cached: 'Features reused from cache (data unchanged).',
+    log_save_bad_name: 'Model name cannot start with "base-".',
+    eval_epoch: (e, n) => `Training on 80% (fresh model): epoch ${e}/${n}`,
     confirm_clear_canvas: 'Clear the workspace? Blocks and loaded models will be removed. The dataset stays in browser storage.',
     confirm_clear_canvas_model: 'The trained model has not been saved yet and will be lost. Clear the workspace? The dataset stays in browser storage.',
     empty_title: 'Empty workspace',
@@ -280,9 +286,23 @@ let preparedData = null; // {xs, ys}
 // Bumped on every sample/class change. runPrepare records it on entry and
 // discards a worker result produced from an older snapshot.
 let datasetVersion = 0;
+// ─── Feature cache ───
+// Bottleneck features are the most expensive thing the app computes and Train
+// and Evaluate both need them for the same images. One entry per source:
+// 'raw' = capturedSamples flattened class by class, 'prepared' = an augmented
+// snapshot. An entry is valid only while datasetVersion, the sample array
+// identity and the base model identity all still match.
+const featureCache = {}; // source -> { version, ident, base, feats }
+function disposeFeatureCache() {
+  Object.keys(featureCache).forEach(k => {
+    try { featureCache[k].feats.dispose(); } catch (_) {}
+    delete featureCache[k];
+  });
+}
 function invalidatePreparedData() {
   preparedData = null;
   datasetVersion++;
+  disposeFeatureCache();
 }
 let baseModel = null;
 let fullModel = null;
@@ -370,6 +390,7 @@ function toggleLang() {
 // ============================================================
 
 // ===== LOG PANEL =====
+const LOG_MAX_ENTRIES = 500;
 function log(type, msg) {
   const el = document.createElement('div');
   el.className = `log-line ll-${type}`;
@@ -377,6 +398,8 @@ function log(type, msg) {
   el.textContent = `[${ts}] ${msg}`;
   const entries = document.getElementById('log-entries');
   entries.appendChild(el);
+  // Keep the panel bounded: inference logs ~1 line/s for the whole session.
+  while (entries.childElementCount > LOG_MAX_ENTRIES) entries.removeChild(entries.firstChild);
   entries.scrollTop = entries.scrollHeight;
 }
 function clearLog() { document.getElementById('log-entries').innerHTML = ''; }
@@ -489,11 +512,26 @@ function openDatasetDB() {
   });
 }
 
+// One scratch canvas per direction instead of a fresh canvas per sample.
+// Safe under concurrent calls: putImageData + toBlob's bitmap snapshot, and
+// drawImage + getImageData, each run synchronously inside a single callback.
+let _encodeCanvas = null;
+let _decodeCanvas = null;
+function scratchCanvas(which, w, h) {
+  let cv = which === 'enc' ? _encodeCanvas : _decodeCanvas;
+  if (!cv) {
+    cv = document.createElement('canvas');
+    if (which === 'enc') _encodeCanvas = cv; else _decodeCanvas = cv;
+  }
+  if (cv.width !== w) cv.width = w;
+  if (cv.height !== h) cv.height = h;
+  return cv;
+}
+
 // Encode one ImageData as a JPEG ArrayBuffer.
 function imageDataToJPEG(imgData, quality) {
   return new Promise((resolve, reject) => {
-    const cv = document.createElement('canvas');
-    cv.width = imgData.width; cv.height = imgData.height;
+    const cv = scratchCanvas('enc', imgData.width, imgData.height);
     cv.getContext('2d').putImageData(imgData, 0, 0);
     cv.toBlob(blob => {
       // toBlob yields null if the canvas is tainted or encoding fails — reject
@@ -512,12 +550,28 @@ function jpegToImageData(buf, width, height) {
   return new Promise((resolve, reject) => {
     const blob = new Blob([buf], { type: 'image/jpeg' });
     createImageBitmap(blob).then(bmp => {
-      const cv = document.createElement('canvas');
-      cv.width = width || bmp.width; cv.height = height || bmp.height;
-      cv.getContext('2d').drawImage(bmp, 0, 0);
-      resolve(cv.getContext('2d').getImageData(0, 0, cv.width, cv.height));
+      const cv = scratchCanvas('dec', width || bmp.width, height || bmp.height);
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(bmp, 0, 0);
+      bmp.close();
+      resolve(ctx.getImageData(0, 0, cv.width, cv.height));
     }, reject);
   });
+}
+
+// Encoded JPEG per ImageData. Samples never change after capture, so a buffer
+// encoded once (or decoded from IDB / an import file) is valid for the sample's
+// whole lifetime; the WeakMap lets it go with the ImageData.
+const _jpegCache = new WeakMap(); // ImageData -> ArrayBuffer
+function encodeSampleJPEG(imgData) {
+  const hit = _jpegCache.get(imgData);
+  if (hit) return Promise.resolve(hit);
+  return imageDataToJPEG(imgData).then(buf => { _jpegCache.set(imgData, buf); return buf; });
+}
+// Decode and remember the source buffer so the first save after a load does
+// not re-encode the whole dataset.
+function decodeSampleJPEG(buf) {
+  return jpegToImageData(buf).then(img => { _jpegCache.set(img, buf); return img; });
 }
 
 // Cancel every pending debounced save. Must be called before any operation that
@@ -527,6 +581,43 @@ function jpegToImageData(buf, width, height) {
 function cancelAllPendingSaves() {
   Object.values(_saveDebounceTimers).forEach(clearTimeout);
   _saveDebounceTimers = {};
+  Object.values(_nameSaveTimers).forEach(clearTimeout);
+  _nameSaveTimers = {};
+}
+
+// Rename path: patch only `name`/`color` on the stored record (read-modify-write
+// in one transaction), never touching the JPEG payload. Debounced per class so
+// typing does not thrash the store. A class with no stored record yet is
+// skipped; its first full write will carry the current name anyway.
+let _nameSaveTimers = {};
+function saveClassNameToIDB(classIdx) {
+  clearTimeout(_nameSaveTimers[classIdx]);
+  _nameSaveTimers[classIdx] = setTimeout(async () => {
+    delete _nameSaveTimers[classIdx];
+    try {
+      await writeClassNameToIDB(classIdx);
+    } catch (err) {
+      console.warn('saveClassNameToIDB failed:', err);
+    }
+  }, 600);
+}
+async function writeClassNameToIDB(classIdx) {
+  if (datasetLoadPromise) await datasetLoadPromise;
+  const db = await openDatasetDB();
+  await new Promise((res, rej) => {
+    const tx = db.transaction(DATASET_STORE, 'readwrite');
+    const store = tx.objectStore(DATASET_STORE);
+    const get = store.get(classIdx);
+    get.onsuccess = () => {
+      const rec = get.result;
+      if (!rec) { res(); return; }
+      rec.name = classNames[classIdx];
+      rec.color = classColors[classIdx];
+      const put = store.put(rec, classIdx);
+      put.onsuccess = res; put.onerror = e => rej(e.target.error);
+    };
+    get.onerror = e => rej(e.target.error);
+  });
 }
 
 // Actually encode + persist one class. Returns a promise that resolves when the
@@ -537,7 +628,8 @@ async function writeClassToIDB(classIdx) {
   if (datasetLoadPromise) await datasetLoadPromise;
   const db = await openDatasetDB();
   const samples = capturedSamples[classIdx] || [];
-  const jpegData = await Promise.all(samples.map(imgData => imageDataToJPEG(imgData)));
+  // Only samples captured since the last save are actually encoded.
+  const jpegData = await Promise.all(samples.map(encodeSampleJPEG));
   const record = { name: classNames[classIdx], color: classColors[classIdx], jpegData };
   await new Promise((res, rej) => {
     const tx = db.transaction(DATASET_STORE, 'readwrite');
@@ -630,7 +722,7 @@ async function loadDatasetFromIDB() {
         if (!rec || !rec.jpegData || !rec.jpegData.length) return;
         if (capturedSamples[idx] && capturedSamples[idx].length) return;
         try {
-          capturedSamples[idx] = await Promise.all(rec.jpegData.map(buf => jpegToImageData(buf)));
+          capturedSamples[idx] = await Promise.all(rec.jpegData.map(decodeSampleJPEG));
         } catch (e) {
           console.warn('Skipping undecodable samples for class', idx, e);
         }
@@ -698,7 +790,7 @@ async function exportDataset() {
   try {
     const classes = await Promise.all(classNames.map(async (name, i) => {
       const samples = capturedSamples[i] || [];
-      const jpegBuffers = await Promise.all(samples.map(imgData => imageDataToJPEG(imgData)));
+      const jpegBuffers = await Promise.all(samples.map(encodeSampleJPEG));
       // Convert ArrayBuffer → base64 string for JSON embedding
       const base64Samples = jpegBuffers.map(buf => {
         const bytes = new Uint8Array(buf);
@@ -767,7 +859,7 @@ async function importDataset(input) {
           const binary = atob(b64);
           const bytes = new Uint8Array(binary.length);
           for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-          return jpegToImageData(bytes.buffer).catch(() => null);
+          return decodeSampleJPEG(bytes.buffer).catch(() => null);
         } catch (_) { return null; }
       }))).filter(Boolean);
       newSamples.push(decoded);
@@ -776,7 +868,7 @@ async function importDataset(input) {
     classNames    = newNames.slice(0, CLASS_COLORS.length);
     classColors   = newColors.slice(0, CLASS_COLORS.length);
     capturedSamples = newSamples.slice(0, CLASS_COLORS.length);
-    preparedData  = null;
+    invalidatePreparedData();
 
     // Persist to IDB. Cancel pending debounced writes, then WIPE the store so
     // classes from a previous (larger) dataset can't survive at higher keys and
@@ -1709,6 +1801,18 @@ function cardDragStart(e, id) {
     return ev;
   }
 
+  // Connector redraw is coalesced to one per animation frame: mousemove can
+  // fire far more often than the display refreshes, and each redraw measures
+  // every card (forced layout).
+  let connectorRafPending = false;
+  function scheduleConnectorRedraw() {
+    if (connectorRafPending) return;
+    connectorRafPending = true;
+    requestAnimationFrame(() => {
+      connectorRafPending = false;
+      if (draggedCard === id) drawPipelineConnectors();
+    });
+  }
   function onMove(ev) {
     const p = pointFromEvent(ev);
     const canvas = document.getElementById('canvas');
@@ -1720,7 +1824,7 @@ function cardDragStart(e, id) {
     card.style.left = nx + 'px';
     card.style.top = ny + 'px';
     // Keep connector curves attached to the block as it moves.
-    drawPipelineConnectors();
+    scheduleConnectorRedraw();
     // Trash detection
     const tr = trash.getBoundingClientRect();
     const inTrash = p.clientX >= tr.left && p.clientX <= tr.right &&
@@ -1922,11 +2026,13 @@ function updateClassNamesEverywhere(source) {
     ).join('');
   });
   persistCanvasState();
-  // Update class name in IDB metadata without re-encoding all JPEG samples.
-  // We re-use saveClassToIDB's debounce timer so rapid typing doesn't thrash.
-  classNames.forEach((_, i) => {
-    if (capturedSamples[i] && capturedSamples[i].length > 0) saveClassToIDB(i);
-  });
+  // Only the renamed class is persisted, and only its name/color field: the
+  // stored JPEG payload is left untouched. The other callers (add/delete
+  // class, import, clear) write their records themselves.
+  if (source && source.id) {
+    const cls = classIdxOf(source);
+    if (cls >= 0 && cls < classNames.length) saveClassNameToIDB(cls);
+  }
 }
 
 // ===== CAMERA — Training =====
@@ -2290,10 +2396,6 @@ async function runPrepare(id) {
   const prog = document.getElementById('prog-' + id);
   const status = document.getElementById('prep-status-' + id);
 
-  const blob = new Blob([WORKER_CODE], { type: 'application/javascript' });
-  const workerURL = URL.createObjectURL(blob);
-  const worker = new Worker(workerURL);
-
   // Flatten all samples with labels
   const allSamples = [];
   const allLabels = [];
@@ -2303,6 +2405,26 @@ async function runPrepare(id) {
       allLabels.push(cls);
     }
   }
+
+  if (multiplier === 1) {
+    // No augmentation: the prepared set IS the originals. Reference the
+    // ImageData objects directly (downstream only reads pixels from them)
+    // instead of cloning the whole dataset into a worker and back. rawOrder
+    // tells the feature cache this set is identical to the flattened raw
+    // samples, so Train and Evaluate share one feature tensor.
+    if (prog) prog.value = 100;
+    preparedData = { xs: allSamples, ys: allLabels, numClasses: classNames.length, rawOrder: true };
+    log('success', t('log_prep_done', allSamples.length));
+    if (status) status.textContent = t('log_prep_done', allSamples.length);
+    setBlockStatus(document.getElementById(id), 'done');
+    evaluatePipelineState();
+    prepareInProgress = false;
+    return;
+  }
+
+  const blob = new Blob([WORKER_CODE], { type: 'application/javascript' });
+  const workerURL = URL.createObjectURL(blob);
+  const worker = new Worker(workerURL);
 
   return new Promise((resolve) => {
     // Tear down worker + blob URL + guard exactly once, whatever the outcome.
@@ -2601,10 +2723,9 @@ async function runTraining(id) {
   setBlockStatus(document.getElementById(id), 'running');
   log('step', t('log_train_start', epochs));
 
-  // Declared outside try so finally can always dispose them
-  let featsTensor = null;
+  // ysTensor is disposed in finally; the feature tensor is OWNED BY THE
+  // FEATURE CACHE and must never be disposed here.
   let ysTensor = null;
-  const allFeats = [];      // per-batch feature tensors — leak on cancel/error otherwise
   let classifier = null;    // disposed in finally unless training committed it
   let committed = false;
   const prevModel = fullModel; // freed AFTER the new model is live (see below)
@@ -2614,41 +2735,20 @@ async function runTraining(id) {
     // Always resize to 224×224 — MobileNetV3-Small requires that input size
     // regardless of the resolution the user chose when capturing samples.
     log('info', lang === 'pl' ? `Ekstrakcja cech z ${rawXs.length} próbek...` : `Extracting features from ${rawXs.length} samples...`);
-    // BATCHED feature extraction — one baseModel.predict() per BATCH samples
-    // instead of per-sample. ~4-8x faster on GPU. Yield to UI between batches.
-    // Worker output uses plain {data,width,height} objects; wrap with
-    // ImageData (no buffer copy) so tf.browser.fromPixels accepts them.
-    const BATCH = 8;
-    for (let bs = 0; bs < rawXs.length; bs += BATCH) {
-      if (trainingCancelled) throw new Error('cancelled');
-      const end = Math.min(bs + BATCH, rawXs.length);
-      const batchTensor = tf.tidy(() => {
-        const items = [];
-        for (let i = bs; i < end; i++) {
-          const d = rawXs[i];
-          const im = d instanceof ImageData
-            ? d
-            : new ImageData(d.data, d.width, d.height);
-          let t = tf.browser.fromPixels(im).toFloat().div(255);
-          if (im.width !== 224 || im.height !== 224) {
-            t = t.resizeBilinear([224, 224]);
-          }
-          items.push(t);
+    // A prepared set without augmentation is the raw set in the same order,
+    // so it shares the 'raw' cache entry with Evaluate.
+    const featsTensor = await getCachedFeatures(
+      preparedData.rawOrder ? 'raw' : 'prepared',
+      rawXs,
+      preparedData.rawOrder ? 'raw' : rawXs,
+      {
+        shouldCancel: () => trainingCancelled,
+        onProgress: (done, total) => {
+          if (info) info.textContent = lang === 'pl'
+            ? `Ekstrakcja cech: ${done}/${total}`
+            : `Feature extraction: ${done}/${total}`;
         }
-        return tf.stack(items);
       });
-      try {
-        allFeats.push(baseModel.predict(batchTensor));
-      } finally {
-        batchTensor.dispose();
-      }
-      if (info) info.textContent = lang === 'pl'
-        ? `Ekstrakcja cech: ${end}/${rawXs.length}`
-        : `Feature extraction: ${end}/${rawXs.length}`;
-      await tf.nextFrame();
-    }
-    featsTensor = tf.concat(allFeats, 0);
-    allFeats.forEach(f => f.dispose());
     const featSize = featsTensor.shape[1];
 
     // Dispose the index tensor immediately after oneHot consumes it
@@ -2738,12 +2838,8 @@ async function runTraining(id) {
       setBlockStatus(document.getElementById(id), 'error');
     }
   } finally {
-    // Always clean up feature tensors regardless of success, cancellation or error.
-    if (featsTensor) featsTensor.dispose();
+    // The label tensor is ours; the feature tensor stays in featureCache.
     if (ysTensor) ysTensor.dispose();
-    // Batch feature tensors leak if we bailed mid-extraction (dispose is
-    // idempotent, so re-disposing the ones freed after concat is harmless).
-    allFeats.forEach(f => { try { f.dispose(); } catch (_) {} });
     // The freshly-built classifier leaks if training was cancelled or errored
     // before ownership transferred to fullModel.
     if (classifier && !committed) { try { classifier.dispose(); } catch (_) {} }
@@ -2759,30 +2855,66 @@ function stopTraining(id) {
 
 // ===== MODEL EVALUATION (train/test split) =====
 // Extract MobileNet bottleneck features for a list of ImageData samples.
-// Returns a [N, featSize] tensor (caller disposes). Batched like runTraining.
-async function extractFeatures(samples) {
+// Returns a [N, featSize] tensor (caller owns it). BATCHED: one
+// baseModel.predict() per BATCH samples instead of per-sample, ~4-8x faster
+// on GPU, yielding to the UI between batches. Always resizes to 224x224
+// (MobileNetV3-Small input) whatever resolution the samples were captured at.
+// Worker output uses plain {data,width,height} objects; wrap with ImageData
+// (no buffer copy) so tf.browser.fromPixels accepts them.
+// opts.shouldCancel() aborts with 'cancelled'; opts.onProgress(done, total).
+async function extractFeatures(samples, opts) {
   const BATCH = 8;
+  const shouldCancel = opts && opts.shouldCancel;
+  const onProgress = opts && opts.onProgress;
   const feats = [];
-  for (let bs = 0; bs < samples.length; bs += BATCH) {
-    const end = Math.min(bs + BATCH, samples.length);
-    const batchTensor = tf.tidy(() => {
-      const items = [];
-      for (let i = bs; i < end; i++) {
-        const d = samples[i];
-        const im = d instanceof ImageData ? d : new ImageData(d.data, d.width, d.height);
-        let tt = tf.browser.fromPixels(im).toFloat().div(255);
-        if (im.width !== 224 || im.height !== 224) tt = tt.resizeBilinear([224, 224]);
-        items.push(tt);
-      }
-      return tf.stack(items);
-    });
-    try { feats.push(baseModel.predict(batchTensor)); }
-    finally { batchTensor.dispose(); }
-    await tf.nextFrame();
+  try {
+    for (let bs = 0; bs < samples.length; bs += BATCH) {
+      if (shouldCancel && shouldCancel()) throw new Error('cancelled');
+      const end = Math.min(bs + BATCH, samples.length);
+      const batchTensor = tf.tidy(() => {
+        const items = [];
+        for (let i = bs; i < end; i++) {
+          const d = samples[i];
+          const im = d instanceof ImageData ? d : new ImageData(d.data, d.width, d.height);
+          let tt = tf.browser.fromPixels(im).toFloat().div(255);
+          if (im.width !== 224 || im.height !== 224) tt = tt.resizeBilinear([224, 224]);
+          items.push(tt);
+        }
+        return tf.stack(items);
+      });
+      try { feats.push(baseModel.predict(batchTensor)); }
+      finally { batchTensor.dispose(); }
+      if (onProgress) onProgress(end, samples.length);
+      await tf.nextFrame();
+    }
+    return tf.concat(feats, 0);
+  } finally {
+    // Per-batch tensors are always freed: after concat on success, and on a
+    // cancel/error mid-way so nothing leaks.
+    feats.forEach(f => { try { f.dispose(); } catch (_) {} });
   }
-  const out = tf.concat(feats, 0);
-  feats.forEach(f => f.dispose());
-  return out;
+}
+
+// Cached wrapper around extractFeatures. `source` names the cache slot,
+// `ident` is what makes the sample list unique within that slot (the array
+// itself for a prepared snapshot, 'raw' for the flattened captured samples,
+// whose content is covered by datasetVersion). The returned tensor belongs to
+// the cache: callers must not dispose it.
+async function getCachedFeatures(source, samples, ident, opts) {
+  const hit = featureCache[source];
+  if (hit && hit.version === datasetVersion && hit.ident === ident && hit.base === baseModel) {
+    log('info', t('log_feat_cached'));
+    return hit.feats;
+  }
+  if (hit) { try { hit.feats.dispose(); } catch (_) {} delete featureCache[source]; }
+  // Snapshot the keys before the (async) extraction so a sample captured
+  // mid-way produces a stale entry that the next lookup rejects.
+  const version = datasetVersion;
+  const base = baseModel;
+  const feats = await extractFeatures(samples, opts);
+  if (featureCache[source]) { try { featureCache[source].feats.dispose(); } catch (_) {} }
+  featureCache[source] = { version, ident, base, feats };
+  return feats;
 }
 
 let evaluateInProgress = false;
@@ -2816,32 +2948,44 @@ async function runEvaluate(id) {
   if (resEl) resEl.innerHTML = '';
 
   const numClasses = classNames.length;
-  // Stratified 80/20 split. Keep the test ImageData refs for the thumbnails.
-  const trainSamples = [], trainLabels = [], testSamples = [], testLabels = [];
+  // Features are extracted ONCE for the flattened raw set (class by class, the
+  // same order runPrepare uses, so the cache entry is shared with Train) and
+  // the train/test rows are gathered from it by index. Stratified 80/20 split;
+  // keep the test ImageData refs for the thumbnails.
+  const flatSamples = [];
+  const trainIdx = [], trainLabels = [], testIdx = [], testLabels = [], testSamples = [];
   for (let c = 0; c < numClasses; c++) {
-    const arr = (capturedSamples[c] || []).slice();
-    if (arr.length < 2) { arr.forEach(s => { trainSamples.push(s); trainLabels.push(c); }); continue; }
+    const arr = capturedSamples[c] || [];
+    const offset = flatSamples.length;
+    arr.forEach(s => flatSamples.push(s));
+    const order = arr.map((_, i) => offset + i);
+    if (arr.length < 2) { order.forEach(gi => { trainIdx.push(gi); trainLabels.push(c); }); continue; }
     // Deterministic seeded Fisher-Yates so the split is stable across clicks
     // but still a real per-class permutation (the old index-only formula gave
     // one fixed pattern for every class, so the same capture indices were
     // always held out).
     const rng = mulberry32(arr.length * 1000 + c);
-    for (let i = arr.length - 1; i > 0; i--) {
+    for (let i = order.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
+      [order[i], order[j]] = [order[j], order[i]];
     }
     const nTest = Math.max(1, Math.round(arr.length * 0.2));
-    arr.forEach((s, i) => {
-      if (i < nTest) { testSamples.push(s); testLabels.push(c); }
-      else { trainSamples.push(s); trainLabels.push(c); }
+    order.forEach((gi, i) => {
+      if (i < nTest) { testIdx.push(gi); testLabels.push(c); testSamples.push(flatSamples[gi]); }
+      else { trainIdx.push(gi); trainLabels.push(c); }
     });
   }
 
+  const EVAL_EPOCHS = 20;
   let trainFeat = null, testFeat = null, ysTensor = null, classifier = null, trainProbT = null, testProbT = null;
   try {
     setStatus(lang === 'pl' ? 'Ekstrakcja cech...' : 'Extracting features...');
-    trainFeat = await extractFeatures(trainSamples);
-    testFeat = await extractFeatures(testSamples);
+    // Owned by featureCache (never disposed here); trainFeat/testFeat are ours.
+    const allFeat = await getCachedFeatures('raw', flatSamples, 'raw', {
+      onProgress: (done, total) => setStatus((lang === 'pl' ? 'Ekstrakcja cech: ' : 'Extracting features: ') + done + '/' + total)
+    });
+    trainFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(trainIdx, 'int32')));
+    testFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(testIdx, 'int32')));
     const featSize = trainFeat.shape[1];
 
     const idxT = tf.tensor1d(trainLabels, 'int32');
@@ -2857,7 +3001,17 @@ async function runEvaluate(id) {
       ]
     });
     classifier.compile({ optimizer: tf.train.adam(0.001), loss: 'categoricalCrossentropy', metrics: ['accuracy'] });
-    await classifier.fit(trainFeat, ysTensor, { epochs: 20, batchSize: 16, shuffle: true });
+    await classifier.fit(trainFeat, ysTensor, {
+      epochs: EVAL_EPOCHS, batchSize: 16, shuffle: true,
+      // Yield between epochs so the tab stays responsive and the status line
+      // actually repaints.
+      callbacks: {
+        onEpochEnd: async (epoch) => {
+          setStatus(t('eval_epoch', epoch + 1, EVAL_EPOCHS));
+          await tf.nextFrame();
+        }
+      }
+    });
 
     setStatus(lang === 'pl' ? 'Test na 20% (niewidziane)...' : 'Testing on 20% (unseen)...');
     trainProbT = classifier.predict(trainFeat);
@@ -3000,15 +3154,28 @@ function renderEvaluation(id, r) {
 }
 
 // ===== SAVE MODEL =====
+// The MobileNet backbone is identical for every trained head, so it is stored
+// ONCE under this key (~2.5 MB) and only the small head is saved per name.
+// model-explorer.html reads the same key to skip the network download.
+const BASE_MODEL_IDB_KEY = 'indexeddb://ml-blocks-base-v1';
+
 async function runSaveIDB(id) {
   if (!fullModel) { log('warn', t('lbl_no_model')); return; }
   if (!baseModel) { log('warn', t('log_no_model_base')); return; }
   const nameEl = document.getElementById('model-name-' + id);
   const name = (nameEl ? nameEl.value.trim() : '') || 'model-1';
+  // 'base-*' is the backbone namespace (fixed key + legacy per-name copies);
+  // a head stored there would be hidden from the list and could clobber it.
+  if (name.startsWith('base-')) {
+    log('warn', t('log_save_bad_name'));
+    setBlockStatus(document.getElementById(id), 'error');
+    return;
+  }
   try {
     fullModel.userDefinedMetadata = modelMetadata; // bake labels into model JSON
     await fullModel.save('indexeddb://ml-blocks-' + name);
-    await baseModel.save('indexeddb://ml-blocks-base-' + name);
+    const stored = await tf.io.listModels();
+    if (!stored[BASE_MODEL_IDB_KEY]) await baseModel.save(BASE_MODEL_IDB_KEY);
     localStorage.setItem('ml-blocks-meta-' + name, JSON.stringify(modelMetadata));
     log('success', t('log_save_idb'));
     setBlockStatus(document.getElementById(id), 'done');
@@ -3146,7 +3313,7 @@ function buildStandaloneAppHTML(bundle) {
 const BUNDLE = ${dataJson};
 const LABELS = BUNDLE.labels, COLORS = BUNDLE.colors, SIZE = BUNDLE.inputSize || 224;
 function b64ToBuf(b64){const bin=atob(b64),n=bin.length,bytes=new Uint8Array(n);for(let i=0;i<n;i++)bytes[i]=bin.charCodeAt(i);return bytes.buffer;}
-let baseModel=null, headModel=null, stream=null, loopTimer=null;
+let baseModel=null, headModel=null, stream=null, loopTimer=null, busy=false;
 async function load(){
   headModel = await tf.loadLayersModel({load:async()=>({modelTopology:BUNDLE.classifier.modelTopology,weightSpecs:BUNDLE.classifier.weightSpecs,weightData:b64ToBuf(BUNDLE.classifier.weightData),format:BUNDLE.classifier.format})});
   baseModel = await tf.loadGraphModel({load:async()=>({modelTopology:BUNDLE.base.modelTopology,weightSpecs:BUNDLE.base.weightSpecs,weightData:b64ToBuf(BUNDLE.base.weightData),format:BUNDLE.base.format})});
@@ -3163,17 +3330,29 @@ async function start(){
   }catch(e){ try{ stream=await navigator.mediaDevices.getUserMedia({video:true}); }catch(e2){ document.getElementById('status').textContent='${isPl ? 'Brak dostępu do kamery' : 'No camera access'}'; return; } }
   const vid=document.getElementById('vid'); vid.srcObject=stream; await vid.play();
   document.getElementById('btn').style.display='none';
-  loopTimer=setInterval(predict,120);
+  startLoop();
 }
+function startLoop(){ if(!loopTimer&&stream) loopTimer=setInterval(predict,120); }
+function stopLoop(){ if(loopTimer){ clearInterval(loopTimer); loopTimer=null; } }
 async function predict(){
+  // In-flight guard: on a slow GPU a tick can outlast the interval; without
+  // it ticks pile up and the page stutters.
+  if(busy) return;
   const vid=document.getElementById('vid'); if(!vid.srcObject) return;
+  busy=true;
   let probs;
-  const t=tf.tidy(()=>tf.browser.fromPixels(vid).resizeBilinear([SIZE,SIZE]).toFloat().div(255).expandDims(0));
-  try{ const f=baseModel.predict(t); const p=headModel.predict(f); probs=await p.data(); f.dispose(); p.dispose(); } finally { t.dispose(); }
-  let max=0; for(let i=1;i<probs.length;i++) if(probs[i]>probs[max]) max=i;
-  for(let i=0;i<LABELS.length;i++){ const pc=Math.round((probs[i]||0)*100); document.getElementById('pct'+i).textContent=pc+'%'; document.getElementById('fill'+i).style.width=pc+'%'; }
-  const r=document.getElementById('result'); r.textContent=esc(LABELS[max])+' '+Math.round(probs[max]*100)+'%'; r.style.color=COLORS[max]||'#e2e8f0';
+  try{
+    const t=tf.tidy(()=>tf.browser.fromPixels(vid).resizeBilinear([SIZE,SIZE]).toFloat().div(255).expandDims(0));
+    try{ const f=baseModel.predict(t); const p=headModel.predict(f); probs=await p.data(); f.dispose(); p.dispose(); } finally { t.dispose(); }
+    let max=0; for(let i=1;i<probs.length;i++) if(probs[i]>probs[max]) max=i;
+    for(let i=0;i<LABELS.length;i++){ const pc=Math.round((probs[i]||0)*100); document.getElementById('pct'+i).textContent=pc+'%'; document.getElementById('fill'+i).style.width=pc+'%'; }
+    const r=document.getElementById('result'); r.textContent=esc(LABELS[max])+' '+Math.round(probs[max]*100)+'%'; r.style.color=COLORS[max]||'#e2e8f0';
+  }catch(e){ /* frame not ready yet */ }
+  finally{ busy=false; }
 }
+// Pause inference while the tab is hidden; release the camera when the page goes away.
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) stopLoop(); else startLoop(); });
+window.addEventListener('pagehide',()=>{ stopLoop(); if(stream){ stream.getTracks().forEach(tr=>tr.stop()); stream=null; } });
 document.getElementById('btn').addEventListener('click',start);
 load().catch(e=>{document.getElementById('status').textContent='Error: '+e.message;});
 <\/script>
@@ -3246,6 +3425,7 @@ async function tryLoadModelFiles(id) {
     }
     disposeIfUnused(prevInfer, inferModel, fullModel);
     disposeIfUnused(prevBase, baseModel, fullModel);
+    if (prevBase !== baseModel) disposeFeatureCache();
     setBlockStatus(document.getElementById(id), 'done');
     log('success', t('log_upload_done', classNames.join(', ')));
     modelSaved = true; // loaded from disk → already exists somewhere
@@ -3282,12 +3462,12 @@ async function runLoadIDB(id) {
   try {
     inferModel = await tf.loadLayersModel('indexeddb://ml-blocks-' + name);
     try {
-      baseModel = await tf.loadGraphModel('indexeddb://ml-blocks-base-' + name);
+      baseModel = await tf.loadGraphModel(BASE_MODEL_IDB_KEY);
       log('info', lang === 'pl' ? 'Model bazowy wczytany z przeglądarki ✓' : 'Base model loaded from browser ✓');
     } catch (_) {
-      // Backward compat: try old fixed key
+      // Backward compat: older saves stored a backbone copy per model name.
       try {
-        baseModel = await tf.loadGraphModel('indexeddb://ml-blocks-base-v1');
+        baseModel = await tf.loadGraphModel('indexeddb://ml-blocks-base-' + name);
         log('info', lang === 'pl' ? 'Model bazowy wczytany z przeglądarki ✓' : 'Base model loaded from browser ✓');
       } catch (_2) {
         log('warn', lang === 'pl'
@@ -3300,6 +3480,7 @@ async function runLoadIDB(id) {
     processLoadedMeta(id, meta);
     disposeIfUnused(prevInfer, inferModel, fullModel);
     disposeIfUnused(prevBase, baseModel, fullModel);
+    if (prevBase !== baseModel) disposeFeatureCache();
     setBlockStatus(document.getElementById(id), 'done');
     log('success', t('log_upload_done', meta.classLabels ? meta.classLabels.join(', ') : '—'));
     modelSaved = true;
@@ -3460,10 +3641,44 @@ function stopZeroShot(id) {
   log('info', lang === 'pl' ? 'Zero-shot zatrzymany' : 'Zero-shot stopped');
 }
 
+// Top-5 result rows are built once per results element and patched per tick.
+const _zsUI = new WeakMap(); // resultsEl -> rows:[{label,pct,fill}]
+function ensureZeroShotRowsDOM(resultsEl, k) {
+  const cached = _zsUI.get(resultsEl);
+  if (cached && cached.length === k) return cached;
+  resultsEl.innerHTML = '';
+  const rows = [];
+  for (let i = 0; i < k; i++) {
+    const row = document.createElement('div');
+    row.style.marginBottom = '3px';
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;justify-content:space-between;font-size:10px;margin-bottom:1px';
+    const label = document.createElement('span');
+    label.style.cssText = 'font-weight:600;color:var(--c-model);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px';
+    const pct = document.createElement('span');
+    pct.style.color = 'var(--c-muted)';
+    head.appendChild(label); head.appendChild(pct);
+    const track = document.createElement('div');
+    track.style.cssText = 'background:#E2E8F0;border-radius:3px;height:5px';
+    const fill = document.createElement('div');
+    fill.style.cssText = 'background:var(--c-model);width:0%;height:5px;border-radius:3px;transition:width .15s';
+    track.appendChild(fill);
+    row.appendChild(head); row.appendChild(track);
+    resultsEl.appendChild(row);
+    rows.push({ label, pct, fill });
+  }
+  _zsUI.set(resultsEl, rows);
+  return rows;
+}
+
+// Per-block in-flight guard so a slow tick never overlaps the next one.
+const zsBusy = {}; // id -> bool
 async function runZeroShot(id) {
   if (!zeroShotModel) return;
+  if (zsBusy[id]) return;
   const vid = document.getElementById('zsvid-' + id);
   if (!vid || !vid.srcObject) return;
+  zsBusy[id] = true;
   const labels = imagenetLabels;
   // Declared outside try so a throw in predict/softmax/data() still frees them
   // — this runs up to 10x/s, so a leak here compounds fast.
@@ -3495,28 +3710,23 @@ async function runZeroShot(id) {
         topV[j] = v; topI[j] = i;
       }
     }
-    const top5 = [];
-    for (let k = 0; k < K; k++) top5.push({ v: topV[k], i: topI[k] });
     const resultsEl = document.getElementById('zs-results-' + id);
     if (resultsEl && labels) {
-      resultsEl.innerHTML = top5.map(({ v, i }) => {
-        const label = labels[i] || `class_${i}`;
-        const pct = Math.min(100, v * 100).toFixed(1);
-        return `<div style="margin-bottom:3px">
-<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:1px">
-  <span style="font-weight:600;color:var(--c-model);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">${escapeHtml(label)}</span>
-  <span style="color:var(--c-muted)">${pct}%</span>
-</div>
-<div style="background:#E2E8F0;border-radius:3px;height:5px">
-  <div style="background:var(--c-model);width:${pct}%;height:5px;border-radius:3px;transition:width .15s"></div>
-</div></div>`;
-      }).join('');
+      const rows = ensureZeroShotRowsDOM(resultsEl, K);
+      for (let k = 0; k < K; k++) {
+        const i = topI[k];
+        const pct = Math.min(100, topV[k] * 100).toFixed(1);
+        rows[k].label.textContent = labels[i] || `class_${i}`;
+        rows[k].pct.textContent = pct + '%';
+        rows[k].fill.style.width = pct + '%';
+      }
     }
   } catch (e) { /* silent — frame may not be ready yet */ }
   finally {
     if (tensor) tensor.dispose();
     if (logitsTensor) logitsTensor.dispose();
     if (probsTensor) probsTensor.dispose();
+    zsBusy[id] = false;
   }
 }
 
@@ -3644,12 +3854,17 @@ function updatePredictBars(ui, predictions, threshold) {
   }
 }
 
+// In-flight guard: setInterval keeps firing while a slow tick is still
+// awaiting the GPU; without this, ticks pile up and the UI stutters.
+let inferBusy = false;
 async function runInference(camId) {
   if (!inferModel) return;
   if (frozenFrame) return;
+  if (inferBusy) return;
   const vid = inferVideoEl;
   if (!vid || !vid.srcObject) return;
   if (!baseModel) return; // user is between block placements; silent
+  inferBusy = true;
 
   // Declared outside try so a throw in either predict() (e.g. a loaded model
   // whose input shape doesn't match the base features) frees them instead of
@@ -3723,6 +3938,7 @@ async function runInference(camId) {
     if (predTensor) predTensor.dispose();
     if (features) features.dispose();
     if (tensor) tensor.dispose();
+    inferBusy = false;
   }
 }
 
@@ -3781,6 +3997,11 @@ async function runXAI(id) {
   setBlockStatus(block, 'running');
   xaiRunning = true;
   xaiCancelled = false;
+  // Pause the live inference loop for the sweep: it would compete for the GPU
+  // with the ~100 occlusion predicts. Restored in finally (freezeFrame only
+  // toggles this flag, so the user's own freeze state survives the run).
+  const prevFrozen = frozenFrame;
+  frozenFrame = true;
 
   try {
   // ── 1. Capture frame using EXACTLY the same preprocessing as inference ──
@@ -4009,6 +4230,7 @@ async function runXAI(id) {
   } finally {
     xaiRunning = false;
     xaiCancelled = false;
+    frozenFrame = prevFrozen;
     if (progEl) progEl.style.display = 'none';
   }
 }
@@ -4193,7 +4415,8 @@ function drawHistChart(id) {
   if (!cv || predHistory.length < 2) return;
   const W = cv.offsetWidth || 256;
   const H = cv.height || 60;
-  cv.width = W;
+  // Assigning width clears the bitmap and forces layout; only do it on resize.
+  if (cv.dataset.w !== String(W)) { cv.width = W; cv.dataset.w = String(W); }
   const ctx = cv.getContext('2d');
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#F8FAFC';
