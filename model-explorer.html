@@ -16,9 +16,27 @@
             --accent: #1E3932;
             --accent-light: #2d5246;
             --text-heading: #1A1A1A;
-            --text-body: #666666;
+            --text-body: #64748B;
+            --text-faint: #94A3B8;
             --border: #F0F0F0;
             --border-hover: #E0E0E0;
+            --border-strong: #CBD5E1;
+            --accent-tint: #f0f7f4;
+            --accent-tint-2: #e8f5f0;
+            --accent-tint-border: #c6e6d8;
+            --accent-a04: rgb(30 57 50 / .04);
+            --chrome-bg: #334155;
+            --chrome-text: #e2e8f0;
+            --ok: #10b981;
+            --warn: #f59e0b;
+            --danger: #ef4444;
+            /* Layer-type tags (architecture rows and the legend badges) */
+            --tag-input-bg: #dbeafe;  --tag-input-fg: #1e40af;
+            --tag-stem-bg: #fce7f3;   --tag-stem-fg: #9d174d;
+            --tag-bneck-bg: #d1fae5;  --tag-bneck-fg: #065f46;
+            --tag-se-bg: #ede9fe;     --tag-se-fg: #4c1d95;
+            --tag-head-bg: #fef3c7;   --tag-head-fg: #78350f;
+            --tag-output-bg: #fee2e2; --tag-output-fg: #991b1b;
             --radius-sm: 4px;
             --radius-md: 8px;
             --radius-lg: 12px;
@@ -38,10 +56,10 @@
             background: var(--bg-main);
             -webkit-font-smoothing: antialiased;
         }
-        ::selection { background: var(--accent); color: white; }
+        ::selection { background: var(--accent); color: var(--bg-main); }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: var(--bg-section); }
-        ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 10px; }
         /* LAYOUT */
         .top-bar {
             height: var(--topbar-h);
@@ -52,7 +70,7 @@
             justify-content: space-between;
             position: sticky;
             top: 0;
-            background: white;
+            background: var(--bg-main);
             z-index: 100;
         }
         .logo { display: flex; align-items: center; gap: 10px; }
@@ -73,11 +91,11 @@
         }
         .status-dot {
             width: 7px; height: 7px; border-radius: 50%;
-            background: #d1d5db;
+            background: var(--border-strong);
         }
-        .status-dot.loading { background: #f59e0b; animation: pulse 1s infinite; }
-        .status-dot.ready { background: #10b981; }
-        .status-dot.error { background: #ef4444; }
+        .status-dot.loading { background: var(--warn); animation: pulse 1s infinite; }
+        .status-dot.ready { background: var(--ok); }
+        .status-dot.error { background: var(--danger); }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
         .main { display: grid; grid-template-columns: 380px 1fr; min-height: calc(100vh - var(--topbar-h)); }
         /* LEFT PANEL */
@@ -99,7 +117,7 @@
             border-radius: var(--radius-md); border: none; cursor: pointer;
             transition: all var(--transition); width: 100%; justify-content: center;
         }
-        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary { background: var(--accent); color: var(--bg-main); }
         .btn-primary:hover { background: var(--accent-light); }
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-secondary {
@@ -149,11 +167,11 @@
             transition: all var(--transition);
             position: relative;
         }
-        .upload-area:hover { border-color: var(--accent); background: #f0f7f4; }
+        .upload-area:hover { border-color: var(--accent); background: var(--accent-tint); }
         .upload-area input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
         .upload-icon { color: var(--text-body); margin-bottom: 8px; }
         .upload-text { font-size: 13px; color: var(--text-body); }
-        .upload-hint { font-size: 11px; color: #aaa; margin-top: 4px; }
+        .upload-hint { font-size: 11px; color: var(--text-faint); margin-top: 4px; }
         #preview-img {
             width: 100%; border-radius: var(--radius-md);
             margin-top: 16px; display: none;
@@ -205,19 +223,19 @@
             transition: background var(--transition);
             position: relative;
         }
-        .arch-block:hover { background: white; }
-        .arch-block.selected { background: white; box-shadow: 0 0 0 2px var(--accent); }
+        .arch-block:hover { background: var(--bg-main); }
+        .arch-block.selected { background: var(--bg-main); box-shadow: 0 0 0 2px var(--accent); }
         .block-tag {
             font-size: 10px; font-weight: 700;
             padding: 3px 8px; border-radius: 3px;
             text-align: center; width: fit-content;
         }
-        .tag-input { background: #dbeafe; color: #1e40af; }
-        .tag-stem { background: #fce7f3; color: #9d174d; }
-        .tag-bneck { background: #d1fae5; color: #065f46; }
-        .tag-se { background: #ede9fe; color: #4c1d95; }
-        .tag-head { background: #fef3c7; color: #78350f; }
-        .tag-output { background: #fee2e2; color: #991b1b; }
+        .tag-input { background: var(--tag-input-bg); color: var(--tag-input-fg); }
+        .tag-stem { background: var(--tag-stem-bg); color: var(--tag-stem-fg); }
+        .tag-bneck { background: var(--tag-bneck-bg); color: var(--tag-bneck-fg); }
+        .tag-se { background: var(--tag-se-bg); color: var(--tag-se-fg); }
+        .tag-head { background: var(--tag-head-bg); color: var(--tag-head-fg); }
+        .tag-output { background: var(--tag-output-bg); color: var(--tag-output-fg); }
         .block-name {
             font-size: 12px; font-weight: 600; color: var(--text-heading);
         }
@@ -239,7 +257,7 @@
         }
         /* Layer detail panel */
         .detail-panel {
-            background: white;
+            background: var(--bg-main);
             border: 1px solid var(--border);
             border-radius: var(--radius-lg);
             padding: 20px;
@@ -277,7 +295,7 @@
         .empty-state {
             text-align: center; padding: 60px 24px; color: var(--text-body);
         }
-        .empty-state svg { margin: 0 auto 16px; display: block; color: #ddd; }
+        .empty-state svg { margin: 0 auto 16px; display: block; color: var(--border-strong); }
         .empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text-heading); margin-bottom: 6px; }
         .empty-state p { font-size: 13px; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -287,11 +305,9 @@
             font-size: 10px; font-weight: 700; text-transform: uppercase;
             letter-spacing: 0.05em; border-radius: 3px;
         }
-        .badge-green { background: #d1fae5; color: #065f46; }
-        .badge-blue { background: #dbeafe; color: #1e40af; }
         .model-info {
-            background: linear-gradient(135deg, #f0f7f4 0%, #e8f5f0 100%);
-            border: 1px solid #c6e6d8;
+            background: linear-gradient(135deg, var(--accent-tint) 0%, var(--accent-tint-2) 100%);
+            border: 1px solid var(--accent-tint-border);
             border-radius: var(--radius-lg);
             padding: 20px;
             margin-bottom: 24px;
@@ -301,6 +317,26 @@
         .model-info-stats { display: flex; gap: 20px; margin-top: 12px; }
         .model-info-stats div { font-size: 11px; }
         .model-info-stats strong { display: block; font-size: 16px; font-weight: 700; color: var(--accent); }
+        .lang-btn {
+            background: var(--chrome-bg); color: var(--chrome-text); border: none;
+            border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer;
+        }
+        .inline-error { font-size: 12px; color: var(--danger); }
+        /* Phones and small tablets: stack the panels, no sticky sidebar, and let
+           the wide architecture table scroll inside its own container. */
+        @media (max-width: 768px) {
+            .top-bar { height: auto; min-height: var(--topbar-h); padding: 12px 16px; gap: 10px; }
+            .logo-sub { display: none; }
+            .main { grid-template-columns: 1fr; }
+            .left-panel {
+                position: static; height: auto;
+                border-right: none; border-bottom: 1px solid var(--border);
+            }
+            .right-panel { padding: 20px 16px; }
+            .panel-section { padding: 20px 16px; }
+            .detail-grid { grid-template-columns: 1fr 1fr; }
+            .pred-name { max-width: 60vw; }
+        }
     </style>
 </head>
 <body>
@@ -318,7 +354,7 @@
         </div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
-        <button id="exp-lang" onclick="toggleExpLang()" style="background:#334155;color:#e2e8f0;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">EN</button>
+        <button id="exp-lang" class="lang-btn" onclick="toggleExpLang()">EN</button>
         <div id="status-pill" class="status-pill">
             <div id="status-dot" class="status-dot"></div>
             <span id="status-text" data-i18n="st_notloaded">Not loaded</span>
@@ -396,7 +432,7 @@
         <div class="panel-section">
             <div class="panel-title" data-i18n="p_pred">Predictions</div>
             <div id="predictions">
-                <div style="font-size:12px;color:#aaa" data-i18n="pred_empty">Run inference to see results</div>
+                <div style="font-size:12px;color:var(--text-faint)" data-i18n="pred_empty">Run inference to see results</div>
             </div>
         </div>
         <!-- Inference time -->
@@ -486,12 +522,12 @@
                 <div class="detail-panel" style="display:block">
                     <div class="detail-title" data-i18n="about_notation_title">Architecture Notation</div>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px">
-                        <span class="badge" style="background:#dbeafe;color:#1e40af" data-i18n="badge_input">INPUT – RGB image 224×224</span>
-                        <span class="badge" style="background:#fce7f3;color:#9d174d" data-i18n="badge_stem">STEM – Initial conv+BN+act</span>
-                        <span class="badge" style="background:#d1fae5;color:#065f46" data-i18n="badge_bneck">BNECK – Bottleneck block</span>
-                        <span class="badge" style="background:#ede9fe;color:#4c1d95" data-i18n="badge_se">SE – Squeeze &amp; Excitation</span>
-                        <span class="badge" style="background:#fef3c7;color:#78350f" data-i18n="badge_head">HEAD – Classifier head</span>
-                        <span class="badge" style="background:#fee2e2;color:#991b1b" data-i18n="badge_output">OUTPUT – 1000 class logits</span>
+                        <span class="badge tag-input" data-i18n="badge_input">INPUT – RGB image 224×224</span>
+                        <span class="badge tag-stem" data-i18n="badge_stem">STEM – Initial conv+BN+act</span>
+                        <span class="badge tag-bneck" data-i18n="badge_bneck">BNECK – Bottleneck block</span>
+                        <span class="badge tag-se" data-i18n="badge_se">SE – Squeeze &amp; Excitation</span>
+                        <span class="badge tag-head" data-i18n="badge_head">HEAD – Classifier head</span>
+                        <span class="badge tag-output" data-i18n="badge_output">OUTPUT – 1000 class logits</span>
                     </div>
                     <div style="margin-top:12px;font-size:12px;color:var(--text-body)">
                         <p data-i18n="about_legend"><strong>exp</strong> = expansion factor | <strong>k</strong> = kernel size | <strong>s</strong> = stride | <strong>SE</strong> = has squeeze-excitation | <strong>HS</strong> = hard-swish activation</p>
@@ -509,7 +545,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr style="background:rgba(30,57,50,0.04)">
+                            <tr style="background:var(--accent-a04)">
                                 <td style="padding:10px;font-weight:700;color:var(--accent)">MobileNet V3 Small ★</td>
                                 <td style="padding:10px;text-align:right">67.4%</td>
                                 <td style="padding:10px;text-align:right">2.5M</td>
@@ -798,7 +834,7 @@ async function loadModel() {
         document.getElementById('demo-btn').disabled = false;
         if (currentImage) document.getElementById('classify-btn').disabled = false;
         setBtn(btn, 'check', 'btn_loaded');
-        btn.style.background = '#10b981';
+        btn.style.background = 'var(--ok)';
         setTimeout(() => progressWrap.classList.remove('visible'), 2500);
     } catch(e) {
         setStatus('error', 'st_fail');
@@ -896,7 +932,7 @@ async function classify() {
         await visualizeFeatureMaps();
     } catch(e) {
         console.error(e);
-        document.getElementById('predictions').innerHTML = `<div style="font-size:12px;color:#ef4444">${expT('rt_error')}${escapeHtmlX(e.message)}</div>`;
+        document.getElementById('predictions').innerHTML = `<div class="inline-error">${expT('rt_error')}${escapeHtmlX(e.message)}</div>`;
     } finally {
         btn.disabled = false;
         setBtn(btn, 'bolt', 'btn_run');
@@ -959,7 +995,7 @@ async function visualizeFeatureMaps() {
                 canvasesToInsert.push({ uid, canvas });
             }
             tensor.dispose();
-            const extra = C > showN ? `<div class="fmap-item"><div class="fmap-canvas" style="display:flex;align-items:center;justify-content:center;font-size:9px;color:#aaa;background:var(--bg-section)">${expT('rt_more', C - showN)}</div></div>` : '';
+            const extra = C > showN ? `<div class="fmap-item"><div class="fmap-canvas" style="display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-faint);background:var(--bg-section)">${expT('rt_more', C - showN)}</div></div>` : '';
             html += `
                 <div style="margin-bottom:28px">
                     <div style="font-size:12px;font-weight:700;color:var(--text-heading);margin-bottom:10px;display:flex;align-items:center;gap:8px">
@@ -1000,7 +1036,7 @@ async function visualizeFeatureMaps() {
         });
         document.getElementById('emb-canvas-slot').appendChild(embCanvas);
     } catch(e) {
-        container.innerHTML = `<div style="font-size:12px;color:#ef4444">${expT('rt_fm_error')}${escapeHtmlX(e.message)}</div>`;
+        container.innerHTML = `<div class="inline-error">${expT('rt_fm_error')}${escapeHtmlX(e.message)}</div>`;
         console.error(e);
     }
 }

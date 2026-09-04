@@ -35,7 +35,7 @@ const BLOCK_META = {
   'model-explorer':   { phase: 'model',  color: 'var(--c-eval)',   badge: 'EVAL',   titleKey: 'block_model_explorer',   rank: 13, group: 'infer' }
 };
 // Unknown types (a stale saved layout) get a neutral record so nothing throws.
-const BLOCK_META_FALLBACK = { phase: 'data', color: '#64748B', badge: '', titleKey: null, rank: 99, group: 'infer' };
+const BLOCK_META_FALLBACK = { phase: 'data', color: 'var(--c-muted)', badge: '', titleKey: null, rank: 99, group: 'infer' };
 function blockMeta(type) { return BLOCK_META[type] || BLOCK_META_FALLBACK; }
 // Translated block title; the type id itself for an unknown type.
 function blockTitle(type) {
@@ -56,6 +56,47 @@ function escapeHtml(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// ===== THEME TOKENS FOR CANVAS =====
+// Canvas 2D has no var() support, so chart / overlay code reads the colour and
+// font tokens from :root. There is no theme switch, so a plain memo is enough.
+const cssTokenCache = {};
+function cssToken(name) {
+  if (!(name in cssTokenCache)) {
+    cssTokenCache[name] = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  return cssTokenCache[name];
+}
+// "255 40 40" triplet token + alpha -> CSS colour string (mirrors the
+// rgb(var(--rgb-x) / a) pattern used in style.css).
+function cssRgba(tripletName, alpha) {
+  return `rgb(${cssToken(tripletName)} / ${alpha})`;
+}
+function cssRgbChannels(tripletName) {
+  return cssToken(tripletName).split(/\s+/).map(Number);
+}
+function cssFont(px) {
+  return `${px}px ${cssToken('--font')}`;
+}
+
+// Size a chart canvas to its CSS box times devicePixelRatio (crisp on HiDPI)
+// and return a context whose coordinate space is CSS pixels. Reassigning
+// width/height clears the bitmap and forces layout, so only touch them when
+// the CSS size or the pixel ratio actually changed.
+function setupChartCanvas(cv, fallbackH) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.offsetWidth || 256;
+  const H = cv.offsetHeight || fallbackH;
+  const key = `${W}x${H}@${dpr}`;
+  if (cv.dataset.dim !== key) {
+    cv.width = Math.round(W * dpr);
+    cv.height = Math.round(H * dpr);
+    cv.dataset.dim = key;
+  }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, W, H };
 }
 
 // ===== SEEDED PRNG =====
@@ -1139,7 +1180,7 @@ async function loadDatasetFromIDB() {
       // Restore class metadata first (fast)
       const maxKey = Math.max(...keys);
       // Expand arrays to match stored class count
-      while (classNames.length <= maxKey) { classNames.push(''); classColors.push(CLASS_COLORS[classNames.length - 1] || '#64748B'); capturedSamples.push([]); }
+      while (classNames.length <= maxKey) { classNames.push(''); classColors.push(CLASS_COLORS[(classNames.length - 1) % CLASS_COLORS.length]); capturedSamples.push([]); }
       for (let ki = 0; ki < keys.length; ki++) {
         const idx = keys[ki];
         const rec = records[ki];
@@ -1629,7 +1670,7 @@ function renderBlockBody(type, id) {
 
 function buildCameraInputBody(id) {
   const classButtons = () => classNames.map((name, i) =>
-    `<button class="bk-btn" style="background:${classColors[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${id}',${i})">${escapeHtml(name)}</button>`
+    `<button class="bk-btn bk-btn--xs" style="background:${classColors[i]}" onclick="blockCapture('${id}',${i})">${escapeHtml(name)}</button>`
   ).join('');
   return `
 <div class="video-wrap"><video class="bk-video" id="vid-${id}" autoplay playsinline muted></video></div>
@@ -1638,13 +1679,13 @@ ${makeParam(t('param_samples'), `<input type="number" id="spc-${id}" value="10" 
 ${makeBtn(t('btn_start_camera'), `blockStartCamera('${id}')`, 'var(--c-data)')}
 <div id="capture-btns-${id}" style="display:flex;flex-direction:column;gap:4px;margin-top:4px">${classButtons()}</div>
 <input type="file" id="cam-photo-up-${id}" accept="image/*" multiple style="display:none" onchange="uploadPhotosToClass(window.activeClass||0, this)">
-<button class="bk-btn" style="margin-top:4px;background:#475569;font-size:11px" onclick="document.getElementById('cam-photo-up-${id}').click()" title="${t('title_upload_active')}">${t('btn_upload_photos')}</button>
-<button class="bk-btn" style="margin-top:4px;background:#64748B;font-size:11px" onclick="addClass(null)">${t('btn_add_class')}</button>
+<button class="bk-btn bk-btn--neutral bk-btn--compact" style="margin-top:4px" onclick="document.getElementById('cam-photo-up-${id}').click()" title="${t('title_upload_active')}">${t('btn_upload_photos')}</button>
+<button class="bk-btn bk-btn--muted bk-btn--compact" style="margin-top:4px" onclick="addClass(null)">${t('btn_add_class')}</button>
 <div id="cam-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center;margin-top:4px">–</div>
 <div id="thumbs-${id}" class="thumb-strip"></div>
 <div style="border-top:1px dashed var(--c-border);margin-top:8px;padding-top:8px">
   <input type="file" id="dataset-file-${id}" accept=".json" style="display:none" onchange="importDataset(this)">
-  <button class="bk-btn" style="background:#475569;font-size:11px" onclick="document.getElementById('dataset-file-${id}').click()">${t('btn_load_dataset')}</button>
+  <button class="bk-btn bk-btn--neutral bk-btn--compact" onclick="document.getElementById('dataset-file-${id}').click()">${t('btn_load_dataset')}</button>
 </div>`;
 }
 
@@ -1666,11 +1707,11 @@ function renderLabelRows(id) {
 <input class="class-name-input" id="cn-${id}-${i}" value="${escapeHtml(classNames[i])}" aria-label="${t('aria_class_name', i + 1)}"
   oninput="updateClassNamesEverywhere(this)" placeholder="${t('ph_class_name')}">
 <span class="class-count" id="cc-${id}-${i}">${(capturedSamples[i] || []).length} ${t('lbl_samples')}</span>
-<button style="flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${classColors[i]};color:#fff" onclick="labelCapture(${i})">${t('btn_capture_short')}</button>
+<button class="class-capture-btn" style="background:${classColors[i]}" onclick="labelCapture(${i})">${t('btn_capture_short')}</button>
 <input type="file" id="photo-up-${id}-${i}" accept="image/*" multiple style="display:none" onchange="uploadPhotosToClass(${i}, this)">
-<button class="class-delete-btn" onclick="document.getElementById('photo-up-${id}-${i}').click()" title="${uploadTip}" aria-label="${uploadTip}">📁</button>
-<button class="class-delete-btn" onclick="clearClassSamples(${i})" title="${clearTip}" aria-label="${clearTip}">⌫</button>
-${canDelete ? `<button class="class-delete-btn class-delete-class-btn" onclick="deleteClass(${i})" title="${deleteTip}" aria-label="${deleteTip}">🗑</button>` : ''}
+<button class="class-tool-btn" onclick="document.getElementById('photo-up-${id}-${i}').click()" title="${uploadTip}" aria-label="${uploadTip}">📁</button>
+<button class="class-tool-btn" onclick="clearClassSamples(${i})" title="${clearTip}" aria-label="${clearTip}">⌫</button>
+${canDelete ? `<button class="class-tool-btn class-delete-class-btn" onclick="deleteClass(${i})" title="${deleteTip}" aria-label="${deleteTip}">🗑</button>` : ''}
 </div>
 <div id="thumbs-label-${i}-${id}" class="thumb-strip"></div>`;
   }
@@ -1866,7 +1907,7 @@ ${makeParam(t('param_augment'), `<select id="aug-${id}" onchange="previewAugment
   <option value="none" selected>${t('opt_prepare_only')}</option>
   <option value="all">Flip + Brightness + Zoom + Skew</option>
 </select>`)}
-<button class="bk-btn" style="background:#64748B;font-size:11px;margin-top:4px" onclick="previewAugmentation('${id}')">${t('btn_preview_aug')}</button>
+<button class="bk-btn bk-btn--muted bk-btn--compact" style="margin-top:4px" onclick="previewAugmentation('${id}')">${t('btn_preview_aug')}</button>
 <div id="aug-preview-${id}" class="aug-preview"></div>
 <progress id="prog-${id}" value="0" max="100" style="margin-top:6px"></progress>
 <div id="prep-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">–</div>
@@ -1896,7 +1937,7 @@ ${makeParam(t('param_batch'), `<select id="bs-${id}">
 <div id="train-interp-${id}" class="train-interp" aria-live="polite"></div>
 <div style="display:flex;gap:6px;margin-top:4px">
 ${makeBtn(t('btn_train'), `runTraining('${id}')`, 'var(--c-train)')}
-${makeBtn(t('btn_stop_train'), `stopTraining('${id}')`, '#64748B')}
+${makeBtn(t('btn_stop_train'), `stopTraining('${id}')`, 'var(--c-muted)')}
 </div>`;
 }
 
@@ -1905,7 +1946,7 @@ function buildSaveModelBody(id) {
 ${makeParam(t('param_model_name'), `<input type="text" id="model-name-${id}" value="model-1" placeholder="model-1" style="width:90px;font-size:12px">`)}
 <div id="save-info-${id}" style="font-size:11px;color:var(--c-muted)">–</div>
 ${makeBtn(t('btn_save_idb'), `runSaveIDB('${id}')`, 'var(--c-deploy)')}
-${makeBtn(t('btn_download'), `runDownload('${id}')`, '#0369A1')}`;
+${makeBtn(t('btn_download'), `runDownload('${id}')`, 'var(--c-data)')}`;
 }
 
 function buildUploadModelBody(id) {
@@ -1917,9 +1958,9 @@ ${makeBtn(t('btn_pick_files'), `pickModelFiles('${id}')`, 'var(--c-data)')}
   <select id="idb-select-${id}" style="flex:1;font-size:12px;padding:4px 6px;border-radius:4px;border:1px solid var(--c-border);background:var(--c-bg)">
     <option value="" disabled selected>${t('lbl_no_saved_models')}</option>
   </select>
-  <button class="bk-btn" style="background:#64748B;padding:4px 8px;font-size:13px;width:auto" onclick="refreshIDBList('${id}')" title="${t('aria_refresh_models')}" aria-label="${t('aria_refresh_models')}">↺</button>
+  <button class="bk-btn bk-btn--muted bk-btn--icon" onclick="refreshIDBList('${id}')" title="${t('aria_refresh_models')}" aria-label="${t('aria_refresh_models')}">↺</button>
 </div>
-${makeBtn(t('btn_load_idb'), `runLoadIDB('${id}')`, '#64748B')}
+${makeBtn(t('btn_load_idb'), `runLoadIDB('${id}')`, 'var(--c-muted)')}
 <div id="meta-${id}" style="font-size:10px;color:var(--c-muted);margin-top:4px;line-height:1.8">–</div>`;
 }
 
@@ -1928,7 +1969,7 @@ function buildCameraInferBody(id) {
 <div class="video-wrap"><video class="bk-video" id="vid-${id}" autoplay playsinline muted></video></div>
 ${makeParam(t('param_fps'), `<select id="fps-${id}"><option value="1000">1</option><option value="200" selected>5</option><option value="100">10</option></select>`)}
 ${makeBtn(t('btn_start_camera'), `startInferCamera('${id}')`, 'var(--c-data)')}
-${makeBtn(t('btn_stop_camera'), `stopInferCamera('${id}')`, '#64748B')}`;
+${makeBtn(t('btn_stop_camera'), `stopInferCamera('${id}')`, 'var(--c-muted)')}`;
 }
 
 
@@ -1942,7 +1983,7 @@ ${makeParam('FPS', `<select id="zsfps-${id}"><option value="1000">1</option><opt
 <div id="zs-results-${id}" style="margin-top:6px"></div>
 <div style="display:flex;gap:6px;margin-top:4px">
 ${makeBtn(t('btn_start'), `startZeroShot('${id}')`, 'var(--c-model)')}
-${makeBtn(t('btn_stop'), `stopZeroShot('${id}')`, '#64748B')}
+${makeBtn(t('btn_stop'), `stopZeroShot('${id}')`, 'var(--c-muted)')}
 </div>`;
 }
 
@@ -1960,7 +2001,7 @@ ${makeParam(t('param_threshold'), `<select id="thr-${id}">
   <option value="0.8">80%</option><option value="0.9">90%</option>
 </select>`)}
 <canvas id="hist-chart-${id}" class="chart-canvas" height="60"></canvas>
-<button class="bk-btn" id="freeze-btn-${id}" style="background:#64748B" aria-pressed="${frozenFrame ? 'true' : 'false'}" onclick="freezeFrame('${id}')">${t(frozenFrame ? 'btn_unfreeze_frame' : 'btn_freeze_frame')}</button>`;
+<button class="bk-btn bk-btn--muted" id="freeze-btn-${id}" aria-pressed="${frozenFrame ? 'true' : 'false'}" onclick="freezeFrame('${id}')">${t(frozenFrame ? 'btn_unfreeze_frame' : 'btn_freeze_frame')}</button>`;
 }
 
 function buildExplainAIBody(id) {
@@ -1977,7 +2018,7 @@ function buildExplainAIBody(id) {
   const waitMsg   = t('xai_wait');
   const howto     = t('xai_howto');
   return `
-<div id="xai-wrap-${id}" style="position:relative; width:224px; height:224px; margin: 0 auto; border-radius:6px; overflow:hidden; background:#000;">
+<div id="xai-wrap-${id}" style="position:relative; width:224px; height:224px; margin: 0 auto; border-radius:6px; overflow:hidden; background:var(--c-stage);">
   <canvas id="xai-vid-${id}" style="width:100%; height:100%; display:block;"></canvas>
   <canvas id="xai-overlay-${id}" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
 </div>
@@ -2007,7 +2048,7 @@ ${makeParam(granLabel, `<select id="xai-patch-${id}">
 </div>
 <div style="display:flex;gap:6px;margin-top:6px">
 ${makeBtn(t('btn_run_xai'), `runXAI('${id}')`, 'var(--c-eval)')}
-${makeBtn(stopLbl, `stopXAI('${id}')`, '#64748B')}
+${makeBtn(stopLbl, `stopXAI('${id}')`, 'var(--c-muted)')}
 </div>`;
 }
 
@@ -2882,12 +2923,9 @@ function updateTrainInterpretation(id, epoch, acc) {
 function drawChart(canvasId) {
   const cv = document.getElementById(canvasId);
   if (!cv) return;
-  const ctx = cv.getContext('2d');
-  const W = cv.offsetWidth || 256;
-  const H = cv.height || 80;
-  cv.width = W;
+  const { ctx, W, H } = setupChartCanvas(cv, 80);
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#F8FAFC';
+  ctx.fillStyle = cssToken('--c-surface-2');
   ctx.fillRect(0, 0, W, H);
 
   // Layout: leave room for axis labels
@@ -2896,7 +2934,7 @@ function drawChart(canvasId) {
   const innerH = H - PAD_T - PAD_B;
 
   // Axis frame
-  ctx.strokeStyle = '#CBD5E1';
+  ctx.strokeStyle = cssToken('--c-border-strong');
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(PAD_L, PAD_T);
@@ -2905,14 +2943,14 @@ function drawChart(canvasId) {
   ctx.stroke();
 
   // Y-axis ticks: accuracy uses fixed 0..1, drawn on left axis.
-  ctx.font = '9px Inter';
-  ctx.fillStyle = '#94A3B8';
+  ctx.font = cssFont(9);
+  ctx.fillStyle = cssToken('--c-muted-2');
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   [0, 0.5, 1].forEach(v => {
     const y = PAD_T + innerH - v * innerH;
     ctx.fillText(v.toFixed(1), PAD_L - 4, y);
-    ctx.strokeStyle = '#E2E8F0';
+    ctx.strokeStyle = cssToken('--c-border');
     ctx.beginPath();
     ctx.moveTo(PAD_L, y); ctx.lineTo(W - PAD_R, y);
     ctx.stroke();
@@ -2928,7 +2966,7 @@ function drawChart(canvasId) {
       : [0, Math.floor((nEpochs - 1) / 2), nEpochs - 1];
     positions.forEach(i => {
       const x = nEpochs === 1 ? PAD_L + innerW / 2 : PAD_L + (i / (nEpochs - 1)) * innerW;
-      ctx.fillStyle = '#94A3B8';
+      ctx.fillStyle = cssToken('--c-muted-2');
       ctx.fillText(String(i + 1), x, H - PAD_B + 2);
     });
   }
@@ -2951,19 +2989,19 @@ function drawChart(canvasId) {
     ctx.stroke();
   }
   // Accuracy: bounded 0..1, drawn against left axis ticks directly.
-  drawLine(accHistory, '#059669', v => v);
+  drawLine(accHistory, cssToken('--c-model'), v => v);
   // Loss: scale into [0..1] for plotting only (right-side y label shows real value).
-  drawLine(lossHistory, '#DC2626', v => (v - lossMin) / lossRange);
+  drawLine(lossHistory, cssToken('--c-train'), v => (v - lossMin) / lossRange);
 
   // Legend + final values, top of chart
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.font = '10px Inter';
+  ctx.font = cssFont(10);
   const lastLoss = lossHistory[lossHistory.length - 1];
   const lastAcc = accHistory[accHistory.length - 1];
-  ctx.fillStyle = '#DC2626';
+  ctx.fillStyle = cssToken('--c-train');
   ctx.fillText(t('chart_loss') + (lastLoss != null ? ` ${lastLoss.toFixed(3)}` : ''), PAD_L + 4, 1);
-  ctx.fillStyle = '#059669';
+  ctx.fillStyle = cssToken('--c-model');
   ctx.fillText(t('chart_acc') + (lastAcc != null ? ` ${(lastAcc * 100).toFixed(1)}%` : ''), PAD_L + 80, 1);
 }
 
@@ -3393,8 +3431,8 @@ function renderEvaluation(id, r) {
       const isDiag = tr === pc;
       const intensity = v / maxCell;
       const bg = isDiag
-        ? `rgba(5,150,105,${0.15 + intensity * 0.6})`
-        : (v > 0 ? `rgba(220,38,38,${0.15 + intensity * 0.6})` : 'transparent');
+        ? cssRgba('--rgb-model', 0.15 + intensity * 0.6)
+        : (v > 0 ? cssRgba('--rgb-train', 0.15 + intensity * 0.6) : 'transparent');
       cells += `<td style="background:${bg}">${v || ''}</td>`;
     }
     rows += `<tr>${cells}</tr>`;
@@ -3449,6 +3487,18 @@ function renderEvaluation(id, r) {
 // model-explorer.html reads the same key to skip the network download.
 const BASE_MODEL_IDB_KEY = 'indexeddb://ml-blocks-base-v1';
 
+// Shared by the Save Model block and the post-train toast: the small head is
+// saved under the chosen name, the backbone once under BASE_MODEL_IDB_KEY.
+async function saveModelToBrowser(name) {
+  fullModel.userDefinedMetadata = modelMetadata; // bake labels into model JSON
+  await fullModel.save('indexeddb://ml-blocks-' + name);
+  const stored = await tf.io.listModels();
+  if (!stored[BASE_MODEL_IDB_KEY]) await baseModel.save(BASE_MODEL_IDB_KEY);
+  localStorage.setItem('ml-blocks-meta-' + name, JSON.stringify(modelMetadata));
+  modelSaved = true;
+  evaluatePipelineState();
+}
+
 async function runSaveIDB(id) {
   if (!fullModel) { log('warn', t('lbl_no_model')); return; }
   if (!baseModel) { log('warn', t('log_no_model_base')); return; }
@@ -3462,15 +3512,9 @@ async function runSaveIDB(id) {
     return;
   }
   try {
-    fullModel.userDefinedMetadata = modelMetadata; // bake labels into model JSON
-    await fullModel.save('indexeddb://ml-blocks-' + name);
-    const stored = await tf.io.listModels();
-    if (!stored[BASE_MODEL_IDB_KEY]) await baseModel.save(BASE_MODEL_IDB_KEY);
-    localStorage.setItem('ml-blocks-meta-' + name, JSON.stringify(modelMetadata));
+    await saveModelToBrowser(name);
     log('success', t('log_save_idb'));
     setBlockStatus(document.getElementById(id), 'done');
-    modelSaved = true;
-    evaluatePipelineState();
     const el = document.getElementById('save-info-' + id);
     if (el) el.textContent = t('log_save_idb');
   } catch (err) {
@@ -3576,20 +3620,21 @@ function buildStandaloneAppHTML(bundle) {
 <title>${escapeHtml(title)}</title>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"><\/script>
 <style>
-  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
-  h1{font-size:20px;margin:0 0 4px} .sub{color:#94a3b8;font-size:12px;margin-bottom:16px}
-  #stage{position:relative;width:100%;max-width:360px;aspect-ratio:1;border-radius:16px;overflow:hidden;background:#1e293b;border:2px solid #334155}
+  :root{--bg:#0f172a;--surface:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#94a3b8;--faint:#475569;--link:#64748b;--ok:#22c55e;--ok-ink:#052e16;--font:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  *{box-sizing:border-box} body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+  h1{font-size:20px;margin:0 0 4px} .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
+  #stage{position:relative;width:100%;max-width:360px;aspect-ratio:1;border-radius:16px;overflow:hidden;background:var(--surface);border:2px solid var(--border)}
   video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
-  button{margin-top:16px;background:#22c55e;color:#052e16;border:none;padding:12px 22px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer}
+  button{margin-top:16px;background:var(--ok);color:var(--ok-ink);border:none;padding:12px 22px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer}
   button:disabled{opacity:.5;cursor:default}
   #bars{width:100%;max-width:360px;margin-top:16px;display:flex;flex-direction:column;gap:8px}
   .bar-row{font-size:13px}
   .bar-head{display:flex;justify-content:space-between;margin-bottom:3px}
-  .bar-track{height:10px;background:#1e293b;border-radius:5px;overflow:hidden}
+  .bar-track{height:10px;background:var(--surface);border-radius:5px;overflow:hidden}
   .bar-fill{height:100%;border-radius:5px;transition:width .12s}
   #result{font-size:22px;font-weight:800;margin-top:14px;min-height:28px}
-  .foot{margin-top:20px;color:#475569;font-size:11px}
-  .foot a{color:#64748b}
+  .foot{margin-top:20px;color:var(--faint);font-size:11px}
+  .foot a{color:var(--link)}
 </style>
 </head>
 <body>
@@ -3612,7 +3657,7 @@ async function load(){
   const b=document.getElementById('btn'); b.disabled=false;
   // Build bar rows.
   const bars=document.getElementById('bars');
-  bars.innerHTML=LABELS.map((n,i)=>'<div class="bar-row"><div class="bar-head"><span>'+esc(n)+'</span><span id="pct'+i+'">0%</span></div><div class="bar-track"><div class="bar-fill" id="fill'+i+'" style="width:0%;background:'+(COLORS[i]||'#22c55e')+'"></div></div></div>').join('');
+  bars.innerHTML=LABELS.map((n,i)=>'<div class="bar-row"><div class="bar-head"><span>'+esc(n)+'</span><span id="pct'+i+'">0%</span></div><div class="bar-track"><div class="bar-fill" id="fill'+i+'" style="width:0%;background:'+(COLORS[i]||'var(--ok)')+'"></div></div></div>').join('');
 }
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 async function start(){
@@ -3637,7 +3682,7 @@ async function predict(){
     try{ const f=baseModel.predict(t); const p=headModel.predict(f); probs=await p.data(); f.dispose(); p.dispose(); } finally { t.dispose(); }
     let max=0; for(let i=1;i<probs.length;i++) if(probs[i]>probs[max]) max=i;
     for(let i=0;i<LABELS.length;i++){ const pc=Math.round((probs[i]||0)*100); document.getElementById('pct'+i).textContent=pc+'%'; document.getElementById('fill'+i).style.width=pc+'%'; }
-    const r=document.getElementById('result'); r.textContent=LABELS[max]+' '+Math.round(probs[max]*100)+'%'; r.style.color=COLORS[max]||'#e2e8f0';
+    const r=document.getElementById('result'); r.textContent=LABELS[max]+' '+Math.round(probs[max]*100)+'%'; r.style.color=COLORS[max]||'var(--text)';
   }catch(e){ /* frame not ready yet */ }
   finally{ busy=false; }
 }
@@ -3959,7 +4004,7 @@ function ensureZeroShotRowsDOM(resultsEl, k) {
     pct.style.color = 'var(--c-muted)';
     head.appendChild(label); head.appendChild(pct);
     const track = document.createElement('div');
-    track.style.cssText = 'background:#E2E8F0;border-radius:3px;height:5px';
+    track.style.cssText = 'background:var(--c-border);border-radius:3px;height:5px';
     const fill = document.createElement('div');
     fill.style.cssText = 'background:var(--c-model);width:0%;height:5px;border-radius:3px;transition:width .15s';
     track.appendChild(fill);
@@ -4490,7 +4535,7 @@ async function runXAI(id) {
         const deltaPP = (o - b) * 100;
         const dir = deltaPP > 0.05 ? '+' : deltaPP < -0.05 ? '-' : '0';
         const arrow = deltaPP > 0.05 ? '&uarr;' : deltaPP < -0.05 ? '&darr;' : '&middot;';
-        const color = deltaPP > 0.05 ? '#16A34A' : deltaPP < -0.05 ? '#DC2626' : '#94A3B8';
+        const color = deltaPP > 0.05 ? 'var(--c-ok)' : deltaPP < -0.05 ? 'var(--c-train)' : 'var(--c-muted-2)';
         rows.push(`<div class="xai-class-row">
   <span class="xai-class-dot" style="background:${inferColor(i)}"></span>
   <span class="xai-class-name" title="${escapeHtml(labels[i])}">${escapeHtml(labels[i])}</span>
@@ -4533,8 +4578,8 @@ function drawXAIFocusBox(overlay, px, py, patch, scaleX, scaleY) {
   const x = px * scaleX, y = py * scaleY, w = patch * scaleX, h = patch * scaleY;
   octx.save();
   octx.lineWidth = Math.max(3, 3 * (window.devicePixelRatio || 1));
-  octx.strokeStyle = '#FACC15';
-  octx.shadowColor = 'rgba(0,0,0,0.6)';
+  octx.strokeStyle = cssToken('--c-highlight');
+  octx.shadowColor = cssRgba('--rgb-shade', 0.6);
   octx.shadowBlur = 6;
   octx.strokeRect(x + 1, y + 1, w - 2, h - 2);
   octx.restore();
@@ -4556,7 +4601,7 @@ function renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY
 
   // Dark vignette behind the colors – dims the image uniformly so the
   // red/blue regions stand out clearly even on bright video frames.
-  octx.fillStyle = 'rgba(0,0,0,0.45)';
+  octx.fillStyle = cssRgba('--rgb-shade', 0.45);
   octx.fillRect(0, 0, overlay.width, overlay.height);
 
   // Moderate blur smooths patch edges without washing out the signal.
@@ -4572,8 +4617,8 @@ function renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY
       // high-importance regions are fully opaque and unmissable.
       const alpha = 0.50 + mag * 0.50;
       octx.fillStyle = v > 0
-        ? `rgba(255,40,40,${alpha.toFixed(3)})`   // red – supports prediction
-        : `rgba(30,100,255,${alpha.toFixed(3)})`; // blue – distractor
+        ? cssRgba('--rgb-xai-heat-pos', alpha.toFixed(3))  // red – supports prediction
+        : cssRgba('--rgb-xai-heat-neg', alpha.toFixed(3)); // blue – distractor
       octx.fillRect(
         x * STRIDE * scaleX,
         y * STRIDE * scaleY,
@@ -4636,15 +4681,16 @@ async function runXAISaliency(p) {
     off.height = inputSize;
     const offCtx = off.getContext('2d');
     const imgData = offCtx.createImageData(inputSize, inputSize);
+    const [heatR, heatG, heatB] = cssRgbChannels('--rgb-xai-heat-pos');
     for (let y = 0; y < inputSize; y++) {
       for (let x = 0; x < inputSize; x++) {
         const v = Math.min(1, arr[y][x] / max);
         if (v < 0.04) continue; // skip noise floor
         const alpha = Math.pow(v, 0.35); // gamma boost – weak gradients visible
         const i = (y * inputSize + x) * 4;
-        imgData.data[i]     = 255;
-        imgData.data[i + 1] = 40;
-        imgData.data[i + 2] = 40;
+        imgData.data[i]     = heatR;
+        imgData.data[i + 1] = heatG;
+        imgData.data[i + 2] = heatB;
         imgData.data[i + 3] = Math.round(alpha * 255);
       }
     }
@@ -4653,7 +4699,7 @@ async function runXAISaliency(p) {
     octx.clearRect(0, 0, overlay.width, overlay.height);
     // Dark base matches the occlusion heatmap style – dims the video so
     // the bright red saliency regions are immediately obvious.
-    octx.fillStyle = 'rgba(0,0,0,0.45)';
+    octx.fillStyle = cssRgba('--rgb-shade', 0.45);
     octx.fillRect(0, 0, overlay.width, overlay.height);
     octx.imageSmoothingEnabled = true;
     octx.filter = 'blur(8px)';
@@ -4692,17 +4738,13 @@ async function runXAISaliency(p) {
 function drawHistChart(id) {
   const cv = document.getElementById('hist-chart-' + id);
   if (!cv || predHistory.length < 2) return;
-  const W = cv.offsetWidth || 256;
-  const H = cv.height || 60;
-  // Assigning width clears the bitmap and forces layout; only do it on resize.
-  if (cv.dataset.w !== String(W)) { cv.width = W; cv.dataset.w = String(W); }
-  const ctx = cv.getContext('2d');
+  const { ctx, W, H } = setupChartCanvas(cv, 60);
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#F8FAFC';
+  ctx.fillStyle = cssToken('--c-surface-2');
   ctx.fillRect(0, 0, W, H);
   const barW = W / 30;
   predHistory.forEach((p, i) => {
-    ctx.fillStyle = classColors[p.idx] || '#059669';
+    ctx.fillStyle = classColors[p.idx] || cssToken('--c-model');
     const bh = p.conf * (H - 4);
     ctx.fillRect(i * barW, H - bh - 2, barW - 2, bh);
   });
@@ -4742,14 +4784,15 @@ async function quickSaveModel() {
     const el = document.getElementById('model-name-' + saveBlock.id);
     if (el && el.value.trim()) name = el.value.trim();
   }
+  // Same guard as runSaveIDB: 'base-*' is the backbone namespace.
+  if (name.startsWith('base-')) {
+    log('warn', t('log_save_bad_name'));
+    showToast(t('log_save_bad_name'), 'warn', { duration: 3000 });
+    return;
+  }
   try {
-    fullModel.userDefinedMetadata = modelMetadata;
-    await fullModel.save('indexeddb://ml-blocks-' + name);
-    await baseModel.save('indexeddb://ml-blocks-base-' + name);
-    localStorage.setItem('ml-blocks-meta-' + name, JSON.stringify(modelMetadata));
-    modelSaved = true;
+    await saveModelToBrowser(name);
     if (saveBlock && saveBlock.card) setBlockStatus(saveBlock.card, 'done');
-    evaluatePipelineState();
     log('success', t('log_save_idb'));
     showToast(t('toast_saved_as', name), 'success', { duration: 3000 });
   } catch (err) {

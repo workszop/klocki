@@ -13,6 +13,83 @@
   --c-focus: #0369A1;
   --c-focus-on-dark: #22D3EE;
   --c-log-muted: #94A3B8;
+  /* Surfaces and ink (the thick border / hard-shadow "sticker" look) */
+  --c-ink: #1a1a2e;
+  --c-ink-soft: #475569;
+  --c-surface: #fff;
+  --c-surface-2: #F8FAFC;
+  --c-stage: #000;
+  --c-border-strong: #CBD5E1;
+  --c-muted-2: #94A3B8;
+  /* Dark chrome: top bar and log panel (same value as --c-text on purpose,
+     but a separate role so either can be retuned alone) */
+  --c-topbar: #0F172A;
+  --c-log-bg: #0F172A;
+  --c-chrome-2: #1E293B;
+  --c-chrome-3: #334155;
+  --c-chrome-text: #CBD5E1;
+  --c-logo-accent: #22D3EE;
+  /* Semantic states */
+  --c-ok: #047857;
+  --c-ok-deep: #14532D;
+  --c-ok-bg: #ECFDF5;
+  --c-ok-bg-2: #D1FAE5;
+  --c-ok-border: #6EE7B7;
+  --c-ok-on-dark: #4ADE80;
+  --c-warn: #B45309;
+  --c-warn-bg: #FEF3C7;
+  --c-warn-border: #F59E0B;
+  --c-warn-on-dark: #FCD34D;
+  --c-highlight: #FACC15;
+  --c-danger: #B91C1C;
+  --c-danger-soft: #EF4444;
+  --c-danger-bg: #FEF2F2;
+  --c-danger-bg-2: #FEE2E2;
+  --c-danger-border: #FCA5A5;
+  --c-danger-on-dark: #F87171;
+  --c-info: #3B82F6;
+  --c-info-bg: #EFF6FF;
+  --c-info-text: #1E40AF;
+  --c-info-on-dark: #38BDF8;
+  --c-info-soft-on-dark: #93C5FD;
+  --c-xai-neg: #2563EB;
+  /* Translucent variants (static alpha) */
+  --c-chrome-text-a25: rgb(203 213 225 / .25);
+  --c-danger-soft-a05: rgb(239 68 68 / .05);
+  --c-danger-soft-a15: rgb(239 68 68 / .15);
+  --c-danger-soft-a80: rgb(239 68 68 / .8);
+  --c-logo-accent-a35: rgb(34 211 238 / .35);
+  --c-logo-accent-a0: rgb(34 211 238 / 0);
+  --c-muted-a35: rgb(100 116 139 / .35);
+  --c-ok-a40: rgb(4 120 87 / .4);
+  --c-shade-a05: rgb(0 0 0 / .05);
+  --c-shade-a15: rgb(0 0 0 / .15);
+  --c-shade-a60: rgb(0 0 0 / .6);
+  --c-surface-a15: rgb(255 255 255 / .15);
+  --c-surface-a25: rgb(255 255 255 / .25);
+  --c-surface-a35: rgb(255 255 255 / .35);
+  --c-surface-a50: rgb(255 255 255 / .5);
+  --c-surface-a90: rgb(255 255 255 / .9);
+  --c-train-a25: rgb(220 38 38 / .25);
+  --c-train-a85: rgb(220 38 38 / .85);
+  --c-warn-a40: rgb(180 83 9 / .4);
+  --c-xai-neg-a25: rgb(37 99 235 / .25);
+  --c-xai-neg-a85: rgb(37 99 235 / .85);
+  /* RGB triplets for canvas code that computes alpha at runtime
+     (confusion matrix, XAI heatmap); read via cssToken() in app.js */
+  --rgb-surface: 255 255 255;
+  --rgb-shade: 0 0 0;
+  --rgb-muted: 100 116 139;
+  --rgb-chrome-text: 203 213 225;
+  --rgb-logo-accent: 34 211 238;
+  --rgb-ok: 4 120 87;
+  --rgb-warn: 180 83 9;
+  --rgb-danger-soft: 239 68 68;
+  --rgb-train: 220 38 38;
+  --rgb-model: 5 150 105;
+  --rgb-xai-neg: 37 99 235;
+  --rgb-xai-heat-pos: 255 40 40;
+  --rgb-xai-heat-neg: 30 100 255;
   --topbar-h: 56px;
   --sidebar-w: 260px;
   --log-w: 320px;
@@ -84,7 +161,7 @@ select {
 /* TOPBAR */
 #topbar {
   height: var(--topbar-h);
-  background: #0F172A;
+  background: var(--c-topbar);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -96,13 +173,13 @@ select {
 #logo {
   font-size: 18px;
   font-weight: 700;
-  color: #fff;
+  color: var(--c-surface);
   letter-spacing: -.5px;
   white-space: nowrap
 }
 
 #logo span {
-  color: #22D3EE
+  color: var(--c-logo-accent)
 }
 
 #flowbar {
@@ -122,7 +199,7 @@ select {
   border-radius: 20px;
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
+  color: var(--c-surface);
   opacity: .35;
   transition: opacity .2s, transform .2s;
   cursor: default;
@@ -147,7 +224,7 @@ select {
 }
 
 .flow-arrow {
-  color: #475569;
+  color: var(--c-ink-soft);
   font-size: 12px
 }
 
@@ -186,18 +263,18 @@ select {
 .tb-btn {
   padding: 8px 14px;
   border-radius: 10px;
-  border: 2px solid rgba(203, 213, 225, .25);
+  border: 2px solid var(--c-chrome-text-a25);
   font-size: 13px;
   font-weight: 600;
-  background: #1E293B;
-  color: #CBD5E1;
+  background: var(--c-chrome-2);
+  color: var(--c-border-strong);
   transition: transform .12s, background .15s, color .15s;
   white-space: nowrap
 }
 
 .tb-btn:hover {
-  background: #334155;
-  color: #fff
+  background: var(--c-chrome-3);
+  color: var(--c-surface)
 }
 
 .tb-btn:active {
@@ -205,9 +282,9 @@ select {
 }
 
 .tb-btn.active {
-  background: #38BDF8;
-  color: #0F172A;
-  border-color: #38BDF8
+  background: var(--c-info-on-dark);
+  color: var(--c-topbar);
+  border-color: var(--c-info-on-dark)
 }
 
 #btn-lang {
@@ -216,24 +293,24 @@ select {
 }
 
 #btn-run {
-  background: #059669;
-  color: #fff;
+  background: var(--c-model);
+  color: var(--c-surface);
   padding: 8px 18px;
   border-radius: 10px;
-  border: 3px solid #1a1a2e;
-  box-shadow: 4px 4px 0 #1a1a2e;
+  border: 3px solid var(--c-ink);
+  box-shadow: 4px 4px 0 var(--c-ink);
   font-size: 13px;
   font-weight: 700;
   transition: transform .12s, box-shadow .12s, background .15s
 }
 
 #btn-run:hover {
-  background: #047857
+  background: var(--c-ok)
 }
 
 #btn-run:active {
   transform: scale(.95) translateY(2px);
-  box-shadow: 2px 2px 0 #1a1a2e
+  box-shadow: 2px 2px 0 var(--c-ink)
 }
 
 /* WORKSPACE */
@@ -246,7 +323,7 @@ select {
 /* SIDEBAR */
 #sidebar {
   width: var(--sidebar-w);
-  background: #fff;
+  background: var(--c-surface);
   border-right: 1px solid var(--c-border);
   display: flex;
   flex-direction: column;
@@ -268,9 +345,9 @@ select {
   padding: 8px 10px;
   margin-bottom: 6px;
   border-radius: 8px;
-  border: 2px solid #1a1a2e;
-  box-shadow: 2px 2px 0 #1a1a2e;
-  background: #F8FAFC;
+  border: 2px solid var(--c-ink);
+  box-shadow: 2px 2px 0 var(--c-ink);
+  background: var(--c-surface-2);
   color: var(--c-text);
   font-size: 12px;
   font-weight: 600;
@@ -286,17 +363,17 @@ select {
 
 .sidebar-action-btn:active {
   transform: translateY(1px);
-  box-shadow: 1px 1px 0 #1a1a2e
+  box-shadow: 1px 1px 0 var(--c-ink)
 }
 
 .sidebar-action-btn--danger {
-  color: #B91C1C;
-  border-color: #FCA5A5;
-  box-shadow: 2px 2px 0 #FCA5A5
+  color: var(--c-danger);
+  border-color: var(--c-danger-border);
+  box-shadow: 2px 2px 0 var(--c-danger-border)
 }
 
 .sidebar-action-btn--danger:hover {
-  background: #FEF2F2
+  background: var(--c-danger-bg)
 }
 
 .dataset-info {
@@ -316,10 +393,10 @@ select {
 }
 
 .palette-block {
-  background: #F8FAFC;
-  border: 3px solid #1a1a2e;
+  background: var(--c-surface-2);
+  border: 3px solid var(--c-ink);
   border-radius: 12px;
-  box-shadow: 4px 4px 0 #1a1a2e;
+  box-shadow: 4px 4px 0 var(--c-ink);
   padding: 10px 12px;
   margin-bottom: 10px;
   cursor: pointer;
@@ -340,7 +417,7 @@ select {
 }
 
 .palette-block:hover {
-  box-shadow: 2px 2px 0 #1a1a2e;
+  box-shadow: 2px 2px 0 var(--c-ink);
   transform: translate(2px, 2px)
 }
 
@@ -363,7 +440,7 @@ select {
      dragged past the fold stay reachable instead of being clipped away. */
   overflow: auto;
   background: var(--c-bg);
-  background-image: radial-gradient(circle, #CBD5E1 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--c-border-strong) 1px, transparent 1px);
   background-size: 24px 24px;
   background-attachment: local
 }
@@ -380,19 +457,19 @@ select {
 
 #pipeline-connectors .pipe-path {
   fill: none;
-  stroke: #94A3B8;
+  stroke: var(--c-muted-2);
   stroke-width: 2.5;
   stroke-dasharray: 6 5;
   opacity: .7
 }
 
 #pipeline-connectors .pipe-dot {
-  fill: #94A3B8;
+  fill: var(--c-muted-2);
   opacity: .8
 }
 
 #pipeline-connectors.pipe-active .pipe-path {
-  stroke: var(--c-train, #DC2626);
+  stroke: var(--c-train);
   opacity: 1;
   animation: pipe-flow 1s linear infinite
 }
@@ -409,22 +486,22 @@ select {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, .9);
-  color: #1a1a2e;
+  background: var(--c-surface-a90);
+  color: var(--c-ink);
   font-size: 11px;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-right: 2px;
-  border: 1.5px solid rgba(0, 0, 0, .15)
+  border: 1.5px solid var(--c-shade-a15)
 }
 
 /* Currently-executing block during a pipeline run. The pulsing ring is a
    separate ::after layer animating opacity/transform only (compositor-side);
    animating box-shadow repainted the whole card every frame. */
 .block-card.block-running {
-  outline: 3px solid #DC2626;
+  outline: 3px solid var(--c-train);
   outline-offset: 0
 }
 
@@ -433,7 +510,7 @@ select {
   position: absolute;
   inset: -5px;
   border-radius: 20px;
-  border: 3px solid #DC2626;
+  border: 3px solid var(--c-train);
   pointer-events: none;
   will-change: opacity, transform;
   animation: block-pulse 1s ease-in-out infinite
@@ -469,7 +546,7 @@ select {
 #empty-state .empty-title {
   font-size: 22px;
   font-weight: 700;
-  color: #475569
+  color: var(--c-ink-soft)
 }
 
 #empty-state .empty-subtitle {
@@ -492,8 +569,8 @@ select {
 .empty-btn {
   padding: 12px 20px;
   border-radius: 12px;
-  border: 3px solid #1a1a2e;
-  box-shadow: 4px 4px 0 #1a1a2e;
+  border: 3px solid var(--c-ink);
+  box-shadow: 4px 4px 0 var(--c-ink);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -503,17 +580,17 @@ select {
 
 .empty-btn:active {
   transform: scale(.96) translateY(2px);
-  box-shadow: 2px 2px 0 #1a1a2e
+  box-shadow: 2px 2px 0 var(--c-ink)
 }
 
 .empty-btn-primary {
   background: var(--c-train);
-  color: #fff
+  color: var(--c-surface)
 }
 
 .empty-btn-secondary {
   background: var(--c-deploy);
-  color: #fff
+  color: var(--c-surface)
 }
 
 #empty-state .empty-hint {
@@ -533,17 +610,17 @@ select {
   z-index: 400;
   width: 60px;
   height: 60px;
-  border: 2px dashed #EF4444;
+  border: 2px dashed var(--c-danger-soft);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #EF4444;
+  color: var(--c-danger-soft);
   font-size: 22px;
   opacity: 0;
   transition: .2s;
   pointer-events: none;
-  background: rgba(239, 68, 68, .05)
+  background: var(--c-danger-soft-a05)
 }
 
 #trash-zone.visible {
@@ -552,7 +629,7 @@ select {
 }
 
 #trash-zone.hot {
-  background: rgba(239, 68, 68, .15);
+  background: var(--c-danger-soft-a15);
   border-style: solid
 }
 
@@ -560,10 +637,10 @@ select {
 .block-card {
   position: absolute;
   width: 340px;
-  background: #fff;
+  background: var(--c-surface);
   border-radius: 16px;
-  box-shadow: 6px 6px 0 #1a1a2e;
-  border: 3px solid #1a1a2e;
+  box-shadow: 6px 6px 0 var(--c-ink);
+  border: 3px solid var(--c-ink);
   user-select: none;
   min-height: 60px;
   transition: box-shadow .12s, transform .12s
@@ -571,7 +648,7 @@ select {
 
 .block-card.dragging {
   opacity: .85;
-  box-shadow: 3px 3px 0 #1a1a2e;
+  box-shadow: 3px 3px 0 var(--c-ink);
   z-index: 1000
 }
 
@@ -580,8 +657,8 @@ select {
 }
 
 @keyframes savePulse {
-  0%, 100% { box-shadow: 6px 6px 0 #1a1a2e, 0 0 0 0 rgba(34, 211, 238, 0); }
-  50%      { box-shadow: 6px 6px 0 #1a1a2e, 0 0 0 8px rgba(34, 211, 238, .35); }
+  0%, 100% { box-shadow: 6px 6px 0 var(--c-ink), 0 0 0 0 var(--c-logo-accent-a0); }
+  50%      { box-shadow: 6px 6px 0 var(--c-ink), 0 0 0 8px var(--c-logo-accent-a35); }
 }
 
 #toast-stack {
@@ -596,18 +673,19 @@ select {
 }
 
 .toast {
-  background: #1E3932;
-  color: #fff;
+  background: var(--c-deploy);
+  color: var(--c-surface);
   padding: 12px 18px;
   border-radius: 10px;
-  border: 3px solid #1a1a2e;
-  box-shadow: 4px 4px 0 #1a1a2e;
+  border: 3px solid var(--c-ink);
+  box-shadow: 4px 4px 0 var(--c-ink);
   font-weight: 600;
   font-size: 13px;
   max-width: 360px;
   opacity: 0;
   transform: translateY(8px);
-  transition: opacity .25s, transform .25s
+  transition: opacity .25s, transform .25s;
+  pointer-events: auto
 }
 
 .toast.show {
@@ -616,19 +694,15 @@ select {
 }
 
 .toast-success {
-  background: #047857
+  background: var(--c-ok)
 }
 
 .toast-warn {
-  background: #B45309
+  background: var(--c-warn)
 }
 
 .toast-error {
-  background: #B91C1C
-}
-
-.toast {
-  pointer-events: auto
+  background: var(--c-danger)
 }
 
 .toast-actions {
@@ -639,9 +713,9 @@ select {
 }
 
 .toast-btn {
-  background: rgba(255, 255, 255, .15);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, .35);
+  background: var(--c-surface-a15);
+  color: var(--c-surface);
+  border: 1px solid var(--c-surface-a35);
   border-radius: 6px;
   padding: 5px 12px;
   font-size: 12px;
@@ -649,9 +723,9 @@ select {
 }
 
 .toast-btn-primary {
-  background: #fff;
-  color: #1E3932;
-  border-color: #fff
+  background: var(--c-surface);
+  color: var(--c-deploy);
+  border-color: var(--c-surface)
 }
 
 .toast-btn:hover {
@@ -679,7 +753,7 @@ select {
 }
 
 .eval-score-test {
-  border-color: var(--c-eval, #7C3AED);
+  border-color: var(--c-eval);
   border-width: 2px
 }
 
@@ -707,13 +781,13 @@ select {
 }
 
 .eval-verdict-ok {
-  color: #047857;
-  border-color: rgba(4, 120, 87, .4)
+  color: var(--c-ok);
+  border-color: var(--c-ok-a40)
 }
 
 .eval-verdict-warn {
-  color: #B45309;
-  border-color: rgba(180, 83, 9, .4);
+  color: var(--c-warn);
+  border-color: var(--c-warn-a40);
   font-weight: 600
 }
 
@@ -774,7 +848,7 @@ select {
   width: 48px;
   height: 48px;
   border-radius: 4px;
-  border: 2px solid #DC2626
+  border: 2px solid var(--c-train)
 }
 
 .eval-miss-cap {
@@ -793,11 +867,11 @@ select {
 }
 
 .train-interp-ok {
-  color: #047857
+  color: var(--c-ok)
 }
 
 .train-interp-warn {
-  color: #B45309;
+  color: var(--c-warn);
   font-weight: 600
 }
 
@@ -861,22 +935,22 @@ select {
   border-radius: 8px;
   font-weight: 700;
   font-size: 13px;
-  border: 2px solid #1a1a2e;
-  box-shadow: 3px 3px 0 #1a1a2e
+  border: 2px solid var(--c-ink);
+  box-shadow: 3px 3px 0 var(--c-ink)
 }
 
 .confirm-cancel {
-  background: #fff;
-  color: #1a1a2e
+  background: var(--c-surface);
+  color: var(--c-ink)
 }
 
 .confirm-ok {
-  background: #1E3932;
-  color: #fff
+  background: var(--c-deploy);
+  color: var(--c-surface)
 }
 
 .confirm-ok-danger {
-  background: #B91C1C
+  background: var(--c-danger)
 }
 
 .confirm-cancel:active,
@@ -896,7 +970,7 @@ select {
 }
 
 .block-card .bk-header .drag-handle {
-  color: rgba(255, 255, 255, .5);
+  color: var(--c-surface-a50);
   font-size: 15px;
   line-height: 1;
   flex-shrink: 0
@@ -906,7 +980,7 @@ select {
   flex: 1;
   font-size: 13px;
   font-weight: 700;
-  color: #fff;
+  color: var(--c-surface);
   letter-spacing: .02em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -916,8 +990,8 @@ select {
 .block-card .bk-badge {
   font-size: 10px;
   font-weight: 700;
-  background: rgba(255, 255, 255, .25);
-  color: #fff;
+  background: var(--c-surface-a25);
+  color: var(--c-surface);
   padding: 3px 8px;
   border-radius: 12px;
   text-transform: uppercase;
@@ -930,7 +1004,7 @@ select {
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, .9);
+  background: var(--c-surface-a90);
   margin-left: auto;
   flex-shrink: 0;
   white-space: nowrap
@@ -940,8 +1014,8 @@ select {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, .15);
-  color: #fff;
+  background: var(--c-surface-a15);
+  color: var(--c-surface);
   font-size: 13px;
   font-weight: 700;
   display: flex;
@@ -955,7 +1029,7 @@ select {
 }
 
 .block-card .bk-close:hover {
-  background: rgba(239, 68, 68, .8)
+  background: var(--c-danger-soft-a80)
 }
 
 body.edu-mode .bk-close {
@@ -963,7 +1037,7 @@ body.edu-mode .bk-close {
 }
 
 .block-card.status-idle .bk-status {
-  color: #64748B
+  color: var(--c-muted)
 }
 
 .block-card.status-running .bk-status {
@@ -972,11 +1046,11 @@ body.edu-mode .bk-close {
 }
 
 .block-card.status-done .bk-status {
-  color: #059669
+  color: var(--c-model)
 }
 
 .block-card.status-error .bk-status {
-  color: #DC2626
+  color: var(--c-train)
 }
 
 @keyframes pulse {
@@ -999,18 +1073,18 @@ body.edu-mode .bk-close {
 }
 
 .bk-note {
-  background: #EFF6FF;
-  border-left: 3px solid #3B82F6;
+  background: var(--c-info-bg);
+  border-left: 3px solid var(--c-info);
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 11px;
-  color: #1E40AF;
+  color: var(--c-info-text);
   line-height: 1.45
 }
 
 .bk-prereq {
-  background: #FEF2F2;
-  border: 1px solid #FCA5A5;
+  background: var(--c-danger-bg);
+  border: 1px solid var(--c-danger-border);
   border-radius: 8px;
   padding: 6px 8px;
   font-size: 11px;
@@ -1021,20 +1095,20 @@ body.edu-mode .bk-close {
 }
 
 .bk-prereq.all-ok {
-  background: #ECFDF5;
-  border-color: #6EE7B7
+  background: var(--c-ok-bg);
+  border-color: var(--c-ok-border)
 }
 
 .prereq-heading {
   font-weight: 700;
-  color: #B91C1C;
+  color: var(--c-danger);
   font-size: 10px;
   letter-spacing: .04em;
   text-transform: uppercase
 }
 
 .bk-prereq.all-ok .prereq-heading {
-  color: #047857
+  color: var(--c-ok)
 }
 
 .prereq-pills {
@@ -1052,20 +1126,20 @@ body.edu-mode .bk-close {
   font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
-  background: #fff;
+  background: var(--c-surface);
   border: 1px solid var(--c-border)
 }
 
 .prereq-pill.ok {
-  background: #D1FAE5;
-  border-color: #6EE7B7;
-  color: #047857
+  background: var(--c-ok-bg-2);
+  border-color: var(--c-ok-border);
+  color: var(--c-ok)
 }
 
 .prereq-pill.missing {
-  background: #FEF2F2;
-  border-color: #FCA5A5;
-  color: #B91C1C
+  background: var(--c-danger-bg);
+  border-color: var(--c-danger-border);
+  color: var(--c-danger)
 }
 
 .prereq-mark {
@@ -1102,7 +1176,7 @@ body.edu-mode .bk-close {
   border: 1px solid var(--c-border);
   border-radius: 5px;
   font-size: 13px;
-  background: #F8FAFC
+  background: var(--c-surface-2)
 }
 
 .param-row input[type=range] {
@@ -1112,11 +1186,11 @@ body.edu-mode .bk-close {
 .bk-btn {
   padding: 7px 12px;
   border-radius: 10px;
-  border: 3px solid #1a1a2e;
-  box-shadow: 3px 3px 0 #1a1a2e;
+  border: 3px solid var(--c-ink);
+  box-shadow: 3px 3px 0 var(--c-ink);
   font-size: 13px;
   font-weight: 700;
-  color: #fff;
+  color: var(--c-surface);
   width: 100%;
   text-align: center;
   margin-top: 2px;
@@ -1128,7 +1202,31 @@ body.edu-mode .bk-close {
 
 .bk-btn:active {
   transform: scale(.95) translateY(2px);
-  box-shadow: 1px 1px 0 #1a1a2e
+  box-shadow: 1px 1px 0 var(--c-ink)
+}
+
+/* Neutral (secondary) actions and compact sizes; the per-class capture
+   buttons keep only their class colour inline. */
+.bk-btn--neutral {
+  background: var(--c-ink-soft)
+}
+
+.bk-btn--muted {
+  background: var(--c-muted)
+}
+
+.bk-btn--compact {
+  font-size: 11px
+}
+
+.bk-btn--xs {
+  font-size: 10px;
+  padding: 4px 8px
+}
+
+.bk-btn--icon {
+  padding: 4px 8px;
+  width: auto
 }
 
 progress {
@@ -1139,7 +1237,7 @@ progress {
 }
 
 progress::-webkit-progress-bar {
-  background: #E2E8F0;
+  background: var(--c-border);
   border-radius: 3px
 }
 
@@ -1172,12 +1270,12 @@ video.bk-video {
 }
 
 .warn-banner {
-  background: #FEF3C7;
-  border: 1px solid #F59E0B;
+  background: var(--c-warn-bg);
+  border: 1px solid var(--c-warn-border);
   border-radius: 6px;
   padding: 8px 12px;
   font-size: 12px;
-  color: #B45309;
+  color: var(--c-warn);
   display: none;
   word-wrap: break-word;
   overflow-wrap: break-word
@@ -1190,7 +1288,7 @@ video.bk-video {
 /* LOG PANEL */
 #log-panel {
   width: var(--log-w);
-  background: #0F172A;
+  background: var(--c-log-bg);
   display: flex;
   flex-direction: column;
   flex-shrink: 0
@@ -1198,7 +1296,7 @@ video.bk-video {
 
 #log-header {
   padding: 12px 14px;
-  border-bottom: 1px solid #1E293B;
+  border-bottom: 1px solid var(--c-chrome-2);
   display: flex;
   align-items: center;
   justify-content: space-between
@@ -1207,7 +1305,7 @@ video.bk-video {
 #log-header-title {
   font-size: 13px;
   font-weight: 700;
-  color: #94A3B8;
+  color: var(--c-log-muted);
   text-transform: uppercase;
   letter-spacing: .08em
 }
@@ -1244,24 +1342,24 @@ video.bk-video {
 }
 
 .log-line.ll-success {
-  color: #4ADE80
+  color: var(--c-ok-on-dark)
 }
 
 .log-line.ll-warn {
-  color: #FCD34D
+  color: var(--c-warn-on-dark)
 }
 
 .log-line.ll-error {
-  color: #F87171
+  color: var(--c-danger-on-dark)
 }
 
 .log-line.ll-step {
-  color: #38BDF8;
+  color: var(--c-info-on-dark);
   font-weight: 700
 }
 
 .log-line.ll-data {
-  color: #93C5FD
+  color: var(--c-info-soft-on-dark)
 }
 
 #log-entries::-webkit-scrollbar {
@@ -1273,7 +1371,7 @@ video.bk-video {
 }
 
 #log-entries::-webkit-scrollbar-thumb {
-  background: #1E293B;
+  background: var(--c-chrome-2);
   border-radius: 2px
 }
 
@@ -1281,7 +1379,7 @@ video.bk-video {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, .6);
+  background: var(--c-shade-a60);
   z-index: 500;
   display: flex;
   align-items: center;
@@ -1293,10 +1391,10 @@ video.bk-video {
 }
 
 .modal-box {
-  background: #fff;
+  background: var(--c-surface);
   border-radius: 20px;
-  border: 3px solid #1a1a2e;
-  box-shadow: 8px 8px 0 #1a1a2e;
+  border: 3px solid var(--c-ink);
+  box-shadow: 8px 8px 0 var(--c-ink);
   padding: 32px;
   max-width: 560px;
   width: calc(100% - 32px);
@@ -1332,7 +1430,7 @@ video.bk-video {
   font-size: 11px;
   font-weight: 700;
   background: var(--c-deploy);
-  color: #fff;
+  color: var(--c-surface);
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -1382,23 +1480,23 @@ video.bk-video {
 
 .modal-close-btn {
   background: var(--c-deploy);
-  color: #fff;
+  color: var(--c-surface);
   padding: 10px 24px;
   border-radius: 12px;
-  border: 3px solid #1a1a2e;
-  box-shadow: 4px 4px 0 #1a1a2e;
+  border: 3px solid var(--c-ink);
+  box-shadow: 4px 4px 0 var(--c-ink);
   font-size: 14px;
   font-weight: 700;
   transition: transform .12s, box-shadow .12s, background .15s
 }
 
 .modal-close-btn:hover {
-  background: #14532D
+  background: var(--c-ok-deep)
 }
 
 .modal-close-btn:active {
   transform: scale(.95) translateY(2px);
-  box-shadow: 2px 2px 0 #1a1a2e
+  box-shadow: 2px 2px 0 var(--c-ink)
 }
 
 /* EDU MODE */
@@ -1415,12 +1513,15 @@ body.edu-mode .bk-header {
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  background: #1E3932;
-  color: #fff;
+  background: var(--c-deploy);
+  color: var(--c-surface);
   font-size: 11px;
   padding: 5px 10px;
   border-radius: 6px;
-  white-space: nowrap;
+  max-width: 340px;
+  width: max-content;
+  white-space: normal;
+  text-align: center;
   pointer-events: none;
   display: none;
   z-index: 50
@@ -1435,7 +1536,7 @@ canvas.chart-canvas {
   width: 100%;
   height: 80px;
   border-radius: 6px;
-  background: #F8FAFC;
+  background: var(--c-surface-2);
   border: 1px solid var(--c-border)
 }
 
@@ -1490,31 +1591,71 @@ canvas.chart-canvas {
   white-space: nowrap
 }
 
+.class-capture-btn {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  border: none;
+  color: var(--c-surface)
+}
+
+.class-tool-btn {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  border: 1px solid var(--c-border)
+}
+
+.class-tool-btn:hover {
+  background: var(--c-bg)
+}
+
 .class-delete-class-btn {
   opacity: .55
 }
 
 .class-delete-class-btn:hover {
   opacity: 1;
-  background: #FEE2E2 !important;
-  color: #B91C1C !important;
-  border-color: #FCA5A5 !important
+  background: var(--c-danger-bg-2);
+  color: var(--c-danger);
+  border-color: var(--c-danger-border)
 }
 
-/* Responsive flow bar hiding on narrow */
-@media(max-width:900px) {
+/* Phones and small tablets (project breakpoint: 768px). The three fixed-width
+   panels (sidebar 260 + canvas + log 320) don't fit side by side and everything
+   is overflow:hidden, so the canvas would collapse and the log panel would be
+   pushed off-screen. Stack the workspace vertically, let the page scroll, and
+   drop the flow bar (it needs ~500px of free width). */
+@media (max-width: 768px) {
+  body {
+    overflow: auto
+  }
   #flowbar {
     display: none
   }
-}
-
-/* Small screens: the three fixed-width panels (sidebar 260 + canvas + log 320)
-   don't fit side by side, and everything is overflow:hidden – so on a phone the
-   canvas collapses to nothing and the log panel is pushed off-screen with no way
-   to reach it. Stack the workspace vertically and let the page scroll instead. */
-@media(max-width:860px) {
-  body {
-    overflow: auto
+  #topbar {
+    height: auto;
+    min-height: var(--topbar-h);
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px
+  }
+  #topbar-actions {
+    margin-left: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    flex-basis: 100%;
+    flex-wrap: wrap
+  }
+  .tb-btn {
+    padding: 7px 10px;
+    font-size: 12px
   }
   #workspace {
     flex-direction: column;
@@ -1531,15 +1672,21 @@ canvas.chart-canvas {
     width: 100%;
     min-height: 55vh
   }
+  .block-card {
+    width: min(340px, calc(100vw - 24px))
+  }
   #log-panel {
     width: 100%;
     height: 180px;
     flex-shrink: 0
   }
-  /* Log panel is now below the canvas, not to its right – pin the trash zone
+  /* Log panel is now below the canvas, not to its right: pin the trash zone
      to the true bottom-right corner. */
   #trash-zone {
     right: 16px
+  }
+  .modal-box {
+    padding: 20px
   }
 }
 
@@ -1569,7 +1716,7 @@ canvas.chart-canvas {
 
 .pred-row .pred-track {
   position: relative;
-  background: #E2E8F0;
+  background: var(--c-border);
   border-radius: 3px;
   height: 6px;
   overflow: visible
@@ -1593,7 +1740,7 @@ canvas.chart-canvas {
   bottom: 0;
   left: var(--thr, 70%);
   width: 0;
-  border-left: 1px dashed #475569;
+  border-left: 1px dashed var(--c-ink-soft);
   pointer-events: none;
   opacity: .65
 }
@@ -1601,7 +1748,7 @@ canvas.chart-canvas {
 .pred-thr-label {
   position: relative;
   font-size: 9px;
-  color: #475569;
+  color: var(--c-ink-soft);
   font-weight: 600;
   font-style: italic;
   margin-bottom: 6px;
@@ -1615,7 +1762,7 @@ canvas.chart-canvas {
   left: var(--thr, 70%);
   width: 1px;
   height: 4px;
-  background: #475569;
+  background: var(--c-ink-soft);
   opacity: .65
 }
 
@@ -1644,11 +1791,11 @@ canvas.chart-canvas {
   height: 6px;
   border-radius: 3px;
   background: linear-gradient(to right,
-    rgba(37, 99, 235, .85),
-    rgba(37, 99, 235, .25),
-    rgba(0, 0, 0, .05),
-    rgba(220, 38, 38, .25),
-    rgba(220, 38, 38, .85))
+    var(--c-xai-neg-a85),
+    var(--c-xai-neg-a25),
+    var(--c-shade-a05),
+    var(--c-train-a25),
+    var(--c-train-a85))
 }
 
 .xai-legend-label {
@@ -1731,7 +1878,7 @@ canvas.chart-canvas {
 .xai-class-track {
   position: relative;
   height: 8px;
-  background: #E2E8F0;
+  background: var(--c-border);
   border-radius: 3px;
   overflow: visible
 }
@@ -1741,9 +1888,9 @@ canvas.chart-canvas {
   left: 0;
   top: 0;
   height: 8px;
-  background: rgba(100, 116, 139, .35);
+  background: var(--c-muted-a35);
   border-radius: 3px;
-  border-right: 1px dashed #475569
+  border-right: 1px dashed var(--c-ink-soft)
 }
 
 .xai-class-track .xai-bar-occ {
