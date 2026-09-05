@@ -5,3 +5,5 @@ plans/
 superpowers/
 mockups/
 scratch/
+*.plan.md
+*.draft.*

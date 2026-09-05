@@ -724,6 +724,51 @@ const STRINGS = {
   }
 };
 
+// Prediction copy stays outside STRINGS because the prediction card can be
+// refreshed independently of the canvas shell.  This lets the model output
+// survive a language rebuild while labels and state copy are translated in one
+// deterministic pass.
+const PREDICTION_TEXT = {
+  pl: {
+    waiting: 'Oczekiwanie na pierwszą klatkę',
+    live: 'Na żywo',
+    paused: 'Wstrzymano',
+    stopped: 'Kamera zatrzymana',
+    belowThreshold: 'Poniżej progu',
+    winnerLabel: 'Najlepsza klasa',
+    ranking: 'Ranking klas',
+    history: 'Historia predykcji',
+    historyEmpty: 'Historia pojawi się po pierwszej klatce.',
+    confidenceCaveat: 'Pewność to wynik modelu, nie zmierzona dokładność.',
+    noPrediction: 'Brak predykcji',
+    threshold: 'próg',
+    frame: (n) => `Klatka ${n}`,
+    aboveThreshold: 'powyżej progu'
+  },
+  en: {
+    waiting: 'Waiting for the first frame',
+    live: 'Live',
+    paused: 'Paused',
+    stopped: 'Camera stopped',
+    belowThreshold: 'Below threshold',
+    winnerLabel: 'Top class',
+    ranking: 'Class ranking',
+    history: 'Prediction history',
+    historyEmpty: 'History appears after the first frame.',
+    confidenceCaveat: 'Confidence is a model output, not measured accuracy.',
+    noPrediction: 'No prediction',
+    threshold: 'threshold',
+    frame: (n) => `Frame ${n}`,
+    aboveThreshold: 'above threshold'
+  }
+};
+
+function predictionText(key, ...args) {
+  const copy = PREDICTION_TEXT[lang] || PREDICTION_TEXT.en;
+  const value = copy[key];
+  return typeof value === 'function' ? value(...args) : (value || key);
+}
+
 // ===== STATE =====
 let lang = localStorage.getItem('ml-blocks-lang') || 'pl';
 // A corrupted stored value would make S undefined and t() throw at init.
@@ -854,6 +899,7 @@ function isBlockBusy(b) {
     case 'show-results': return !!inferInterval;
     case 'zero-shot': return !!zsIntervals[b.id];
     case 'train-model': return trainingInProgress;
+    case 'explain-ai': return xaiRunning;
     default: return false;
   }
 }
@@ -1989,19 +2035,40 @@ ${makeBtn(t('btn_stop'), `stopZeroShot('${id}')`, 'var(--c-muted)')}
 
 
 function buildShowResultsBody(id) {
-  // Merged Predict + Show Results block. Element IDs that runInference reads
-  // (pred-bars-, pred-result-, thr-) live here. Camera frames are rendered
-  // by the Camera: Prediction block; this block is the *result* surface.
-  const waitMsg = t('pred_waiting');
+  // Merged Predict + Show Results block. Keep the original IDs because both
+  // the inference loop and the guided shell use them as integration points.
+  // Dynamic labels are filled with textContent by the prediction renderer.
+  const thresholdLabel = t('param_threshold') || predictionText('threshold');
+  const waiting = predictionText('waiting');
   return `
-<div id="pred-bars-${id}"></div>
-<div id="pred-result-${id}" style="font-size:14px;font-weight:700;padding:8px 10px;background:var(--c-bg);border-radius:6px;text-align:center;min-height:32px;color:var(--c-muted);font-style:italic">${waitMsg}</div>
-${makeParam(t('param_threshold'), `<select id="thr-${id}">
-  <option value="0.5">50%</option><option value="0.7" selected>70%</option>
-  <option value="0.8">80%</option><option value="0.9">90%</option>
-</select>`)}
-<canvas id="hist-chart-${id}" class="chart-canvas" height="60"></canvas>
-<button class="bk-btn bk-btn--muted" id="freeze-btn-${id}" aria-pressed="${frozenFrame ? 'true' : 'false'}" onclick="freezeFrame('${id}')">${t(frozenFrame ? 'btn_unfreeze_frame' : 'btn_freeze_frame')}</button>`;
+<section class="pred-ui" id="pred-ui-${id}" data-prediction-id="${id}" data-prediction-state="waiting" data-prediction-mode="waiting" data-prediction-threshold="0.7" data-prediction-history-length="0" data-prediction-render-count="0" aria-describedby="pred-caveat-${id}">
+  <div class="pred-status" id="pred-status-${id}" role="status" aria-live="polite" data-status-key="waiting">
+    <span class="pred-status-dot" aria-hidden="true"></span>
+    <span class="pred-status-label">${waiting}</span>
+  </div>
+  <div class="pred-result" id="pred-result-${id}" data-prediction-result="true" role="group" aria-label="${predictionText('winnerLabel')}">
+    <span class="pred-winner-kicker" id="pred-winner-label-${id}">${predictionText('winnerLabel')}</span>
+    <span class="pred-winner-class" id="pred-winner-class-${id}">${predictionText('noPrediction')}</span>
+    <span class="pred-winner-score" id="pred-winner-score-${id}"></span>
+  </div>
+  <div class="pred-section-title">${predictionText('ranking')}</div>
+  <div id="pred-bars-${id}" class="pred-bars" role="list" aria-label="${predictionText('ranking')}"></div>
+  <div class="pred-history" id="pred-history-${id}">
+    <div class="pred-section-title pred-history-title">${predictionText('history')}</div>
+    <div class="pred-history-empty" id="pred-history-empty-${id}">${predictionText('historyEmpty')}</div>
+    <canvas id="hist-chart-${id}" class="chart-canvas pred-history-chart" height="72" role="img" aria-label="${predictionText('history')}"></canvas>
+    <div class="pred-history-timeline" id="pred-history-timeline-${id}" data-prediction-history="true" role="list" aria-label="${predictionText('history')}"></div>
+  </div>
+  <div class="pred-caveat" id="pred-caveat-${id}" role="note">${predictionText('confidenceCaveat')}</div>
+  <div class="param-row pred-threshold-control">
+    <label class="param-label" for="thr-${id}">${thresholdLabel}</label>
+    <select id="thr-${id}">
+      <option value="0.5">50%</option><option value="0.7" selected>70%</option>
+      <option value="0.8">80%</option><option value="0.9">90%</option>
+    </select>
+  </div>
+  <button class="bk-btn bk-btn--muted" id="freeze-btn-${id}" aria-pressed="${frozenFrame ? 'true' : 'false'}" onclick="freezeFrame('${id}')">${t(frozenFrame ? 'btn_unfreeze_frame' : 'btn_freeze_frame')}</button>
+</section>`;
 }
 
 function buildExplainAIBody(id) {
@@ -2013,42 +2080,55 @@ function buildExplainAIBody(id) {
   const optNorm   = t('xai_opt_normal');
   const optHi     = t('xai_opt_detailed');
   const stopLbl   = t('btn_stop');
-  const legendHi  = t('xai_legend_hi');
-  const legendLo  = t('xai_legend_lo');
-  const waitMsg   = t('xai_wait');
-  const howto     = t('xai_howto');
+  const state = getXAIState(id);
+  const waitMsg = xaiText('wait');
+  const selectedView = state.view === 'original' ? 'original' : 'heatmap';
+  const selectedMethod = state.requestedMethod === 'saliency' ? 'saliency' : 'occlusion';
+  const opacityPct = Math.round(state.opacity * 100);
   return `
-<div id="xai-wrap-${id}" style="position:relative; width:224px; height:224px; margin: 0 auto; border-radius:6px; overflow:hidden; background:var(--c-stage);">
-  <canvas id="xai-vid-${id}" style="width:100%; height:100%; display:block;"></canvas>
-  <canvas id="xai-overlay-${id}" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none;"></canvas>
+<div class="xai-scroll">
+<div id="xai-wrap-${id}" class="xai-viewport" data-xai-status="idle" data-xai-view="${selectedView}" data-xai-method="${selectedMethod}" data-xai-has-result="false" data-xai-overlay-opacity="${opacityPct}">
+  <canvas id="xai-vid-${id}" class="xai-frame" width="224" height="224"></canvas>
+  <canvas id="xai-overlay-${id}" class="xai-overlay" width="224" height="224"></canvas>
 </div>
-<div class="xai-legend">
-  <span class="xai-legend-label">${legendLo}</span>
-  <div class="xai-legend-bar"></div>
-  <span class="xai-legend-label">${legendHi}</span>
+<div class="xai-view-toolbar" role="group" aria-label="${xaiText('viewLabel')}">
+  <span class="xai-toolbar-label">${xaiText('viewLabel')}</span>
+  <button type="button" class="xai-view-btn ${selectedView === 'original' ? 'is-selected' : ''}" id="xai-view-original-${id}" aria-pressed="${selectedView === 'original'}" onclick="setXAIView('${id}','original')">${xaiText('viewOriginal')}</button>
+  <button type="button" class="xai-view-btn ${selectedView === 'heatmap' ? 'is-selected' : ''}" id="xai-view-heatmap-${id}" aria-pressed="${selectedView === 'heatmap'}" onclick="setXAIView('${id}','heatmap')">${xaiText('viewHeatmap')}</button>
 </div>
-<div class="xai-howto">${howto}</div>
+<div class="xai-opacity-control">
+  <label for="xai-opacity-${id}">${xaiText('opacityLabel')}</label>
+  <input type="range" id="xai-opacity-${id}" min="0" max="100" step="1" value="${opacityPct}" oninput="setXAIOverlayOpacity('${id}', this.value)">
+  <output id="xai-opacity-value-${id}" for="xai-opacity-${id}">${opacityPct}%</output>
+</div>
+<div class="xai-snapshot" id="xai-snapshot-${id}" data-xai-snapshot="empty" aria-live="polite">
+  <div class="xai-snapshot-item"><span class="xai-snapshot-label">${xaiText('snapshotLabel')}</span><strong id="xai-snapshot-meta-${id}">${xaiText('snapshotEmpty')}</strong></div>
+  <div class="xai-snapshot-item"><span class="xai-snapshot-label">${xaiText('predictedLabel')}</span><strong id="xai-predicted-${id}">${xaiText('predictionEmpty')}</strong></div>
+</div>
+<div class="xai-legend" id="xai-legend-${id}" data-xai-legend-kind="${selectedMethod}"></div>
+<div class="xai-howto" id="xai-howto-${id}"></div>
 ${makeParam(methLabel, `<select id="xai-method-${id}">
-  <option value="occlusion" selected>${optOccl}</option>
-  <option value="saliency">${optSal}</option>
-</select>`)}
+  <option value="occlusion" ${selectedMethod === 'occlusion' ? 'selected' : ''}>${optOccl}</option>
+  <option value="saliency" ${selectedMethod === 'saliency' ? 'selected' : ''}>${optSal}</option>
+</select>`).replace('<select ', `<select onchange="xaiMethodChanged('${id}', this.value)" `)}
 ${makeParam(granLabel, `<select id="xai-patch-${id}">
-  <option value="56">${optFast}</option>
-  <option value="32" selected>${optNorm}</option>
-  <option value="16">${optHi}</option>
-</select>`)}
-<progress id="xai-prog-${id}" value="0" max="100" style="display:none;margin-top:4px"></progress>
-<div id="xai-result-${id}" style="font-size:13px;font-weight:700;padding:6px 8px;background:var(--c-bg);border-radius:6px;text-align:center;margin-top:6px;min-height:28px;color:var(--c-muted);font-style:italic">${waitMsg}</div>
-<div id="xai-detail-${id}" class="xai-detail" style="display:none">
+  <option value="56" ${state.patchSize === 56 ? 'selected' : ''}>${optFast}</option>
+  <option value="32" ${state.patchSize === 32 ? 'selected' : ''}>${optNorm}</option>
+  <option value="16" ${state.patchSize === 16 ? 'selected' : ''}>${optHi}</option>
+</select>`).replace('<select ', `<select onchange="xaiPatchChanged('${id}', this.value)" `)}
+<progress id="xai-prog-${id}" value="0" max="100" hidden></progress>
+<div id="xai-result-${id}" class="xai-result" role="status" aria-live="polite" data-xai-result="empty">${waitMsg}</div>
+<div id="xai-detail-${id}" class="xai-detail" hidden>
   <div class="xai-detail-row">
     <canvas id="xai-thumb-${id}" width="64" height="64" class="xai-thumb"></canvas>
     <div class="xai-detail-text" id="xai-detail-text-${id}"></div>
   </div>
-  <div class="xai-classes" id="xai-classes-${id}"></div>
+  <div class="xai-classes" id="xai-classes-${id}" aria-live="polite"></div>
 </div>
 <div style="display:flex;gap:6px;margin-top:6px">
 ${makeBtn(t('btn_run_xai'), `runXAI('${id}')`, 'var(--c-eval)')}
 ${makeBtn(stopLbl, `stopXAI('${id}')`, 'var(--c-muted)')}
+</div>
 </div>`;
 }
 
@@ -2294,6 +2374,12 @@ function removeBlock(id) {
         inferCameraStream = null;
       }
       inferVideoEl = null;
+      placedBlocks.filter(b => b.type === 'show-results').forEach(b => renderPredictionState(b.id, 'stopped'));
+    }
+    if (block.type === 'show-results') predSnapshots.delete(String(id));
+    if (block.type === 'explain-ai') {
+      stopXAI(id);
+      window.XAI_UI.drop(id);
     }
     // The zero-shot classifier is large (~5 MB GPU memory). Free it when
     // the user removes the only zero-shot block – they can reload it.
@@ -2344,6 +2430,9 @@ async function clearCanvas() {
   inferVideoEl = null;
   predHistory = [];
   frozenFrame = false;
+  predSnapshots.clear();
+  stopXAI();
+  Object.keys(xaiStates).forEach(id => window.XAI_UI.drop(id));
 
   placedBlocks.forEach(b => { if (b.card) b.card.remove(); });
   placedBlocks = [];
@@ -3875,6 +3964,15 @@ let inferCameraStream = null;
 let inferVideoEl = null;
 let predHistory = [];
 let frozenFrame = false;
+// The latest raw model output is retained separately from the history so a
+// language switch or a shell rebuild can repaint the card without inventing a
+// new prediction.  Values are never smoothed or renormalised.
+const predSnapshots = new Map(); // block id -> normalized prediction snapshot
+const _predHistoryUI = new WeakMap(); // timeline element -> { slots: [...] }
+let predFrameSeq = 0;
+
+const PREDICTION_HISTORY_LIMIT = 30;
+const PREDICTION_MODES = new Set(['live', 'paused', 'waiting', 'stopped']);
 
 // Index of the largest value in an array / typed array (0 for an empty one).
 function argmax(arr) {
@@ -4096,6 +4194,11 @@ async function startInferCamera(id) {
     const interval = fpsEl ? parseInt(fpsEl.value) : 100;
     if (inferInterval) clearInterval(inferInterval);
     inferInterval = setInterval(() => runInference(id), interval);
+    // A restarted camera may still have the previous snapshot.  Keep it
+    // visible, but truthfully mark the card as waiting until a fresh frame
+    // reaches the model.
+    const resultBlock = blocksByType['show-results'];
+    if (resultBlock) renderPredictionState(resultBlock.id, 'waiting');
     evaluatePipelineState();
   } catch (err) {
     log('error', t('log_camera_err') + err.message);
@@ -4116,30 +4219,248 @@ function stopInferCamera(id) {
   inferVideoEl = null;
   frozenFrame = false;
   setBlockStatus(document.getElementById(id), 'idle');
+  const resultBlock = blocksByType['show-results'];
+  if (resultBlock) renderPredictionState(resultBlock.id, 'stopped');
   log('info', t('log_infer_camera_stopped'));
   evaluatePipelineState();
 }
 
-// Build the predict-block bar DOM ONCE per session, then mutate widths/text
-// per frame. Massive saving over innerHTML-rebuild: no parser, no GC churn,
-// no layout reflow on every prediction.
-function ensurePredictBarsDOM(predictBlock, classCount, threshold) {
-  const cached = _predUI.get(predictBlock);
-  if (cached && cached.rows.length === classCount) return cached;
+// ─── Prediction UI helpers ───
+function finitePredictionNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizePredictionColor(value, fallback) {
+  const color = String(value == null ? '' : value).trim();
+  // The model metadata can be imported from a file.  Keep CSS values limited to
+  // simple colour tokens so a persisted label/colour cannot become markup.
+  if (/^(?:var\(--[a-z0-9-]+\)|#[0-9a-f]{3,8}|rgb\([^)]*\)|rgba\([^)]*\)|hsl\([^)]*\)|hsla\([^)]*\))$/i.test(color)) return color;
+  return fallback || 'var(--c-model)';
+}
+
+function predictionBlockRecord(idOrBlock) {
+  if (idOrBlock && typeof idOrBlock === 'object' && idOrBlock.id) return idOrBlock;
+  const id = String(idOrBlock == null ? '' : idOrBlock);
+  const known = blocksByType['show-results'];
+  if (known && known.id === id) return known;
+  const card = document.getElementById(id);
+  return { id, card: card || null };
+}
+
+function predictionRoot(id) {
+  return document.getElementById('pred-ui-' + id)
+    || document.getElementById('pred-result-' + id)?.closest('.pred-ui')
+    || document.getElementById(id)?.querySelector('.pred-ui');
+}
+
+function predictionThreshold(id, fallback) {
+  const field = document.getElementById('thr-' + id);
+  const value = field ? Number(field.value) : Number(fallback);
+  return Math.min(1, Math.max(0, finitePredictionNumber(value, 0.7)));
+}
+
+function normalizePredictionPayload(payload) {
+  const input = payload && typeof payload === 'object' ? payload : {};
+  let raw = [];
+  if (input.probabilities != null) {
+    try { raw = Array.from(input.probabilities); } catch (_) { raw = []; }
+  }
+  // Preserve valid model outputs exactly.  Invalid fixture values are made
+  // deterministic and harmless, but no smoothing or probability re-scaling is
+  // applied to valid values.
+  const probabilities = raw.map(value => finitePredictionNumber(value, 0));
+  const sourceLabels = Array.isArray(input.labels) ? input.labels : inferLabels();
+  const sourceColors = Array.isArray(input.colors) ? input.colors : [];
+  const labels = probabilities.map((_, i) => String(sourceLabels && sourceLabels[i] != null ? sourceLabels[i] : `Class ${i + 1}`));
+  const colors = probabilities.map((_, i) => normalizePredictionColor(
+    sourceColors[i], normalizePredictionColor(inferColor(i), 'var(--c-model)')
+  ));
+  const threshold = Math.min(1, Math.max(0, finitePredictionNumber(input.threshold, 0.7)));
+  const requestedMode = String(input.mode || (probabilities.length ? 'live' : 'waiting')).toLowerCase();
+  const mode = requestedMode === 'below-threshold' || requestedMode === 'low-confidence'
+    ? 'live' : (PREDICTION_MODES.has(requestedMode) ? requestedMode : (probabilities.length ? 'live' : 'waiting'));
+  const maxIdx = probabilities.length ? argmax(probabilities) : -1;
+  const confidence = maxIdx >= 0 ? probabilities[maxIdx] : null;
+  const belowThreshold = confidence != null && confidence < threshold;
+  const state = mode === 'waiting' ? 'waiting'
+    : mode === 'stopped' ? 'stopped'
+      : mode === 'paused' ? 'paused'
+        : (belowThreshold ? 'below-threshold' : 'live');
+  return {
+    probabilities,
+    labels,
+    colors,
+    threshold,
+    mode,
+    state,
+    belowThreshold,
+    maxIdx,
+    confidence,
+    timestamp: input.timestamp != null ? input.timestamp : Date.now(),
+    frame: input.frame != null ? input.frame : null
+  };
+}
+
+function predictionStatusText(snapshot) {
+  if (!snapshot || snapshot.mode === 'waiting') return predictionText('waiting');
+  if (snapshot.mode === 'stopped') return predictionText('stopped');
+  if (snapshot.mode === 'paused') {
+    return snapshot.belowThreshold
+      ? `${predictionText('paused')} · ${predictionText('belowThreshold')}`
+      : predictionText('paused');
+  }
+  return snapshot.belowThreshold
+    ? `${predictionText('live')} · ${predictionText('belowThreshold')}`
+    : predictionText('live');
+}
+
+function ensurePredictionStatusDOM(id) {
+  let root = predictionRoot(id);
+  if (!root) return null;
+  let status = document.getElementById('pred-status-' + id);
+  if (!status) {
+    status = document.createElement('div');
+    status.id = 'pred-status-' + id;
+    status.className = 'pred-status';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    const dot = document.createElement('span');
+    dot.className = 'pred-status-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.className = 'pred-status-label';
+    status.append(dot, label);
+    root.prepend(status);
+  }
+  let dot = status.querySelector('.pred-status-dot');
+  let label = status.querySelector('.pred-status-label');
+  if (!dot) {
+    dot = document.createElement('span');
+    dot.className = 'pred-status-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    status.prepend(dot);
+  }
+  if (!label) {
+    label = document.createElement('span');
+    label.className = 'pred-status-label';
+    status.appendChild(label);
+  }
+  return { root, status, dot, label };
+}
+
+function ensurePredictionWinnerDOM(id) {
+  const result = document.getElementById('pred-result-' + id);
+  if (!result) return null;
+  let kicker = result.querySelector('.pred-winner-kicker');
+  let winner = result.querySelector('.pred-winner-class');
+  let score = result.querySelector('.pred-winner-score');
+  if (!kicker || !winner || !score) {
+    kicker = document.createElement('span');
+    kicker.className = 'pred-winner-kicker';
+    winner = document.createElement('span');
+    winner.className = 'pred-winner-class';
+    score = document.createElement('span');
+    score.className = 'pred-winner-score';
+    result.replaceChildren(kicker, winner, score);
+  }
+  return { result, kicker, winner, score };
+}
+
+function updatePredictionStatus(id, snapshot) {
+  const parts = ensurePredictionStatusDOM(id);
+  if (!parts) return;
+  const key = `${snapshot.mode}:${snapshot.belowThreshold ? 'below' : 'ok'}`;
+  const nextText = predictionStatusText(snapshot);
+  // The state badge is the only live region.  Avoid touching it on every
+  // unchanged frame so screen readers do not announce a flashing stream.
+  if (parts.status.dataset.statusKey !== key || parts.label.textContent !== nextText) {
+    parts.status.dataset.statusKey = key;
+    parts.label.textContent = nextText;
+  }
+  parts.status.dataset.mode = snapshot.mode;
+  parts.status.dataset.confidenceState = snapshot.belowThreshold ? 'below-threshold' : 'above-threshold';
+  parts.status.classList.toggle('is-live', snapshot.mode === 'live');
+  parts.status.classList.toggle('is-paused', snapshot.mode === 'paused');
+  parts.status.classList.toggle('is-waiting', snapshot.mode === 'waiting');
+  parts.status.classList.toggle('is-stopped', snapshot.mode === 'stopped');
+  parts.status.classList.toggle('is-below-threshold', snapshot.belowThreshold);
+}
+
+function updatePredictionWinner(id, snapshot) {
+  const parts = ensurePredictionWinnerDOM(id);
+  if (!parts) return;
+  const { result, kicker, winner, score } = parts;
+  kicker.textContent = predictionText('winnerLabel');
+  result.setAttribute('aria-label', predictionText('winnerLabel'));
+  result.dataset.predictionState = snapshot.state;
+  if (snapshot.maxIdx < 0) {
+    winner.textContent = predictionText('noPrediction');
+    score.textContent = '';
+    result.style.removeProperty('--pred-winner-color');
+  } else {
+    winner.textContent = snapshot.labels[snapshot.maxIdx];
+    score.textContent = `${(snapshot.confidence * 100).toFixed(1)}%`;
+    result.style.setProperty('--pred-winner-color', snapshot.colors[snapshot.maxIdx]);
+  }
+  result.classList.toggle('is-below-threshold', snapshot.belowThreshold);
+  result.classList.toggle('has-prediction', snapshot.maxIdx >= 0);
+  result.dataset.topIndex = String(snapshot.maxIdx);
+  result.dataset.topScore = snapshot.confidence == null ? '' : String(snapshot.confidence);
+}
+
+function setPredictionRootState(id, snapshot, historyLength) {
+  const root = predictionRoot(id);
+  if (!root) return;
+  root.dataset.predictionState = snapshot.state;
+  root.dataset.predictionMode = snapshot.mode;
+  root.dataset.predictionThresholdState = snapshot.belowThreshold ? 'below-threshold' : 'above-threshold';
+  root.dataset.predictionThreshold = String(snapshot.threshold);
+  root.dataset.predictionTopIndex = String(snapshot.maxIdx);
+  root.dataset.predictionTopScore = snapshot.confidence == null ? '' : String(snapshot.confidence);
+  root.dataset.predictionHistoryLength = String(historyLength == null ? predHistory.length : historyLength);
+  root.dataset.predictionLanguage = lang;
+  root.dataset.predictionRenderCount = String((Number(root.dataset.predictionRenderCount) || 0) + 1);
+}
+
+function ensurePredictionThresholdListener(id) {
+  const field = document.getElementById('thr-' + id);
+  if (!field || field.dataset.predictionBound === '1') return;
+  field.dataset.predictionBound = '1';
+  field.addEventListener('change', () => {
+    const previous = predSnapshots.get(id);
+    const threshold = predictionThreshold(id, previous ? previous.threshold : 0.7);
+    if (previous) renderPredictionSnapshot(id, { ...previous, threshold, recordHistory: false }, { recordHistory: false });
+    else renderPredictionState(id, 'waiting', threshold);
+  });
+}
+
+// Build the ranked predict-block bar DOM ONCE per session, then mutate widths/text
+// per frame. Re-check the element identity because applyLang replaces a block
+// body and leaves a WeakMap entry pointing at the disconnected old bars node.
+function ensurePredictBarsDOM(predictBlock, classCount, threshold, labelsArg, colorsArg) {
+  if (!predictBlock || !predictBlock.id) return null;
   const barsEl = document.getElementById('pred-bars-' + predictBlock.id);
   if (!barsEl) return null;
+  const labels = Array.from({ length: classCount }, (_, i) => String(labelsArg && labelsArg[i] != null ? labelsArg[i] : (inferLabels()[i] || `Class ${i + 1}`)));
+  const colors = Array.from({ length: classCount }, (_, i) => normalizePredictionColor(
+    colorsArg && colorsArg[i], normalizePredictionColor(inferColor(i), 'var(--c-model)')
+  ));
+  const cached = _predUI.get(predictBlock);
+  const connected = node => !!node && (node.isConnected !== undefined ? node.isConnected : document.contains(node));
+  if (cached && cached.barsEl === barsEl && connected(cached.barsEl) && cached.rows.length === classCount) {
+    ensurePredictionThresholdListener(predictBlock.id);
+    return cached;
+  }
 
-  const thrPct = (threshold * 100).toFixed(1);
-  const thrLabel = t('lbl_threshold');
-  const labels = inferLabels();
-
-  // Threshold marker line + per-class rows
+  const thresholdValue = Math.min(1, Math.max(0, finitePredictionNumber(threshold, 0.7)));
+  const thrPct = (thresholdValue * 100).toFixed(1);
   const frag = document.createDocumentFragment();
   const thrEl = document.createElement('div');
   thrEl.className = 'pred-thr-label';
   thrEl.style.setProperty('--thr', thrPct + '%');
   const thrSpan = document.createElement('span');
-  thrSpan.textContent = `${thrLabel} ${thrPct}%`;
+  thrSpan.textContent = `${predictionText('threshold')} ${thrPct}%`;
   thrEl.appendChild(thrSpan);
   frag.appendChild(thrEl);
 
@@ -4147,65 +4468,218 @@ function ensurePredictBarsDOM(predictBlock, classCount, threshold) {
   for (let i = 0; i < classCount; i++) {
     const row = document.createElement('div');
     row.className = 'pred-row';
+    row.dataset.classIndex = String(i);
+    row.dataset.rank = String(i + 1);
+    row.setAttribute('role', 'listitem');
     row.style.setProperty('--thr', thrPct + '%');
+    row.style.setProperty('--pred-class-color', colors[i]);
 
     const lbl = document.createElement('div');
     lbl.className = 'pred-label';
+    const left = document.createElement('span');
+    left.className = 'pred-label-left';
+    const rank = document.createElement('span');
+    rank.className = 'pred-rank';
+    rank.textContent = `#${i + 1}`;
     const name = document.createElement('span');
-    name.style.fontWeight = '600';
-    name.style.color = inferColor(i);
+    name.className = 'pred-label-name';
     name.textContent = labels[i];
+    left.append(rank, name);
     const pct = document.createElement('span');
-    pct.style.color = 'var(--c-muted)';
+    pct.className = 'pred-label-pct';
     pct.textContent = '0.0%';
-    lbl.appendChild(name);
-    lbl.appendChild(pct);
+    lbl.append(left, pct);
 
     const track = document.createElement('div');
     track.className = 'pred-track';
+    track.setAttribute('aria-hidden', 'true');
     const fill = document.createElement('div');
     fill.className = 'pred-fill';
-    fill.style.background = inferColor(i);
+    fill.style.backgroundColor = colors[i];
     fill.style.width = '0%';
     track.appendChild(fill);
-
-    row.appendChild(lbl);
-    row.appendChild(track);
+    row.append(lbl, track);
     frag.appendChild(row);
-
-    rows.push({ row, name, pct, fill });
+    rows.push({ row, rank, name, pct, fill });
   }
   barsEl.replaceChildren(frag);
-  const ui = { rows, thrEl, thrSpan, thrPct, classCount };
+  const ui = { barsEl, rows, thrEl, thrSpan, thrPct, classCount, rankKey: '' };
   _predUI.set(predictBlock, ui);
+  ensurePredictionThresholdListener(predictBlock.id);
   return ui;
 }
 
-function updatePredictBars(ui, predictions, threshold) {
-  if (!ui) return;
-  const newThrPct = (threshold * 100).toFixed(1);
+function updatePredictBars(ui, predictions, threshold, labelsArg, colorsArg) {
+  if (!ui || !ui.rows) return [];
+  const values = Array.from(predictions || [], value => finitePredictionNumber(value, 0));
+  const thresholdValue = Math.min(1, Math.max(0, finitePredictionNumber(threshold, 0.7)));
+  const newThrPct = (thresholdValue * 100).toFixed(1);
   if (newThrPct !== ui.thrPct) {
     ui.thrPct = newThrPct;
     ui.thrEl.style.setProperty('--thr', newThrPct + '%');
-    ui.thrSpan.textContent = `${t('lbl_threshold')} ${newThrPct}%`;
+    ui.thrSpan.textContent = `${predictionText('threshold')} ${newThrPct}%`;
     for (const r of ui.rows) r.row.style.setProperty('--thr', newThrPct + '%');
   }
-  const labels = inferLabels();
-  for (let i = 0; i < ui.rows.length; i++) {
-    const p = predictions[i];
-    const pctTxt = (p * 100).toFixed(1);
-    const r = ui.rows[i];
-    r.fill.style.width = pctTxt + '%';
-    r.fill.classList.toggle('below', p < threshold);
-    r.pct.textContent = pctTxt + '%';
-    // Class names can change (rename, model swap) - keep label in sync cheaply.
-    if (r.name.textContent !== labels[i]) {
-      r.name.textContent = labels[i];
-      r.name.style.color = inferColor(i);
-      r.fill.style.background = inferColor(i);
-    }
+  const labels = labelsArg || inferLabels();
+  const colors = colorsArg || [];
+  const ranking = ui.rows.map((_, i) => i).sort((a, b) => {
+    const diff = (values[b] == null ? 0 : values[b]) - (values[a] == null ? 0 : values[a]);
+    return diff || a - b;
+  });
+  const rankKey = ranking.join(',');
+  if (rankKey !== ui.rankKey) {
+    const ordered = document.createDocumentFragment();
+    ranking.forEach(index => ordered.appendChild(ui.rows[index].row));
+    ui.barsEl.appendChild(ordered);
+    ui.rankKey = rankKey;
   }
+  ranking.forEach((classIndex, rankIndex) => {
+    const p = values[classIndex] == null ? 0 : values[classIndex];
+    const r = ui.rows[classIndex];
+    const label = String(labels && labels[classIndex] != null ? labels[classIndex] : `Class ${classIndex + 1}`);
+    const color = normalizePredictionColor(colors[classIndex], normalizePredictionColor(inferColor(classIndex), 'var(--c-model)'));
+    const pctTxt = (p * 100).toFixed(1);
+    r.rank.textContent = `#${rankIndex + 1}`;
+    r.name.textContent = label;
+    r.pct.textContent = pctTxt + '%';
+    r.row.dataset.classIndex = String(classIndex);
+    r.row.dataset.rank = String(rankIndex + 1);
+    r.row.dataset.classLabel = label;
+    r.row.dataset.probability = String(p);
+    r.row.style.setProperty('--pred-class-color', color);
+    r.fill.style.backgroundColor = color;
+    // Width is visual only; the exact value remains available in the data
+    // contract and the snapshot. Do not smooth successive model outputs.
+    r.fill.style.width = Math.max(0, Math.min(100, p * 100)) + '%';
+    r.fill.classList.toggle('below', p < thresholdValue);
+  });
+  return ranking;
 }
+
+function appendPredictionHistory(snapshot) {
+  if (!snapshot || !snapshot.probabilities.length || snapshot.maxIdx < 0) return;
+  const previous = predHistory[predHistory.length - 1];
+  const frame = ++predFrameSeq;
+  predHistory.push({
+    idx: snapshot.maxIdx,
+    conf: snapshot.confidence,
+    label: snapshot.labels[snapshot.maxIdx],
+    color: snapshot.colors[snapshot.maxIdx],
+    frame,
+    at: snapshot.timestamp,
+    changed: !previous || previous.idx !== snapshot.maxIdx
+  });
+  if (predHistory.length > PREDICTION_HISTORY_LIMIT) predHistory.shift();
+}
+
+function renderPredictionSnapshot(id, payload, options) {
+  const opts = options || {};
+  const input = payload && typeof payload === 'object' ? payload : {};
+  const snapshot = normalizePredictionPayload(input);
+  const recordHistory = opts.recordHistory !== false && input.recordHistory !== false;
+  if (recordHistory) appendPredictionHistory(snapshot);
+  predSnapshots.set(String(id), snapshot);
+
+  const block = predictionBlockRecord(id);
+  let ui = null;
+  if (snapshot.probabilities.length) {
+    ui = ensurePredictBarsDOM(block, snapshot.probabilities.length, snapshot.threshold, snapshot.labels, snapshot.colors);
+  } else {
+    // An explicit waiting/empty render must not leave a previous ranked list
+    // looking current.  Drop the old cache as well as its rows; a later frame
+    // will build a fresh marker/list for the new output size.
+    const barsEl = document.getElementById('pred-bars-' + id);
+    if (barsEl) barsEl.replaceChildren();
+    if (block && block.id) _predUI.delete(block);
+  }
+  if (ui) updatePredictBars(ui, snapshot.probabilities, snapshot.threshold, snapshot.labels, snapshot.colors);
+  updatePredictionStatus(String(id), snapshot);
+  updatePredictionWinner(String(id), snapshot);
+  setPredictionRootState(String(id), snapshot, predHistory.length);
+  updatePredictionControls(String(id));
+  drawHistChart(String(id), snapshot.threshold);
+  return snapshot;
+}
+
+function renderPredictionState(id, mode, threshold) {
+  const key = String(id);
+  const previous = predSnapshots.get(key);
+  const next = previous
+    ? { ...previous, mode, threshold: predictionThreshold(key, threshold == null ? previous.threshold : threshold), recordHistory: false }
+    : {
+      probabilities: [], labels: inferLabels(), colors: inferLabels().map((_, i) => inferColor(i)),
+      threshold: predictionThreshold(key, threshold == null ? 0.7 : threshold), mode, recordHistory: false
+    };
+  return renderPredictionSnapshot(key, next, { recordHistory: false });
+}
+
+function updatePredictionControls(id) {
+  const btn = document.getElementById('freeze-btn-' + id);
+  if (btn) {
+    btn.setAttribute('aria-pressed', frozenFrame ? 'true' : 'false');
+    btn.textContent = t(frozenFrame ? 'btn_unfreeze_frame' : 'btn_freeze_frame');
+  }
+  const caveat = document.getElementById('pred-caveat-' + id);
+  if (caveat) caveat.textContent = predictionText('confidenceCaveat');
+  const title = document.querySelector('#pred-history-' + id + ' .pred-history-title');
+  if (title) title.textContent = predictionText('history');
+  const empty = document.getElementById('pred-history-empty-' + id);
+  if (empty && !predHistory.length) empty.textContent = predictionText('historyEmpty');
+}
+
+function refreshPredictionBlock(id) {
+  const key = String(id);
+  const previous = predSnapshots.get(key);
+  const threshold = predictionThreshold(key, previous ? previous.threshold : 0.7);
+  if (previous) renderPredictionSnapshot(key, { ...previous, threshold, recordHistory: false }, { recordHistory: false });
+  else renderPredictionState(key, 'waiting', threshold);
+}
+
+function predictionProbe(id) {
+  const key = String(id);
+  const root = predictionRoot(key);
+  const snapshot = predSnapshots.get(key);
+  const rootThreshold = root ? root.dataset.predictionThreshold : null;
+  const rootTopIndex = root ? root.dataset.predictionTopIndex : null;
+  const rootTopScore = root ? root.dataset.predictionTopScore : null;
+  const threshold = finitePredictionNumber(rootThreshold == null || rootThreshold === '' ? snapshot?.threshold : rootThreshold, 0.7);
+  const topIndex = rootTopIndex == null || rootTopIndex === ''
+    ? (snapshot?.maxIdx ?? null) : finitePredictionNumber(rootTopIndex, null);
+  const topScore = rootTopScore == null || rootTopScore === ''
+    ? (snapshot?.confidence ?? null) : finitePredictionNumber(rootTopScore, null);
+  const rows = root ? Array.from(root.querySelectorAll('#pred-bars-' + key + ' .pred-row')).map(row => ({
+    classIndex: Number(row.dataset.classIndex),
+    rank: Number(row.dataset.rank),
+    label: row.dataset.classLabel || row.querySelector('.pred-label-name')?.textContent || '',
+    probability: Number(row.dataset.probability || 0)
+  })) : [];
+  return {
+    id: key,
+    state: root?.dataset.predictionState || snapshot?.state || 'waiting',
+    mode: root?.dataset.predictionMode || snapshot?.mode || 'waiting',
+    threshold,
+    topIndex,
+    topScore,
+    historyLength: Number(root?.dataset.predictionHistoryLength || predHistory.length),
+    renderCount: Number(root?.dataset.predictionRenderCount || 0),
+    probabilities: snapshot ? snapshot.probabilities.slice() : [],
+    bars: rows
+  };
+}
+
+// Public, model-free entry point for deterministic UI fixtures and shell hooks.
+// Real camera inference calls this exact render path below.
+window.PREDICTION_UI = {
+  render(id, payload) { return renderPredictionSnapshot(String(id), payload || {}, {}); },
+  refreshAll() {
+    const ids = new Set();
+    if (Array.isArray(placedBlocks)) placedBlocks.forEach(block => { if (block.type === 'show-results') ids.add(block.id); });
+    document.querySelectorAll('.pred-ui[id^="pred-ui-"]').forEach(root => ids.add(root.id.slice('pred-ui-'.length)));
+    ids.forEach(refreshPredictionBlock);
+    return Array.from(ids, predictionProbe);
+  },
+  probe: predictionProbe
+};
 
 // In-flight guard: setInterval keeps firing while a slow tick is still
 // awaiting the GPU; without this, ticks pile up and the UI stutters.
@@ -4239,36 +4713,19 @@ async function runInference(camId) {
     predTensor = inferModel.predict(features);
     const predictions = await predTensor.data();
 
+    const predictBlock = blocksByType['show-results'];
     const maxIdx = argmax(predictions);
     const confidence = predictions[maxIdx];
-
-    // Update merged show-results block - patch DOM nodes built once.
-    const predictBlock = blocksByType['show-results'];
     if (predictBlock) {
-      const thresh = parseFloat(document.getElementById('thr-' + predictBlock.id)?.value || '0.7');
-      const ui = ensurePredictBarsDOM(predictBlock, predictions.length, thresh);
-      updatePredictBars(ui, predictions, thresh);
-      const result = document.getElementById('pred-result-' + predictBlock.id);
-      if (result) {
-        if (confidence >= thresh) {
-          result.textContent = `${inferLabels()[maxIdx]} – ${(confidence * 100).toFixed(1)}%`;
-          result.style.color = inferColor(maxIdx);
-          result.style.borderLeft = `4px solid ${inferColor(maxIdx)}`;
-          result.style.fontStyle = '';
-        } else {
-          result.textContent = t('pred_below_threshold');
-          result.style.color = 'var(--c-muted)';
-          result.style.borderLeft = '';
-          result.style.fontStyle = 'italic';
-        }
-      }
-    }
-
-    // Track recent predictions for the small history chart.
-    if (blocksByType['show-results']) {
-      predHistory.push({ idx: maxIdx, conf: confidence });
-      if (predHistory.length > 30) predHistory.shift();
-      drawHistChart(blocksByType['show-results'].id);
+      const thresh = predictionThreshold(predictBlock.id, 0.7);
+      PREDICTION_UI.render(predictBlock.id, {
+        probabilities: Array.from(predictions),
+        labels: inferLabels().slice(0, predictions.length),
+        colors: Array.from({ length: predictions.length }, (_, i) => inferColor(i)),
+        threshold: thresh,
+        mode: 'live',
+        timestamp: Date.now()
+      });
     }
 
     // Rate-limited probability log: only when class changes or 1s elapsed.
@@ -4299,280 +4756,859 @@ async function runInference(camId) {
 // evidence ("this region supports the answer"), the rise is negative evidence
 // ("this region was a distractor"). Visualised on a diverging red/blue map.
 
+// XAI is intentionally stateful outside the block DOM. The controller rebuilds
+// block bodies when the language changes; keeping the captured pixels and real
+// model outputs here lets the new DOM render the completed snapshot again.
+const XAI_DEFAULT_OPACITY = 0.74;
+const XAI_DEFAULT_VIEW = 'heatmap';
+const xaiStates = Object.create(null);
 let xaiCancelled = false;
 let xaiRunning = false;
+let xaiActiveId = null;
+let xaiFrameCounter = 0;
+
+// Keep XAI copy separate from the main STRINGS table. These messages describe
+// the measurement and its limitations, rather than claiming a causal reason.
+const XAI_UI_TEXT = {
+  pl: {
+    wait: 'Uruchom analizę, aby zobaczyć mapę dla pojedynczej klatki.',
+    viewLabel: 'Widok obrazu', viewOriginal: 'Oryginał', viewHeatmap: 'Mapa XAI',
+    opacityLabel: 'Krycie mapy', snapshotLabel: 'Analizowana klatka',
+    predictedLabel: 'Przewidywana klasa', snapshotEmpty: 'Brak zapisanej klatki',
+    predictionEmpty: 'Brak predykcji', frameLabel: 'klatka', timestampLabel: 'czas',
+    analyzing: 'Analizuję nową klatkę…', missingModel: 'Najpierw załaduj lub wytrenuj model.',
+    missingBase: 'Brak modelu bazowego. Załaduj blok „Model bazowy”.',
+    missingCamera: 'Uruchom blok „Kamera: Predykcja”, aby pobrać klatkę.',
+    missingCanvas: 'Nie można przygotować płótna analizy.', cancelled: 'Analiza przerwana – poprzednia mapa została wyczyszczona.',
+    errorPrefix: 'Analiza XAI nie powiodła się: ',
+    legendOcclusionLow: 'wzrost wyniku klasy', legendOcclusionHigh: 'spadek wyniku klasy',
+    legendSaliencyLow: 'niska |gradientu|', legendSaliencyHigh: 'wysoka |gradientu|',
+    occlusionHowto: 'Okluzja zastępuje każdy fragment rozmytym obrazem. Czerwony oznacza spadek wyniku wybranej klasy po tej zmianie, niebieski – wzrost. To test kontrfaktyczny, a nie dowód przyczynowości.',
+    saliencyHowto: 'Saliency pokazuje bezwzględną wartość gradientu wyniku wybranej klasy względem pikseli. Jasne miejsca oznaczają większą lokalną wrażliwość; gradient nie ma tu znaku i nie jest dowodem uwagi ani przyczynowości.',
+    fallbackHowto: 'Saliency nie zadziałało dla tego modelu, więc pokazano okluzję. Mapa i liczby dotyczą okluzji.',
+    baseline: 'przed zmianą', occluded: 'po okluzji', delta: 'różnica',
+    patchLabel: 'Podświetlony fragment', saliencyDetail: (label) => `Jasne piksele mają największą wartość bezwzględną gradientu dla wyniku klasy „${label}”. To lokalna miara wrażliwości, nie dowód przyczynowości.`,
+    occlusionDetail: (label) => `Dla klasy „${label}” pokazano wyniki modelu przed i po zastąpieniu podświetlonego fragmentu rozmyciem. Różnica opisuje reakcję na tę zmianę, nie przyczynę decyzji.`,
+    fallbackShort: 'Saliency niedostępne – użyto okluzji.',
+    noScores: 'Brak wyników dla tego fragmentu.'
+  },
+  en: {
+    wait: 'Run an analysis to see a map for one captured frame.',
+    viewLabel: 'Image view', viewOriginal: 'Original', viewHeatmap: 'XAI map',
+    opacityLabel: 'Map opacity', snapshotLabel: 'Analyzed frame',
+    predictedLabel: 'Predicted class', snapshotEmpty: 'No captured frame',
+    predictionEmpty: 'No prediction', frameLabel: 'frame', timestampLabel: 'time',
+    analyzing: 'Analyzing a new frame…', missingModel: 'Load or train a model first.',
+    missingBase: 'Base model is missing. Load the “Pretrained Model” block.',
+    missingCamera: 'Start the “Camera: Prediction” block to capture a frame.',
+    missingCanvas: 'The analysis canvas could not be prepared.', cancelled: 'Analysis cancelled – the previous map was cleared.',
+    errorPrefix: 'XAI analysis failed: ',
+    legendOcclusionLow: 'class score rises', legendOcclusionHigh: 'class score drops',
+    legendSaliencyLow: 'low |gradient|', legendSaliencyHigh: 'high |gradient|',
+    occlusionHowto: 'Occlusion replaces each patch with a blurred image. Red means the selected class score drops after that change; blue means it rises. This is a counterfactual test, not proof of causality.',
+    saliencyHowto: 'Saliency shows the absolute gradient magnitude of the selected class score with respect to pixels. Brighter areas mean higher local sensitivity; the gradient is unsigned here and is not proof of attention or causality.',
+    fallbackHowto: 'Saliency was unavailable for this model, so occlusion is shown instead. The map and numbers are from occlusion.',
+    baseline: 'before change', occluded: 'after occlusion', delta: 'change',
+    patchLabel: 'Highlighted patch', saliencyDetail: (label) => `Bright pixels have the largest absolute gradient magnitude for the “${label}” score. This is a local sensitivity measure, not proof of causality.`,
+    occlusionDetail: (label) => `For “${label}”, the table shows the model output before and after blurring the highlighted patch. The change describes the response to that perturbation, not a cause of the decision.`,
+    fallbackShort: 'Saliency unavailable – occlusion used.',
+    noScores: 'No scores were returned for this patch.'
+  }
+};
+
+function xaiText(key, ...args) {
+  const dict = XAI_UI_TEXT[lang] || XAI_UI_TEXT.en;
+  const fallback = XAI_UI_TEXT.en[key];
+  const value = dict[key] == null ? fallback : dict[key];
+  return typeof value === 'function' ? value(...args) : (value == null ? key : value);
+}
+
+function makeXAIState(id) {
+  return {
+    id, status: 'idle', error: '', message: '', progress: 0,
+    view: XAI_DEFAULT_VIEW, opacity: XAI_DEFAULT_OPACITY,
+    requestedMethod: 'occlusion', method: 'occlusion', patchSize: 32,
+    fallback: false, fallbackFrom: null, hasResult: false,
+    frameNumber: 0, capturedAt: 0, frameImageData: null,
+    labels: [], baseClass: null, baseConf: null, basePreds: null,
+    heatmap: null, gridW: 0, gridH: 0, stride: 0,
+    saliency: null, saliencySize: 0, bestX: 0, bestY: 0,
+    bestPatch: 0, bestDrop: 0, bestMagnitude: 0,
+    counterClass: null, counterPreds: null, detailMessage: ''
+  };
+}
+
+function getXAIState(id) {
+  const key = String(id || '');
+  if (!xaiStates[key]) xaiStates[key] = makeXAIState(key);
+  return xaiStates[key];
+}
+
+function xaiFiniteNumber(value, fallback) {
+  return Number.isFinite(Number(value)) ? Number(value) : fallback;
+}
+
+function xaiNormalizeMethod(value) {
+  return value === 'saliency' ? 'saliency' : 'occlusion';
+}
+
+function xaiNormalizePatch(value) {
+  const n = parseInt(value, 10);
+  return n === 16 || n === 56 ? n : 32;
+}
+
+function xaiFormatPercent(value) {
+  return Number.isFinite(Number(value)) ? `${(Number(value) * 100).toFixed(1)}%` : '–';
+}
+
+function xaiFormatPP(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '–';
+  const sign = n > 0.0005 ? '+' : n < -0.0005 ? '−' : '±';
+  return `${sign}${Math.abs(n * 100).toFixed(1)} pp`;
+}
+
+function xaiFormatTimestamp(timestamp) {
+  if (!timestamp) return xaiText('snapshotEmpty');
+  try {
+    return new Date(timestamp).toLocaleString(lang === 'pl' ? 'pl-PL' : 'en-GB', {
+      dateStyle: 'short', timeStyle: 'medium'
+    });
+  } catch (_) {
+    return new Date(timestamp).toISOString();
+  }
+}
+
+function xaiDisposeTensorLike(value) {
+  if (!value) return;
+  if (Array.isArray(value)) {
+    value.forEach(xaiDisposeTensorLike);
+    return;
+  }
+  if (typeof value.dispose === 'function') {
+    try { value.dispose(); } catch (_) {}
+  }
+}
+
+function xaiFirstTensor(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function syncXAIControls(id) {
+  const state = getXAIState(id);
+  const methodEl = document.getElementById('xai-method-' + id);
+  const patchEl = document.getElementById('xai-patch-' + id);
+  const opacityEl = document.getElementById('xai-opacity-' + id);
+  if (methodEl) state.requestedMethod = xaiNormalizeMethod(methodEl.value);
+  if (patchEl) state.patchSize = xaiNormalizePatch(patchEl.value);
+  if (opacityEl) state.opacity = Math.max(0, Math.min(1, parseFloat(opacityEl.value) / 100));
+  return state;
+}
+
+function clearXAICanvas(id) {
+  const canvas = document.getElementById('xai-vid-' + id);
+  const overlay = document.getElementById('xai-overlay-' + id);
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  if (overlay) {
+    const ctx = overlay.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
+  }
+}
+
+function xaiSetDataContract(id, state) {
+  const wrap = document.getElementById('xai-wrap-' + id);
+  if (!wrap) return;
+  const labels = state.labels && state.labels.length ? state.labels : inferLabels();
+  const baseLabel = state.baseClass == null ? '' : (labels[state.baseClass] || `class_${state.baseClass}`);
+  const attrs = {
+    xaiStatus: state.status,
+    xaiView: state.view,
+    xaiMethod: state.hasResult ? state.method : state.requestedMethod,
+    xaiRequestedMethod: state.requestedMethod,
+    xaiHasResult: state.hasResult ? 'true' : 'false',
+    xaiFrame: state.frameNumber ? String(state.frameNumber) : '',
+    xaiTimestamp: state.capturedAt ? String(state.capturedAt) : '',
+    xaiBaseClass: state.baseClass == null ? '' : String(state.baseClass),
+    xaiBaseConfidence: Number.isFinite(state.baseConf) ? String(state.baseConf) : '',
+    xaiOverlayOpacity: String(Math.round(state.opacity * 100)),
+    xaiFallback: state.fallback ? 'true' : 'false',
+    xaiFallbackFrom: state.fallbackFrom || '',
+    xaiPredictedLabel: baseLabel
+  };
+  Object.keys(attrs).forEach(key => { wrap.dataset[key] = attrs[key]; });
+  const snapshot = document.getElementById('xai-snapshot-' + id);
+  if (snapshot) snapshot.dataset.xaiSnapshot = state.capturedAt ? 'ready' : 'empty';
+  const result = document.getElementById('xai-result-' + id);
+  if (result) {
+    result.dataset.xaiResult = state.hasResult ? 'ready' : state.status;
+    result.dataset.xaiStatus = state.status;
+  }
+}
+
+function renderXAIHeadline(resultEl, baseClass, baseConf, labels) {
+  if (!resultEl) return;
+  const names = labels && labels.length ? labels : inferLabels();
+  const lbl = names[baseClass] || `class_${baseClass}`;
+  resultEl.textContent = `${xaiText('predictedLabel')}: ${lbl} (${xaiFormatPercent(baseConf)})`;
+  resultEl.style.color = inferColor(baseClass);
+  resultEl.style.borderLeft = `4px solid ${inferColor(baseClass)}`;
+  resultEl.style.fontStyle = '';
+}
+
+function setXAIView(id, view) {
+  const state = getXAIState(id);
+  state.view = view === 'original' ? 'original' : 'heatmap';
+  renderXAIState(id);
+  return state.view;
+}
+
+function setXAIOverlayOpacity(id, value) {
+  const state = getXAIState(id);
+  const raw = typeof value === 'string' ? parseFloat(value) / 100 : Number(value);
+  state.opacity = Math.max(0, Math.min(1, Number.isFinite(raw) ? raw : XAI_DEFAULT_OPACITY));
+  renderXAIState(id);
+  return state.opacity;
+}
+
+function xaiMethodChanged(id, value) {
+  const state = getXAIState(id);
+  state.requestedMethod = xaiNormalizeMethod(value);
+  if (!state.hasResult && !xaiRunning) state.method = state.requestedMethod;
+  renderXAIState(id);
+}
+
+function xaiPatchChanged(id, value) {
+  const state = getXAIState(id);
+  state.patchSize = xaiNormalizePatch(value);
+  renderXAIState(id);
+}
+
+function renderXAISnapshot(id, state) {
+  const meta = document.getElementById('xai-snapshot-meta-' + id);
+  const prediction = document.getElementById('xai-predicted-' + id);
+  const labels = state.labels && state.labels.length ? state.labels : inferLabels();
+  if (meta) {
+    meta.textContent = state.capturedAt
+      ? `${xaiText('frameLabel')} #${state.frameNumber} · ${xaiText('timestampLabel')} ${xaiFormatTimestamp(state.capturedAt)}`
+      : xaiText('snapshotEmpty');
+  }
+  if (prediction) {
+    prediction.textContent = state.baseClass == null
+      ? xaiText('predictionEmpty')
+      : `${labels[state.baseClass] || `class_${state.baseClass}`} · ${xaiFormatPercent(state.baseConf)}`;
+  }
+}
+
+function renderXAILegend(id, state) {
+  const legend = document.getElementById('xai-legend-' + id);
+  const howto = document.getElementById('xai-howto-' + id);
+  if (!legend || !howto) return;
+  const method = state.hasResult ? state.method : state.requestedMethod;
+  legend.dataset.xaiLegendKind = method;
+  if (method === 'saliency') {
+    legend.innerHTML = `<span class="xai-legend-label">${xaiText('legendSaliencyLow')}</span><div class="xai-legend-bar xai-legend-bar--saliency"></div><span class="xai-legend-label">${xaiText('legendSaliencyHigh')}</span>`;
+    howto.textContent = xaiText('saliencyHowto');
+  } else {
+    legend.innerHTML = `<span class="xai-legend-label">${xaiText('legendOcclusionLow')}</span><div class="xai-legend-bar xai-legend-bar--occlusion"></div><span class="xai-legend-label">${xaiText('legendOcclusionHigh')}</span>`;
+    howto.textContent = state.fallback ? `${xaiText('fallbackHowto')} ${xaiText('occlusionHowto')}` : xaiText('occlusionHowto');
+  }
+  if (state.fallback) howto.dataset.xaiFallback = 'true';
+  else delete howto.dataset.xaiFallback;
+}
+
+function renderXAIClasses(id, state) {
+  const classesEl = document.getElementById('xai-classes-' + id);
+  if (!classesEl) return;
+  classesEl.replaceChildren();
+  if (!state.hasResult || state.method !== 'occlusion' || !state.basePreds || !state.counterPreds) return;
+  if (state.basePreds.length !== state.counterPreds.length) {
+    const empty = document.createElement('div');
+    empty.className = 'xai-class-empty';
+    empty.textContent = xaiText('noScores');
+    classesEl.appendChild(empty);
+    return;
+  }
+  const labels = state.labels && state.labels.length ? state.labels : inferLabels();
+  const header = document.createElement('div');
+  header.className = 'xai-class-head';
+  header.innerHTML = `<span>${xaiText('patchLabel')}</span><span>${xaiText('baseline')}</span><span>${xaiText('occluded')}</span><span>${xaiText('delta')}</span>`;
+  classesEl.appendChild(header);
+  state.basePreds.forEach((baseValue, i) => {
+    const afterValue = state.counterPreds[i];
+    const delta = afterValue - baseValue;
+    const row = document.createElement('div');
+    row.className = 'xai-class-row';
+    row.dataset.xaiClass = String(i);
+    row.dataset.xaiBefore = String(baseValue);
+    row.dataset.xaiAfter = String(afterValue);
+    row.dataset.xaiDeltaPp = String(delta * 100);
+
+    const dot = document.createElement('span');
+    dot.className = 'xai-class-dot';
+    dot.style.background = inferColor(i);
+    const name = document.createElement('span');
+    name.className = 'xai-class-name';
+    name.title = labels[i] || `class_${i}`;
+    name.textContent = labels[i] || `class_${i}`;
+    const values = document.createElement('span');
+    values.className = 'xai-class-values';
+    const before = document.createElement('span');
+    before.className = 'xai-class-before';
+    before.textContent = `${xaiText('baseline')}: ${xaiFormatPercent(baseValue)}`;
+    const after = document.createElement('span');
+    after.className = 'xai-class-after';
+    after.textContent = `${xaiText('occluded')}: ${xaiFormatPercent(afterValue)}`;
+    values.append(before, after);
+    const deltaEl = document.createElement('span');
+    deltaEl.className = 'xai-class-delta';
+    deltaEl.textContent = xaiFormatPP(delta);
+    deltaEl.style.color = delta > 0.0005 ? 'var(--c-ok)' : delta < -0.0005 ? 'var(--c-train)' : 'var(--c-muted-2)';
+    row.append(dot, name, values, deltaEl);
+    classesEl.appendChild(row);
+  });
+}
+
+function renderXAIDetail(id, state) {
+  const detailEl = document.getElementById('xai-detail-' + id);
+  const detailText = document.getElementById('xai-detail-text-' + id);
+  const thumbCv = document.getElementById('xai-thumb-' + id);
+  const frameCv = document.getElementById('xai-vid-' + id);
+  const showDetail = !!(state.hasResult && state.detailMessage);
+  if (detailEl) detailEl.hidden = !showDetail;
+  if (detailText) detailText.textContent = showDetail
+    ? xaiText(state.method === 'saliency' ? 'saliencyDetail' : 'occlusionDetail', state.labels[state.baseClass] || `class_${state.baseClass}`) : '';
+  if (thumbCv && showDetail && frameCv && state.bestPatch > 0) {
+    const halfPatch = state.bestPatch;
+    const sx = Math.max(0, Math.min(frameCv.width - halfPatch, state.bestX));
+    const sy = Math.max(0, Math.min(frameCv.height - halfPatch, state.bestY));
+    thumbCv.width = 64;
+    thumbCv.height = 64;
+    const tctx = thumbCv.getContext('2d');
+    tctx.imageSmoothingEnabled = true;
+    tctx.clearRect(0, 0, 64, 64);
+    tctx.drawImage(frameCv, sx, sy, halfPatch, halfPatch, 0, 0, 64, 64);
+  }
+  renderXAIClasses(id, state);
+}
+
+function renderXAISaliencyOverlay(overlay, values, inputSize, scaleX, scaleY) {
+  const off = document.createElement('canvas');
+  off.width = inputSize;
+  off.height = inputSize;
+  const offCtx = off.getContext('2d');
+  const imgData = offCtx.createImageData(inputSize, inputSize);
+  const [heatR, heatG, heatB] = cssRgbChannels('--rgb-xai-heat-pos');
+  let max = 1e-9;
+  for (let i = 0; i < values.length; i++) if (values[i] > max) max = values[i];
+  for (let i = 0; i < values.length; i++) {
+    const v = Math.min(1, values[i] / max);
+    if (v < 0.04) continue;
+    const alpha = Math.pow(v, 0.35);
+    imgData.data[i * 4] = heatR;
+    imgData.data[i * 4 + 1] = heatG;
+    imgData.data[i * 4 + 2] = heatB;
+    imgData.data[i * 4 + 3] = Math.round(alpha * 255);
+  }
+  offCtx.putImageData(imgData, 0, 0);
+  const octx = overlay.getContext('2d');
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  octx.fillStyle = cssRgba('--rgb-shade', 0.45);
+  octx.fillRect(0, 0, overlay.width, overlay.height);
+  octx.imageSmoothingEnabled = true;
+  octx.filter = `blur(${Math.max(1, Math.round(8 * scaleX))}px)`;
+  octx.drawImage(off, 0, 0, overlay.width, overlay.height);
+  octx.filter = 'none';
+}
+
+function renderXAIState(id) {
+  const state = getXAIState(id);
+  const wrap = document.getElementById('xai-wrap-' + id);
+  const canvas = document.getElementById('xai-vid-' + id);
+  const overlay = document.getElementById('xai-overlay-' + id);
+  const methodEl = document.getElementById('xai-method-' + id);
+  const patchEl = document.getElementById('xai-patch-' + id);
+  const opacityEl = document.getElementById('xai-opacity-' + id);
+  const opacityValue = document.getElementById('xai-opacity-value-' + id);
+  const resultEl = document.getElementById('xai-result-' + id);
+  const progEl = document.getElementById('xai-prog-' + id);
+  if (!wrap) return xaiProbe(id);
+  if (methodEl) methodEl.value = state.requestedMethod;
+  if (patchEl) patchEl.value = String(state.patchSize);
+  if (opacityEl) opacityEl.value = String(Math.round(state.opacity * 100));
+  if (opacityValue) opacityValue.textContent = `${Math.round(state.opacity * 100)}%`;
+
+  const inputSize = state.frameImageData ? state.frameImageData.width : 224;
+  if (canvas && state.frameImageData) {
+    if (canvas.width !== inputSize || canvas.height !== state.frameImageData.height) {
+      canvas.width = inputSize;
+      canvas.height = state.frameImageData.height;
+    }
+    canvas.getContext('2d').putImageData(state.frameImageData, 0, 0);
+  } else if (canvas) {
+    const frameCtx = canvas.getContext('2d');
+    frameCtx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  if (overlay) {
+    const displayW = wrap.clientWidth || inputSize;
+    const displayH = wrap.clientHeight || inputSize;
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.max(1, Math.round(displayW * dpr));
+    const height = Math.max(1, Math.round(displayH * dpr));
+    if (overlay.width !== width || overlay.height !== height) {
+      overlay.width = width;
+      overlay.height = height;
+    }
+    const scaleX = overlay.width / inputSize;
+    const scaleY = overlay.height / inputSize;
+    const octx = overlay.getContext('2d');
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    if (state.hasResult && state.method === 'saliency' && state.saliency) {
+      renderXAISaliencyOverlay(overlay, state.saliency, state.saliencySize || inputSize, scaleX, scaleY);
+    } else if (state.heatmap && state.gridW && state.gridH) {
+      renderXAIHeatmap(overlay, state.heatmap, state.gridW, state.gridH, state.stride || state.patchSize, scaleX, scaleY);
+      if (state.bestDrop > 0.001) drawXAIFocusBox(overlay, state.bestX, state.bestY, state.bestPatch || state.patchSize, scaleX, scaleY);
+    }
+    overlay.style.opacity = String(state.opacity);
+    overlay.style.display = state.view === 'heatmap' ? 'block' : 'none';
+  }
+  const originalBtn = document.getElementById('xai-view-original-' + id);
+  const heatmapBtn = document.getElementById('xai-view-heatmap-' + id);
+  [originalBtn, heatmapBtn].forEach(btn => {
+    if (!btn) return;
+    const selected = btn === originalBtn ? state.view === 'original' : state.view === 'heatmap';
+    btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    btn.classList.toggle('is-selected', selected);
+  });
+  if (resultEl) {
+    if (state.status === 'running' || state.status === 'cancelling') {
+      resultEl.textContent = state.status === 'cancelling' ? t('log_xai_stopping') : xaiText('analyzing');
+      resultEl.style.color = 'var(--c-eval)';
+      resultEl.style.borderLeft = '';
+      resultEl.style.fontStyle = '';
+    } else if (state.status === 'error') {
+      resultEl.textContent = state.errorKey ? xaiText(state.errorKey)
+        : xaiText('errorPrefix') + (state.errorDetail || '');
+      resultEl.style.color = 'var(--c-danger)';
+      resultEl.style.borderLeft = '4px solid var(--c-danger)';
+      resultEl.style.fontStyle = '';
+    } else if (state.status === 'cancelled') {
+      resultEl.textContent = xaiText('cancelled');
+      resultEl.style.color = 'var(--c-muted)';
+      resultEl.style.borderLeft = '';
+      resultEl.style.fontStyle = '';
+    } else if (state.hasResult) {
+      renderXAIHeadline(resultEl, state.baseClass, state.baseConf, state.labels);
+    } else {
+      resultEl.textContent = state.message || xaiText('wait');
+      resultEl.style.color = 'var(--c-muted)';
+      resultEl.style.borderLeft = '';
+      resultEl.style.fontStyle = 'italic';
+    }
+  }
+  if (progEl) {
+    progEl.hidden = state.status !== 'running' && state.status !== 'cancelling';
+    progEl.value = Math.max(0, Math.min(100, state.progress || 0));
+  }
+  renderXAISnapshot(id, state);
+  renderXAILegend(id, state);
+  renderXAIDetail(id, state);
+  xaiSetDataContract(id, state);
+  return xaiProbe(id);
+}
+
+function xaiProbe(id) {
+  const key = String(id || '');
+  const state = getXAIState(key);
+  const wrap = document.getElementById('xai-wrap-' + key);
+  const method = state.hasResult ? state.method : state.requestedMethod;
+  return {
+    ok: !!wrap,
+    id: key,
+    status: state.status,
+    view: state.view,
+    method,
+    requestedMethod: state.requestedMethod,
+    hasResult: !!state.hasResult,
+    frame: state.frameNumber || null,
+    timestamp: state.capturedAt || null,
+    baseClass: state.baseClass,
+    baseConfidence: Number.isFinite(state.baseConf) ? state.baseConf : null,
+    bestDrop: Number.isFinite(state.bestDrop) ? state.bestDrop : null,
+    bestMagnitude: Number.isFinite(state.bestMagnitude) ? state.bestMagnitude : null,
+    fallback: !!state.fallback,
+    fallbackFrom: state.fallbackFrom,
+    overlayOpacity: state.opacity,
+    controls: {
+      original: !!document.getElementById('xai-view-original-' + key),
+      heatmap: !!document.getElementById('xai-view-heatmap-' + key),
+      opacity: !!document.getElementById('xai-opacity-' + key),
+      method: !!document.getElementById('xai-method-' + key),
+      patch: !!document.getElementById('xai-patch-' + key)
+    },
+    dataContract: wrap ? {
+      status: wrap.dataset.xaiStatus || '', view: wrap.dataset.xaiView || '',
+      method: wrap.dataset.xaiMethod || '', hasResult: wrap.dataset.xaiHasResult === 'true'
+    } : null
+  };
+}
+
+function publishXAIState(id, patch) {
+  if (id && typeof id === 'object') {
+    patch = id;
+    id = patch.id;
+  }
+  const state = getXAIState(id);
+  if (patch && typeof patch === 'object') {
+    Object.keys(patch).forEach(key => {
+      if (key !== 'id' && patch[key] !== undefined) state[key] = patch[key];
+    });
+  }
+  state.opacity = Math.max(0, Math.min(1, xaiFiniteNumber(state.opacity, XAI_DEFAULT_OPACITY)));
+  state.requestedMethod = xaiNormalizeMethod(state.requestedMethod);
+  state.method = xaiNormalizeMethod(state.method);
+  state.patchSize = xaiNormalizePatch(state.patchSize);
+  renderXAIState(state.id);
+  return xaiProbe(state.id);
+}
+
+window.XAI_UI = {
+  publish: publishXAIState,
+  render: renderXAIState,
+  probe: xaiProbe,
+  refreshAll() {
+    const ids = new Set(Object.keys(xaiStates));
+    document.querySelectorAll('[id^="xai-wrap-"]').forEach(el => ids.add(el.id.slice('xai-wrap-'.length)));
+    ids.forEach(id => renderXAIState(id));
+    return Array.from(ids).map(xaiProbe);
+  },
+  clear(id) {
+    const state = getXAIState(id);
+    const controls = { view: state.view, opacity: state.opacity, requestedMethod: state.requestedMethod, patchSize: state.patchSize };
+    Object.assign(state, makeXAIState(id), controls);
+    renderXAIState(id);
+    return xaiProbe(id);
+  },
+  drop(id) {
+    delete xaiStates[String(id || '')];
+  }
+};
 
 function stopXAI(id) {
-  if (!xaiRunning) return;
+  if (!xaiRunning || (id && xaiActiveId && id !== xaiActiveId)) return;
   xaiCancelled = true;
+  const state = getXAIState(id || xaiActiveId);
+  state.status = 'cancelling';
+  state.message = '';
+  renderXAIState(state.id);
   log('warn', t('log_xai_stopping'));
 }
 
-// Headline shared by the occlusion and saliency paths: what the model sees and
-// how sure it is, in plain language.
-function renderXAIHeadline(resultEl, baseClass, baseConf) {
-  if (!resultEl) return;
-  const lbl = inferLabels()[baseClass];
-  const pct = (baseConf * 100).toFixed(0);
-  const sure = baseConf >= 0.85 ? t('xai_sure_high') : baseConf >= 0.6 ? t('xai_sure_mid') : t('xai_sure_low');
-  resultEl.innerHTML = `<span style="color:${inferColor(baseClass)}">🔍 ${t('xai_sees')} „${escapeHtml(lbl)}" ${pct}%</span> <span style="font-weight:400;color:var(--c-muted);font-style:normal">(${sure})</span>`;
+function xaiBeginRun(id) {
+  const state = syncXAIControls(id);
+  state.status = 'running';
+  state.error = '';
+  state.message = '';
+  state.progress = 0;
+  state.hasResult = false;
+  state.fallback = false;
+  state.fallbackFrom = null;
+  state.frameNumber = 0;
+  state.capturedAt = 0;
+  state.frameImageData = null;
+  state.baseClass = null;
+  state.baseConf = null;
+  state.basePreds = null;
+  state.labels = [];
+  state.heatmap = null;
+  state.gridW = 0;
+  state.gridH = 0;
+  state.stride = 0;
+  state.saliency = null;
+  state.saliencySize = 0;
+  state.bestX = 0;
+  state.bestY = 0;
+  state.bestPatch = 0;
+  state.bestDrop = 0;
+  state.bestMagnitude = 0;
+  state.counterClass = null;
+  state.counterPreds = null;
+  state.detailMessage = '';
+  renderXAIState(id);
+  return state;
+}
+
+function xaiGuardFailure(id, messageKey, logType, logMessage) {
+  const state = getXAIState(id);
+  state.status = 'error';
+  state.errorKey = messageKey;
+  state.error = xaiText(messageKey);
+  state.message = '';
+  state.hasResult = false;
+  renderXAIState(id);
+  if (logMessage) log(logType || 'warn', logMessage);
+}
+
+function clearXAIOutput(state) {
+  state.hasResult = false;
+  state.frameImageData = null;
+  state.capturedAt = 0;
+  state.frameNumber = 0;
+  state.baseClass = null;
+  state.baseConf = null;
+  state.basePreds = null;
+  state.labels = [];
+  state.heatmap = null;
+  state.gridW = 0;
+  state.gridH = 0;
+  state.stride = 0;
+  state.saliency = null;
+  state.saliencySize = 0;
+  state.bestX = 0;
+  state.bestY = 0;
+  state.bestPatch = 0;
+  state.bestDrop = 0;
+  state.bestMagnitude = 0;
+  state.counterClass = null;
+  state.counterPreds = null;
+  state.detailMessage = '';
 }
 
 async function runXAI(id) {
   if (xaiRunning) return; // single-flight
+  const state = xaiBeginRun(id);
   if (!inferModel) {
-    log('warn', t('warn_xai_no_model'));
+    xaiGuardFailure(id, 'missingModel', 'warn', t('warn_xai_no_model'));
     return;
   }
   if (!baseModel) {
-    log('error', t('err_xai_no_base'));
+    xaiGuardFailure(id, 'missingBase', 'error', t('err_xai_no_base'));
     return;
   }
 
-  const resultEl = document.getElementById('xai-result-' + id);
   const vid = inferVideoEl || document.querySelector('video[id^="vid-"]');
   if (!vid || !vid.srcObject) {
-    if (resultEl) resultEl.textContent = t('xai_start_camera');
+    xaiGuardFailure(id, 'missingCamera', 'warn', t('xai_start_camera'));
     return;
   }
   const canvas = document.getElementById('xai-vid-' + id);
   const overlay = document.getElementById('xai-overlay-' + id);
-  if (!canvas || !overlay) return;
+  if (!canvas || !overlay) {
+    xaiGuardFailure(id, 'missingCanvas', 'error');
+    return;
+  }
 
-  // All guards passed: only now touch the progress bar, so an early return
-  // above cannot leave it visible at 0.
-  const detailEl = document.getElementById('xai-detail-' + id);
-  const detailText = document.getElementById('xai-detail-text-' + id);
-  const thumbCv = document.getElementById('xai-thumb-' + id);
   const progEl = document.getElementById('xai-prog-' + id);
-  if (resultEl) resultEl.innerHTML = `<span style="color:var(--c-eval)">${t('xai_analyzing')}</span>`;
-  if (detailEl) detailEl.style.display = 'none';
-  if (progEl) { progEl.style.display = 'block'; progEl.value = 0; }
-
   const inputSize = (inferMetadata && inferMetadata.inputSize) || 224;
-  const labels = inferLabels();
+  // Snapshot model references and labels once. If the user loads another model
+  // while the sweep is in flight, this run still describes one model.
+  const baseModelSnapshot = baseModel;
+  const inferModelSnapshot = inferModel;
+  const labels = inferLabels().slice();
   const block = document.getElementById(id);
   setBlockStatus(block, 'running');
   xaiRunning = true;
+  xaiActiveId = id;
   xaiCancelled = false;
-  // Pause the live inference loop for the sweep: it would compete for the GPU
-  // with the ~100 occlusion predicts. Restored in finally (freezeFrame only
-  // toggles this flag, so the user's own freeze state survives the run).
+  // Pause the live inference loop for the sweep; restore the learner's prior
+  // freeze state in finally.
   const prevFrozen = frozenFrame;
   frozenFrame = true;
 
   try {
-  // ── 1. Capture frame using EXACTLY the same preprocessing as inference ──
-  canvas.width = inputSize;
-  canvas.height = inputSize;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(vid, 0, 0, inputSize, inputSize);
-  const frameImageData = ctx.getImageData(0, 0, inputSize, inputSize);
+    // ── 1. Capture frame using the same 0..1 preprocessing as inference ──
+    canvas.width = inputSize;
+    canvas.height = inputSize;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(vid, 0, 0, inputSize, inputSize);
+    const frameImageData = ctx.getImageData(0, 0, inputSize, inputSize);
+    state.frameImageData = frameImageData;
+    state.frameNumber = ++xaiFrameCounter;
+    state.capturedAt = Date.now();
+    state.labels = labels;
+    publishXAIState(id, { frameImageData, frameNumber: state.frameNumber, capturedAt: state.capturedAt, labels });
 
-  // ── 1b. Pre-compute a heavily-blurred copy of the frame for occlusion.
-  // Replacing a patch with its blurred counterpart removes information without
-  // adding synthetic edges (solid grey introduces artifacts the model never
-  // saw during training). One blur op on the whole canvas is far cheaper than
-  // synthesising blurred pixels per patch.
-  const blurCanvas = document.createElement('canvas');
-  blurCanvas.width = inputSize;
-  blurCanvas.height = inputSize;
-  const bctx = blurCanvas.getContext('2d');
-  bctx.filter = 'blur(12px)';
-  bctx.drawImage(canvas, 0, 0);
-  bctx.filter = 'none';
-  const blurredData = bctx.getImageData(0, 0, inputSize, inputSize).data;
+    // ── 1b. Blur once; each occlusion variant reuses this image ──
+    const blurCanvas = document.createElement('canvas');
+    blurCanvas.width = inputSize;
+    blurCanvas.height = inputSize;
+    const bctx = blurCanvas.getContext('2d');
+    bctx.filter = 'blur(12px)';
+    bctx.drawImage(canvas, 0, 0);
+    bctx.filter = 'none';
+    const blurredData = bctx.getImageData(0, 0, inputSize, inputSize).data;
 
-  // ── 2. Size the overlay to the container's physical pixel dimensions ──
-  const wrap = canvas.parentElement;
-  const displayW = wrap.clientWidth || inputSize;
-  const displayH = wrap.clientHeight || inputSize;
-  const dpr = window.devicePixelRatio || 1;
-  overlay.width = Math.round(displayW * dpr);
-  overlay.height = Math.round(displayH * dpr);
+    // ── 2. Size the overlay to the container's physical pixel dimensions ──
+    const wrap = canvas.parentElement;
+    const displayW = wrap.clientWidth || inputSize;
+    const displayH = wrap.clientHeight || inputSize;
+    const dpr = window.devicePixelRatio || 1;
+    overlay.width = Math.round(displayW * dpr);
+    overlay.height = Math.round(displayH * dpr);
+    const scaleX = overlay.width / inputSize;
+    const scaleY = overlay.height / inputSize;
 
-  // Scale factors: one model-input pixel → overlay physical pixels
-  const scaleX = overlay.width / inputSize;
-  const scaleY = overlay.height / inputSize;
+    // ── 3. Baseline prediction on the unmodified frame ──
+    let baseClass, baseConf, basePreds;
+    {
+      const tInput = tf.tidy(() => tf.browser.fromPixels(frameImageData).toFloat().div(255).expandDims(0));
+      let features = null;
+      let predTensor = null;
+      try {
+        features = xaiFirstTensor(baseModelSnapshot.predict(tInput));
+        predTensor = xaiFirstTensor(inferModelSnapshot.predict(features));
+        basePreds = Array.from(await predTensor.data());
+      } finally {
+        xaiDisposeTensorLike(predTensor);
+        xaiDisposeTensorLike(features);
+        xaiDisposeTensorLike(tInput);
+      }
+      baseClass = argmax(basePreds);
+      baseConf = basePreds[baseClass];
+    }
+    Object.assign(state, { baseClass, baseConf, basePreds, labels, method: state.requestedMethod });
+    publishXAIState(id, { baseClass, baseConf, basePreds, labels, method: state.requestedMethod });
 
-  // ── 3. Baseline prediction on the unmodified frame ──
-  let baseClass, baseConf, basePreds;
-  {
-    const tInput = tf.browser.fromPixels(frameImageData).toFloat().div(255).expandDims(0);
-    const features = baseModel.predict(tInput);
-    const predTensor = inferModel.predict(features);
-    basePreds = await predTensor.data();
-    tInput.dispose();
-    features.dispose();
-    predTensor.dispose();
-    baseClass = argmax(basePreds);
-    baseConf = basePreds[baseClass];
-  }
+    // ── 3b. Method branch: saliency vs occlusion ──
+    // Saliency uses unsigned |gradient|. Some imported GraphModels cannot
+    // backpropagate; in that case the completed result says occlusion was used.
+    if (state.requestedMethod === 'saliency') {
+      const ok = await runXAISaliency({
+        id, canvas, overlay, frameImageData, inputSize,
+        scaleX, scaleY, baseClass, baseConf, basePreds,
+        baseModelSnapshot, inferModelSnapshot, labels, state, progEl, block
+      });
+      if (ok) return;
+      if (xaiCancelled) throw new Error('cancelled');
+      state.fallback = true;
+      state.fallbackFrom = 'saliency';
+      state.method = 'occlusion';
+      state.message = xaiText('fallbackShort');
+      publishXAIState(id, { fallback: true, fallbackFrom: 'saliency', method: 'occlusion', message: state.message });
+      log('warn', t('warn_saliency_fallback'));
+    }
 
-  // ── 3b. Method branch: saliency vs occlusion ──
-  // Saliency uses |grad of class score w.r.t. input pixels| – one forward +
-  // one backward pass through both models. Much faster than occlusion when it
-  // works, but TFJS GraphModels imported from Kaggle don't always support
-  // backprop through every op. On failure we fall through to occlusion.
-  const methodEl = document.getElementById('xai-method-' + id);
-  const method = methodEl ? methodEl.value : 'occlusion';
-  if (method === 'saliency') {
-    const ok = await runXAISaliency({
-      id, canvas, overlay, frameImageData, inputSize,
-      scaleX, scaleY, baseClass, baseConf, basePreds,
-      resultEl, detailEl, detailText, thumbCv, progEl, block
-    });
-    if (ok) return; // finally clause cleans up xaiRunning, etc.
-    log('warn', t('warn_saliency_fallback'));
-  }
+    const PATCH_SIZE = xaiNormalizePatch(state.patchSize);
+    const STRIDE = PATCH_SIZE;
+    const gridW = Math.ceil(inputSize / STRIDE);
+    const gridH = Math.ceil(inputSize / STRIDE);
+    // Signed score difference: positive = target score drops after occlusion;
+    // negative = target score rises. This is a sensitivity measure.
+    const heatmap = new Float32Array(gridW * gridH);
+    const patchPreds = new Array(gridW * gridH);
+    Object.assign(state, { method: 'occlusion', patchSize: PATCH_SIZE, heatmap, gridW, gridH, stride: STRIDE });
+    publishXAIState(id, { method: 'occlusion', patchSize: PATCH_SIZE, heatmap, gridW, gridH, stride: STRIDE });
 
-  const patchSizeEl = document.getElementById('xai-patch-' + id);
-  const PATCH_SIZE = patchSizeEl ? parseInt(patchSizeEl.value) : 32;
-  const STRIDE = PATCH_SIZE;
+    await new Promise(r => setTimeout(r, 30));
 
-  const gridW = Math.ceil(inputSize / STRIDE);
-  const gridH = Math.ceil(inputSize / STRIDE);
-  // Signed importance: + = patch supports prediction, - = distractor.
-  const heatmap = new Float32Array(gridW * gridH);
-  // Full per-patch prediction vector for the counterfactual narrative.
-  const patchPreds = new Array(gridW * gridH);
-
-  await new Promise(r => setTimeout(r, 30));
-
-  // ── 4. Occlusion loop, BATCHED per row ──
-  // Building a tensor with `gridW` occluded variants and running ONE predict()
-  // per row is ~10x faster than the previous one-predict-per-patch loop.
-  for (let y = 0; y < gridH; y++) {
-    if (xaiCancelled) throw new Error('cancelled');
-    const rowImageDatas = [];
-    for (let x = 0; x < gridW; x++) {
-      const buf = new Uint8ClampedArray(frameImageData.data);
-      // Replace patch pixels with their blurred counterparts
-      for (let py = 0; py < PATCH_SIZE; py++) {
-        for (let px = 0; px < PATCH_SIZE; px++) {
-          const ix = x * STRIDE + px;
-          const iy = y * STRIDE + py;
-          if (ix < inputSize && iy < inputSize) {
-            const i4 = (iy * inputSize + ix) * 4;
-            buf[i4]     = blurredData[i4];
-            buf[i4 + 1] = blurredData[i4 + 1];
-            buf[i4 + 2] = blurredData[i4 + 2];
+    // ── 4. Occlusion loop, batched once per row ──
+    for (let y = 0; y < gridH; y++) {
+      if (xaiCancelled) throw new Error('cancelled');
+      const rowImageDatas = [];
+      for (let x = 0; x < gridW; x++) {
+        const buf = new Uint8ClampedArray(frameImageData.data);
+        for (let py = 0; py < PATCH_SIZE; py++) {
+          for (let px = 0; px < PATCH_SIZE; px++) {
+            const ix = x * STRIDE + px;
+            const iy = y * STRIDE + py;
+            if (ix < inputSize && iy < inputSize) {
+              const i4 = (iy * inputSize + ix) * 4;
+              buf[i4] = blurredData[i4];
+              buf[i4 + 1] = blurredData[i4 + 1];
+              buf[i4 + 2] = blurredData[i4 + 2];
+            }
           }
         }
+        rowImageDatas.push(new ImageData(buf, inputSize, inputSize));
       }
-      rowImageDatas.push(new ImageData(buf, inputSize, inputSize));
-    }
 
-    const batchTensor = tf.tidy(() => tf.stack(
-      rowImageDatas.map(im => tf.browser.fromPixels(im).toFloat().div(255))
-    ));
-    const featBatch = baseModel.predict(batchTensor);
-    const predBatch = inferModel.predict(featBatch);
-    const predsArr = await predBatch.array();
-    batchTensor.dispose();
-    featBatch.dispose();
-    predBatch.dispose();
-
-    for (let x = 0; x < gridW; x++) {
-      const idx = y * gridW + x;
-      patchPreds[idx] = predsArr[x];
-      heatmap[idx] = baseConf - predsArr[x][baseClass];
-    }
-
-    if (progEl) progEl.value = Math.round(((y + 1) / gridH) * 100);
-    renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE,
-      overlay.width / inputSize, overlay.height / inputSize);
-    await new Promise(r => setTimeout(r, 0));
-  }
-
-  // ── 5. Final render + plain-language explanation ──
-  renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY);
-
-  // Find the most-supportive patch (largest positive importance)
-  const bestIdx = argmax(heatmap);
-  const bestX = (bestIdx % gridW) * STRIDE;
-  const bestY = Math.floor(bestIdx / gridW) * STRIDE;
-  const bestDrop = heatmap[bestIdx];
-  const counterPreds = patchPreds[bestIdx] || basePreds;
-  const counterClass = argmax(counterPreds);
-
-  // Outline the single most-important region so "the model looked HERE" is
-  // unmistakable, on top of the heatmap.
-  if (bestDrop > 0.001) {
-    drawXAIFocusBox(overlay, bestX, bestY, PATCH_SIZE, scaleX, scaleY);
-  }
-
-  // Headline: clear plain-language statement of the decision + how sure.
-  renderXAIHeadline(resultEl, baseClass, baseConf);
-
-  if (thumbCv && bestDrop > 0.001) {
-    thumbCv.width = 64; thumbCv.height = 64;
-    const tctx = thumbCv.getContext('2d');
-    tctx.imageSmoothingEnabled = true;
-    tctx.drawImage(canvas, bestX, bestY, PATCH_SIZE, PATCH_SIZE, 0, 0, 64, 64);
-  }
-  if (detailEl && detailText && bestDrop > 0.001) {
-    const dropPct = (bestDrop * 100).toFixed(0);
-    const counterLbl = labels[counterClass];
-    const baseLbl = labels[baseClass];
-    // Plain-language "why": what it focused on (thumbnail beside), and what
-    // would change its mind.
-    const txt = counterClass !== baseClass
-      ? t('xai_detail_counter', baseLbl, dropPct, counterLbl)
-      : t('xai_detail_same', baseLbl, dropPct);
-    detailText.textContent = txt;
-    detailEl.style.display = 'block';
-    // Per-class delta breakdown for the most-important patch.
-    // Shows: baseline % (grey track), occluded % (color fill), and the
-    // signed change in percentage points. Lets students see exactly which
-    // class the evidence shifts to when the hot region is hidden.
-    const classesEl = document.getElementById('xai-classes-' + id);
-    if (classesEl && counterPreds && counterPreds.length === basePreds.length) {
-      const rows = [];
-      for (let i = 0; i < basePreds.length; i++) {
-        const b = basePreds[i];
-        const o = counterPreds[i];
-        const deltaPP = (o - b) * 100;
-        const dir = deltaPP > 0.05 ? '+' : deltaPP < -0.05 ? '-' : '0';
-        const arrow = deltaPP > 0.05 ? '&uarr;' : deltaPP < -0.05 ? '&darr;' : '&middot;';
-        const color = deltaPP > 0.05 ? 'var(--c-ok)' : deltaPP < -0.05 ? 'var(--c-train)' : 'var(--c-muted-2)';
-        rows.push(`<div class="xai-class-row">
-  <span class="xai-class-dot" style="background:${inferColor(i)}"></span>
-  <span class="xai-class-name" title="${escapeHtml(labels[i])}">${escapeHtml(labels[i])}</span>
-  <span class="xai-class-track">
-    <span class="xai-bar-base" style="width:${(b*100).toFixed(1)}%"></span>
-    <span class="xai-bar-occ" style="width:${(o*100).toFixed(1)}%;background:${inferColor(i)}"></span>
-  </span>
-  <span class="xai-class-delta" style="color:${color}">${arrow}&nbsp;${Math.abs(deltaPP).toFixed(1)}pp</span>
-</div>`);
+      const batchTensor = tf.tidy(() => tf.stack(
+        rowImageDatas.map(im => tf.browser.fromPixels(im).toFloat().div(255))
+      ));
+      let featBatch = null;
+      let predBatch = null;
+      let predsArr;
+      try {
+        featBatch = xaiFirstTensor(baseModelSnapshot.predict(batchTensor));
+        predBatch = xaiFirstTensor(inferModelSnapshot.predict(featBatch));
+        predsArr = await predBatch.array();
+      } finally {
+        xaiDisposeTensorLike(predBatch);
+        xaiDisposeTensorLike(featBatch);
+        xaiDisposeTensorLike(batchTensor);
       }
-      classesEl.innerHTML = rows.join('');
-    }
-  }
 
-  log('eval', `XAI: "${labels[baseClass]}" ${(baseConf * 100).toFixed(1)}% top patch drop=${(bestDrop * 100).toFixed(1)}pp${counterClass !== baseClass ? ' -> ' + labels[counterClass] : ''}`);
-  setBlockStatus(block, 'done');
+      for (let x = 0; x < gridW; x++) {
+        const idx = y * gridW + x;
+        patchPreds[idx] = Array.from(predsArr[x]);
+        heatmap[idx] = baseConf - predsArr[x][baseClass];
+      }
+      state.progress = Math.round(((y + 1) / gridH) * 100);
+      renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE,
+        overlay.width / inputSize, overlay.height / inputSize);
+      overlay.style.opacity = String(state.opacity);
+      publishXAIState(id, { progress: state.progress, heatmap });
+      await new Promise(r => setTimeout(r, 0));
+    }
+    if (xaiCancelled) throw new Error('cancelled');
+
+    const bestIdx = argmax(heatmap);
+    const bestX = (bestIdx % gridW) * STRIDE;
+    const bestY = Math.floor(bestIdx / gridW) * STRIDE;
+    const bestDrop = heatmap[bestIdx];
+    const counterPreds = patchPreds[bestIdx] || basePreds;
+    const counterClass = argmax(counterPreds);
+    Object.assign(state, {
+      hasResult: true, status: 'done', progress: 100, method: 'occlusion',
+      heatmap, gridW, gridH, stride: STRIDE, bestX, bestY,
+      bestPatch: PATCH_SIZE, bestDrop, counterClass,
+      counterPreds, detailMessage: xaiText('occlusionDetail', labels[baseClass] || `class_${baseClass}`), message: ''
+    });
+    publishXAIState(id, state);
+    log('eval', `XAI: "${labels[baseClass]}" ${(baseConf * 100).toFixed(1)}% top patch delta=${(bestDrop * 100).toFixed(1)}pp${counterClass !== baseClass ? ' -> ' + labels[counterClass] : ''}`);
+    setBlockStatus(block, 'done');
   } catch (err) {
-    if (err.message === 'cancelled') {
+    if (err && err.message === 'cancelled') {
       log('warn', t('log_xai_cancelled'));
-      if (resultEl) resultEl.textContent = t('xai_cancelled_short');
+      state.status = 'cancelled';
+      state.error = '';
+      state.message = xaiText('cancelled');
+      clearXAIOutput(state);
+      publishXAIState(id, state);
       setBlockStatus(block, 'idle');
     } else {
-      log('error', t('err_xai') + err.message);
+      log('error', t('err_xai') + (err && err.message ? err.message : String(err)));
       console.error(err);
+      state.status = 'error';
+      state.errorKey = '';
+      state.errorDetail = err && err.message ? err.message : String(err);
+      state.error = xaiText('errorPrefix') + (err && err.message ? err.message : String(err));
+      state.message = '';
+      clearXAIOutput(state);
+      publishXAIState(id, state);
       setBlockStatus(block, 'error');
     }
   } finally {
     xaiRunning = false;
     xaiCancelled = false;
+    xaiActiveId = null;
     frozenFrame = prevFrozen;
-    if (progEl) progEl.style.display = 'none';
+    if (progEl) progEl.hidden = true;
+    if (state.status === 'running' || state.status === 'cancelling') {
+      state.status = 'idle';
+      publishXAIState(id, state);
+    }
+    if (!document.getElementById('xai-wrap-' + id)) {
+      window.XAI_UI.drop(id);
+      if (!placedBlocks.length) frozenFrame = false;
+    }
   }
 }
-
-// Draw a bright outlined box (with a small "★" marker) around the single most
-// important region, on top of the heatmap, so students immediately see the one
-// spot the model relied on most.
+// Draw a bright outlined box around the patch with the largest measured target
+// score change. It highlights the perturbation being compared, not a causal
+// reason for the prediction.
 function drawXAIFocusBox(overlay, px, py, patch, scaleX, scaleY) {
   const octx = overlay.getContext('2d');
   const x = px * scaleX, y = py * scaleY, w = patch * scaleX, h = patch * scaleY;
@@ -4585,10 +5621,9 @@ function drawXAIFocusBox(overlay, px, py, patch, scaleX, scaleY) {
   octx.restore();
 }
 
-// Diverging colormap renderer. Positive heatmap values (occlusion drops the
-// predicted class confidence) -> red. Negative values (occlusion raises it,
-// so that region was a distractor) -> blue. Magnitude controls alpha. No
-// vignette so the underlying image stays readable.
+// Diverging colormap renderer. Positive values mean the selected class score
+// dropped after occlusion; negative values mean it rose. This is not a signed
+// gradient and does not establish causality.
 function renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY) {
   const octx = overlay.getContext('2d');
   octx.clearRect(0, 0, overlay.width, overlay.height);
@@ -4599,8 +5634,7 @@ function renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY
     if (a > maxAbs) maxAbs = a;
   }
 
-  // Dark vignette behind the colors – dims the image uniformly so the
-  // red/blue regions stand out clearly even on bright video frames.
+  // Dark vignette behind the colours keeps both directions readable.
   octx.fillStyle = cssRgba('--rgb-shade', 0.45);
   octx.fillRect(0, 0, overlay.width, overlay.height);
 
@@ -4617,8 +5651,8 @@ function renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY
       // high-importance regions are fully opaque and unmissable.
       const alpha = 0.50 + mag * 0.50;
       octx.fillStyle = v > 0
-        ? cssRgba('--rgb-xai-heat-pos', alpha.toFixed(3))  // red – supports prediction
-        : cssRgba('--rgb-xai-heat-neg', alpha.toFixed(3)); // blue – distractor
+        ? cssRgba('--rgb-xai-heat-pos', alpha.toFixed(3))
+        : cssRgba('--rgb-xai-heat-neg', alpha.toFixed(3));
       octx.fillRect(
         x * STRIDE * scaleX,
         y * STRIDE * scaleY,
@@ -4630,133 +5664,209 @@ function renderXAIHeatmap(overlay, heatmap, gridW, gridH, STRIDE, scaleX, scaleY
   octx.filter = 'none';
 }
 
-// Gradient-based saliency: |dy/dx| where y = predicted class score and x = input
-// pixels. One forward + one backward pass. Returns true if rendering succeeded,
-// false if the model doesn't support backprop (caller falls back to occlusion).
+// Gradient-based saliency: unsigned |dy/dx| for the selected class score.
+// This is a local sensitivity map, not a signed effect or causal explanation.
+// Returns true if rendering succeeded; false tells the caller to use occlusion.
 async function runXAISaliency(p) {
   const {
     canvas, overlay, frameImageData, inputSize, baseClass, baseConf, basePreds,
-    resultEl, detailEl, detailText, thumbCv, progEl, block
+    baseModelSnapshot = baseModel, inferModelSnapshot = inferModel,
+    labels = inferLabels(), state = getXAIState(p.id), progEl, block
   } = p;
   if (progEl) progEl.value = 30;
-
-  // Compute |gradient of class score w.r.t. input| via tf.grad. The score is
-  // probs[baseClass] – taking just the predicted class, so the saliency
-  // answers "which input pixels most affect *this specific class's* output?".
   let saliency2D = null;
   try {
     saliency2D = tf.tidy(() => {
       const inputT = tf.browser.fromPixels(frameImageData).toFloat().div(255).expandDims(0);
       const gradFn = tf.grad((inp) => {
-        const features = baseModel.predict(inp);
-        const probs = inferModel.predict(features);
-        // gather the scalar class score; .sum() to make it a 0-D scalar
+        const features = xaiFirstTensor(baseModelSnapshot.predict(inp));
+        const probs = xaiFirstTensor(inferModelSnapshot.predict(features));
         return probs.gather([baseClass], 1).sum();
       });
       const grads = gradFn(inputT);
-      // Aggregate across RGB channels, magnitude, drop batch dim
       return grads.abs().max(-1).squeeze();
     });
     if (progEl) progEl.value = 70;
-    const arr = await saliency2D.array(); // [inputSize, inputSize]
+    const arr = await saliency2D.array();
+    if (xaiCancelled) throw new Error('cancelled');
     saliency2D.dispose();
     saliency2D = null;
 
-    // Find max for normalization + argmax for the most-important pixel
+    const values = new Float32Array(inputSize * inputSize);
     let max = 1e-9;
-    let argY = 0, argX = 0;
+    let argY = 0;
+    let argX = 0;
     for (let y = 0; y < inputSize; y++) {
       for (let x = 0; x < inputSize; x++) {
-        const v = arr[y][x];
-        if (v > max) { max = v; argY = y; argX = x; }
+        const value = Number(arr[y][x]) || 0;
+        const index = y * inputSize + x;
+        values[index] = value;
+        if (value > max) { max = value; argY = y; argX = x; }
       }
     }
-
-    // Render saliency on overlay.
-    // Alpha uses a power curve (^0.35) so mid-range gradients are visible,
-    // not just the handful of pixels at the absolute maximum.
-    // Same dark vignette base as the occlusion heatmap so colors pop.
-    const off = document.createElement('canvas');
-    off.width = inputSize;
-    off.height = inputSize;
-    const offCtx = off.getContext('2d');
-    const imgData = offCtx.createImageData(inputSize, inputSize);
-    const [heatR, heatG, heatB] = cssRgbChannels('--rgb-xai-heat-pos');
-    for (let y = 0; y < inputSize; y++) {
-      for (let x = 0; x < inputSize; x++) {
-        const v = Math.min(1, arr[y][x] / max);
-        if (v < 0.04) continue; // skip noise floor
-        const alpha = Math.pow(v, 0.35); // gamma boost – weak gradients visible
-        const i = (y * inputSize + x) * 4;
-        imgData.data[i]     = heatR;
-        imgData.data[i + 1] = heatG;
-        imgData.data[i + 2] = heatB;
-        imgData.data[i + 3] = Math.round(alpha * 255);
-      }
-    }
-    offCtx.putImageData(imgData, 0, 0);
-    const octx = overlay.getContext('2d');
-    octx.clearRect(0, 0, overlay.width, overlay.height);
-    // Dark base matches the occlusion heatmap style – dims the video so
-    // the bright red saliency regions are immediately obvious.
-    octx.fillStyle = cssRgba('--rgb-shade', 0.45);
-    octx.fillRect(0, 0, overlay.width, overlay.height);
-    octx.imageSmoothingEnabled = true;
-    octx.filter = 'blur(8px)';
-    octx.drawImage(off, 0, 0, overlay.width, overlay.height);
-    octx.filter = 'none';
-
-    // Headline result + thumbnail of the most-important region
-    renderXAIHeadline(resultEl, baseClass, baseConf);
-    if (thumbCv) {
-      const half = 32; // 64×64 thumb centred on hottest pixel
-      const sx = Math.max(0, Math.min(inputSize - half * 2, argX - half));
-      const sy = Math.max(0, Math.min(inputSize - half * 2, argY - half));
-      thumbCv.width = 64; thumbCv.height = 64;
-      const tctx = thumbCv.getContext('2d');
-      tctx.imageSmoothingEnabled = true;
-      tctx.drawImage(canvas, sx, sy, half * 2, half * 2, 0, 0, 64, 64);
-    }
-    if (detailEl && detailText) {
-      detailText.textContent = t('xai_saliency_detail', inferLabels()[baseClass]);
-      detailEl.style.display = 'block';
-      // Saliency is a single-pass method – no per-class deltas. Hide the row.
-      const classesEl = document.getElementById('xai-classes-' + p.id);
-      if (classesEl) classesEl.innerHTML = '';
-    }
-    if (progEl) progEl.value = 100;
-    log('eval', `XAI saliency: "${inferLabels()[baseClass]}" ${(baseConf * 100).toFixed(1)}% argmax=(${argX},${argY})`);
+    const half = Math.min(32, Math.floor(inputSize / 2));
+    const bestX = Math.max(0, Math.min(inputSize - half * 2, argX - half));
+    const bestY = Math.max(0, Math.min(inputSize - half * 2, argY - half));
+    Object.assign(state, {
+      hasResult: true, status: 'done', progress: 100, method: 'saliency',
+      saliency: values, saliencySize: inputSize, baseClass, baseConf,
+      basePreds, labels, bestX, bestY, bestPatch: half * 2,
+      bestMagnitude: max, bestDrop: 0, counterClass: null,
+      counterPreds: null, detailMessage: xaiText('saliencyDetail', labels[baseClass] || `class_${baseClass}`), message: ''
+    });
+    publishXAIState(state.id, state);
+    renderXAISaliencyOverlay(overlay, values, inputSize,
+      overlay.width / inputSize, overlay.height / inputSize);
+    overlay.style.opacity = String(state.opacity);
+    log('eval', `XAI saliency: "${labels[baseClass]}" ${(baseConf * 100).toFixed(1)}% argmax=(${argX},${argY})`);
     setBlockStatus(block, 'done');
     return true;
   } catch (err) {
     if (saliency2D) try { saliency2D.dispose(); } catch (_) {}
+    if (err && err.message === 'cancelled') throw err;
     console.warn('Saliency failed:', err);
     return false;
   }
 }
+function ensurePredictionHistoryDOM(id) {
+  const timeline = document.getElementById('pred-history-timeline-' + id);
+  if (!timeline) return null;
+  const connected = timeline.isConnected !== undefined ? timeline.isConnected : document.contains(timeline);
+  const cached = _predHistoryUI.get(timeline);
+  if (cached && connected && cached.slots.length === PREDICTION_HISTORY_LIMIT) return cached;
 
-function drawHistChart(id) {
+  const frag = document.createDocumentFragment();
+  const slots = [];
+  for (let i = 0; i < PREDICTION_HISTORY_LIMIT; i++) {
+    const point = document.createElement('div');
+    point.className = 'pred-history-point';
+    point.setAttribute('role', 'listitem');
+    point.hidden = true;
+    const marker = document.createElement('span');
+    marker.className = 'pred-history-marker';
+    marker.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.className = 'pred-history-point-label';
+    const score = document.createElement('span');
+    score.className = 'pred-history-point-score';
+    const frame = document.createElement('span');
+    frame.className = 'pred-history-point-frame';
+    point.append(marker, label, score, frame);
+    frag.appendChild(point);
+    slots.push({ point, marker, label, score, frame });
+  }
+  timeline.replaceChildren(frag);
+  const ui = { slots };
+  _predHistoryUI.set(timeline, ui);
+  return ui;
+}
+
+function renderPredictionHistoryTimeline(id, threshold) {
+  const timeline = document.getElementById('pred-history-timeline-' + id);
+  const empty = document.getElementById('pred-history-empty-' + id);
+  const historyUI = ensurePredictionHistoryDOM(id);
+  if (!timeline || !historyUI) return;
+  const entries = predHistory.slice(-PREDICTION_HISTORY_LIMIT);
+  const offset = PREDICTION_HISTORY_LIMIT - entries.length;
+  for (let i = 0; i < historyUI.slots.length; i++) {
+    const slot = historyUI.slots[i];
+    const entry = entries[i - offset];
+    if (!entry) {
+      slot.point.hidden = true;
+      continue;
+    }
+    const prior = i - offset > 0 ? entries[i - offset - 1] : null;
+    const changed = !prior || prior.idx !== entry.idx;
+    const label = String(entry.label == null ? `Class ${entry.idx + 1}` : entry.label);
+    const pct = (finitePredictionNumber(entry.conf, 0) * 100).toFixed(1);
+    slot.point.hidden = false;
+    slot.point.classList.toggle('class-change', changed);
+    slot.point.dataset.classIndex = String(entry.idx);
+    slot.point.dataset.frame = String(entry.frame == null ? i + 1 : entry.frame);
+    slot.point.dataset.probability = String(entry.conf);
+    const pointColor = normalizePredictionColor(entry.color, normalizePredictionColor(inferColor(entry.idx), 'var(--c-model)'));
+    slot.point.style.setProperty('--pred-history-color', pointColor);
+    slot.marker.style.backgroundColor = pointColor;
+    slot.label.textContent = label;
+    slot.score.textContent = pct + '%';
+    slot.frame.textContent = predictionText('frame', entry.frame == null ? i + 1 : entry.frame);
+    slot.point.title = `${label} ${pct}%`;
+    slot.point.setAttribute('aria-label', `${predictionText('frame', entry.frame == null ? i + 1 : entry.frame)}: ${label} ${pct}%`);
+  }
+  timeline.dataset.historyLength = String(entries.length);
+  timeline.dataset.threshold = String(threshold);
+  if (empty) {
+    empty.hidden = entries.length > 0;
+    empty.textContent = predictionText('historyEmpty');
+  }
+}
+
+function drawHistChart(id, thresholdArg) {
   const cv = document.getElementById('hist-chart-' + id);
-  if (!cv || predHistory.length < 2) return;
-  const { ctx, W, H } = setupChartCanvas(cv, 60);
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = cssToken('--c-surface-2');
-  ctx.fillRect(0, 0, W, H);
-  const barW = W / 30;
-  predHistory.forEach((p, i) => {
-    ctx.fillStyle = classColors[p.idx] || cssToken('--c-model');
-    const bh = p.conf * (H - 4);
-    ctx.fillRect(i * barW, H - bh - 2, barW - 2, bh);
-  });
+  const snapshot = predSnapshots.get(String(id));
+  const threshold = Math.min(1, Math.max(0, finitePredictionNumber(
+    thresholdArg == null ? snapshot?.threshold : thresholdArg, 0.7
+  )));
+  const entries = predHistory.slice(-PREDICTION_HISTORY_LIMIT);
+  if (cv) {
+    const { ctx, W, H } = setupChartCanvas(cv, 72);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = cssToken('--c-surface-2');
+    ctx.fillRect(0, 0, W, H);
+    const left = 18;
+    const right = 4;
+    const top = 4;
+    const bottom = 12;
+    const chartW = Math.max(1, W - left - right);
+    const chartH = Math.max(1, H - top - bottom);
+    ctx.strokeStyle = cssToken('--c-border');
+    ctx.lineWidth = 1;
+    [0, 0.5, 1].forEach(level => {
+      const y = top + (1 - level) * chartH + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(left, y);
+      ctx.lineTo(W - right, y);
+      ctx.stroke();
+    });
+    const thresholdY = top + (1 - threshold) * chartH;
+    ctx.strokeStyle = cssToken('--c-ink-soft');
+    ctx.setLineDash([3, 2]);
+    ctx.beginPath();
+    ctx.moveTo(left, thresholdY);
+    ctx.lineTo(W - right, thresholdY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = cssToken('--c-muted');
+    ctx.font = cssFont(8);
+    ctx.textAlign = 'right';
+    ctx.fillText('100%', left - 3, top + 7);
+    ctx.fillText('0%', left - 3, H - bottom + 1);
+    if (entries.length) {
+      const barW = chartW / PREDICTION_HISTORY_LIMIT;
+      entries.forEach((entry, i) => {
+        const confidence = Math.max(0, Math.min(1, finitePredictionNumber(entry.conf, 0)));
+        const bh = confidence * chartH;
+        ctx.fillStyle = normalizePredictionColor(entry.color, normalizePredictionColor(inferColor(entry.idx), 'var(--c-model)'));
+        ctx.fillRect(left + (PREDICTION_HISTORY_LIMIT - entries.length + i) * barW, top + chartH - bh, Math.max(1, barW - 1), bh);
+      });
+    }
+    cv.dataset.historyLength = String(entries.length);
+    cv.dataset.threshold = String(threshold);
+  }
+  renderPredictionHistoryTimeline(String(id), threshold);
 }
 
 function freezeFrame(id) {
   frozenFrame = !frozenFrame;
-  const btn = document.getElementById('freeze-btn-' + id);
-  if (btn) {
-    btn.setAttribute('aria-pressed', frozenFrame ? 'true' : 'false');
-    btn.textContent = t(frozenFrame ? 'btn_unfreeze_frame' : 'btn_freeze_frame');
+  const key = String(id);
+  const previous = predSnapshots.get(key);
+  if (previous) {
+    const mode = frozenFrame ? 'paused' : (inferInterval && inferCameraStream ? 'live' : 'stopped');
+    renderPredictionSnapshot(key, { ...previous, mode, recordHistory: false }, { recordHistory: false });
+  } else {
+    renderPredictionState(key, frozenFrame ? 'paused' : (inferInterval && inferCameraStream ? 'live' : 'waiting'));
   }
+  updatePredictionControls(key);
   log('info', t(frozenFrame ? 'log_frame_frozen' : 'log_frame_resumed'));
 }
 
