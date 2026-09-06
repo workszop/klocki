@@ -7,18 +7,450 @@
   <title>KlockiAI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
   <link rel="stylesheet" href="workspace.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@700;800&display=swap" rel="stylesheet">
+  <!-- edulab design system tokens (inlined so this experiment is self-contained) -->
+  <style>
+/* ============================================================
+   edulab — Colors & Type foundation
+   Fonts loaded from Google Fonts (CDN). See README "Visual
+   Foundations" for substitution notes.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ---- Brand fonts ---- */
+  --font-display: 'Outfit', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-sans:    'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono:    'Roboto Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ============================================================
+     RAW COLOR TOKENS
+     ============================================================ */
+
+  /* Paper — page background is white; the sand steps are wells/alternating sections */
+  --paper:    #FFFFFF;   /* page background (white)    */
+  --paper-2:  #FBF7E6;   /* alternating section        */
+  --paper-3:  #F5EDCB;   /* deepest sand / wells       */
+  --surface:  #FFFFFF;   /* cards & sheets             */
+
+  /* Ink — warm near-black text & lines */
+  --ink:      #1C1917;   /* primary text               */
+  --ink-2:    #57534E;   /* secondary text             */
+  --ink-3:    #948C82;   /* muted / placeholder        */
+  --line:     #EDE7D2;   /* hairline borders           */
+  --line-2:   #DDD4B6;   /* stronger borders           */
+
+  /* ---- Brand: Yellow main · Blue + Green secondary · Red danger ----
+     Plain saturated colours. A "-soft" tint IS the saturated colour
+     (panels and chips are solid), "-ink" is the text colour ON it:
+     white on blue/green/red, dark ink on yellow. Never colour-on-colour
+     (no green text on green); the saturated colour itself goes only on
+     white or black. */
+
+  /* Yellow — primary (buttons, progress, values on dark panels) */
+  --yellow:      #FFD500;
+  --yellow-600:  #F0C800;  /* hover / press          */
+  --yellow-soft: #FFD500;  /* chip / panel fill      */
+  --yellow-ink:  #1C1917;  /* text on yellow         */
+
+  /* Blue — secondary (panels, chips, correct / selected state) */
+  --blue:      #1E8FC2;
+  --blue-600:  #177AA8;
+  --blue-soft: #1E8FC2;
+  --blue-ink:  #FFFFFF;
+
+  /* Green — secondary support (chips, success) */
+  --green:      #00A651;
+  --green-600:  #009444;
+  --green-soft: #00A651;
+  --green-ink:  #FFFFFF;
+
+  /* Red — danger / important / wrong (use sparingly) */
+  --red:      #E5322D;
+  --red-600:  #C92823;
+  --red-soft: #E5322D;
+  --red-ink:  #FFFFFF;
+
+  /* Legacy role aliases — older edulab apps use these names */
+  --marigold: var(--yellow); --marigold-600: var(--yellow-600); --marigold-soft: var(--yellow-soft); --marigold-ink: var(--yellow-ink);
+  --teal:     var(--blue);   --teal-600:     var(--blue-600);   --teal-soft:     var(--blue-soft);   --teal-ink:     var(--blue-ink);
+  --sky:      var(--green);                                     --sky-soft:      var(--green-soft);  --sky-ink:      var(--green-ink);
+  --coral:    var(--red);    --coral-600:    var(--red-600);    --coral-soft:    var(--red-soft);    --coral-ink:    var(--red-ink);
+
+  /* Play palette — subject/category colours in the kids app */
+  --play-sun:    #FFD500;
+  --play-grass:  #00A651;
+  --play-berry:  #C6478B;
+  --play-grape:  #7A5AC2;
+  --play-sky:    #1E8FC2;
+  --play-coral:  #E5322D;
+
+  /* ---- Semantic ---- */
+  --success:      #00A651;  --success-soft: #00A651;  --success-ink: #FFFFFF;
+  --warning:      #FFD500;  --warning-soft: #FFD500;  --warning-ink: #1C1917;
+  --danger:       #E5322D;  --danger-soft:  #E5322D;  --danger-ink:  #FFFFFF;
+  --info:         #1E8FC2;  --info-soft:    #1E8FC2;  --info-ink:    #FFFFFF;
+
+  /* ---- Functional aliases ---- */
+  --bg:        var(--paper);
+  --fg:        var(--ink);
+  --fg-muted:  var(--ink-2);
+  --primary:   var(--yellow);
+  --on-primary:#1C1917;      /* dark text on yellow */
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--yellow) 45%, transparent);
+
+  /* ============================================================
+     SPACING  (4pt base)
+     ============================================================ */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  --sp-12: 48px; --sp-16: 64px; --sp-20: 80px; --sp-24: 96px;
+
+  /* ---- Radii (friendly, generous) ---- */
+  --r-xs: 6px; --r-sm: 10px; --r-md: 14px; --r-lg: 20px; --r-xl: 28px; --r-pill: 999px;
+
+  /* ---- Elevation — warm, low, soft ---- */
+  --shadow-sm: 0 1px 2px rgba(33,30,26,.06), 0 1px 1px rgba(33,30,26,.04);
+  --shadow-md: 0 4px 16px rgba(33,30,26,.08), 0 1px 3px rgba(33,30,26,.05);
+  --shadow-lg: 0 16px 40px rgba(33,30,26,.12), 0 3px 8px rgba(33,30,26,.06);
+  --shadow-primary:  0 8px 22px color-mix(in srgb, var(--yellow) 30%, transparent);
+  --shadow-marigold: var(--shadow-primary);   /* legacy alias */
+
+  /* ============================================================
+     TYPE SCALE (semantic sizes)
+     ============================================================ */
+  --display-font:  clamp(48px, 6vw, 72px);
+  --h1: 44px; --h2: 33px; --h3: 25px; --h4: 19px;
+  --body-lg: 18px; --body: 16px; --body-sm: 14px;
+  --caption: 13px; --overline: 12px;
+}
+
+/* ============================================================
+   SEMANTIC ELEMENT STYLES
+   Apply via element selectors or .edu-prose wrapper.
+   ============================================================ */
+
+.edu-display, .edu h1.display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--display-font);
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+.edu h1, .edu-h1 {
+  font-family: var(--font-display);
+  font-weight: 700; font-size: var(--h1);
+  line-height: 1.06; letter-spacing: -0.02em; color: var(--ink);
+}
+.edu h2, .edu-h2 {
+  font-family: var(--font-display);
+  font-weight: 600; font-size: var(--h2);
+  line-height: 1.12; letter-spacing: -0.015em; color: var(--ink);
+}
+.edu h3, .edu-h3 {
+  font-family: var(--font-display);
+  font-weight: 600; font-size: var(--h3);
+  line-height: 1.2; letter-spacing: -0.01em; color: var(--ink);
+}
+.edu h4, .edu-h4 {
+  font-family: var(--font-sans);
+  font-weight: 700; font-size: var(--h4);
+  line-height: 1.3; color: var(--ink);
+}
+.edu p, .edu-p, .edu-body {
+  font-family: var(--font-sans);
+  font-weight: 400; font-size: var(--body);
+  line-height: 1.6; color: var(--ink-2);
+}
+.edu-body-lg { font-family: var(--font-sans); font-size: var(--body-lg); line-height: 1.6; color: var(--ink-2); }
+.edu-small  { font-family: var(--font-sans); font-size: var(--body-sm); line-height: 1.5; color: var(--ink-2); }
+.edu-caption{ font-family: var(--font-sans); font-size: var(--caption); line-height: 1.45; color: var(--ink-3); }
+
+/* Overline — mono, tracked; functional labels only (never above page/section titles) */
+.edu-overline {
+  font-family: var(--font-mono);
+  font-weight: 500; font-size: var(--overline);
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink);
+}
+.edu code, .edu-mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em; color: var(--ink);
+  background: var(--paper-3); padding: 0.12em 0.4em; border-radius: var(--r-xs);
+}
+
+/* Solid colour blocks (callouts, stat cards, chips): set background: var(--X-soft) and
+   color: var(--X-ink) on the block, add .edu-block, and every heading/paragraph inside
+   inherits that text colour instead of the default ink. */
+.edu-block, .edu-block h1, .edu-block h2, .edu-block h3, .edu-block h4, .edu-block p,
+.edu-block li, .edu-block small { color: inherit; }
+
+body.edu { background: var(--paper); color: var(--ink); font-family: var(--font-sans); }
+
+  </style>
+  <script defer src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <style>
+/* ─── Icons (lucide) ─── */
+.edu-icon { display: inline-block; width: 1.1em; height: 1.1em; vertical-align: -0.2em; stroke-width: 2.25; margin-inline: 0 .35em; flex-shrink: 0; }
+.edu-icon:last-child { margin-inline: 0; }
+.bk-close .edu-icon, .co-card-toggle .edu-icon, .co-card-resize .edu-icon, .co-palette-action .edu-icon, .flow-arrow .edu-icon { margin: 0; width: 1em; height: 1em; vertical-align: -0.15em; }
+.drag-handle .edu-icon { margin: 0; width: 1em; height: 1em; }
+
+/* ─── Experimental edulab look: remap app tokens onto the edulab system ─── */
+:root {
+  --font: var(--font-sans);
+  --mono: var(--font-mono);
+  /* surfaces + text */
+  --c-bg: var(--paper-2);
+  --c-surface: var(--surface);
+  --c-surface-2: var(--paper-2);
+  --c-border: var(--line);
+  --c-border-strong: var(--line-2);
+  --c-text: var(--ink);
+  --c-ink: var(--ink);
+  --c-ink-soft: var(--ink-2);
+  --c-muted: var(--ink-2);
+  --c-muted-2: var(--ink-3);
+  --c-stage: var(--ink);
+  /* pipeline phases (play palette; each carries white text) */
+  --c-data: var(--play-sky);
+  --c-label: var(--play-grape);
+  --c-prep: var(--play-berry);
+  --c-model: var(--green);
+  --c-train: var(--red);
+  --c-eval: var(--blue-600);
+  --c-deploy: var(--ink);
+  /* chrome: light header, dark terminal */
+  --c-topbar: var(--paper);
+  --c-log-bg: var(--ink);
+  --c-chrome-2: var(--ink-2);
+  --c-chrome-3: var(--ink-3);
+  --c-chrome-text: var(--paper-3);
+  --c-log-muted: var(--ink-3);
+  --c-logo-accent: var(--yellow);
+  --c-focus: var(--blue);
+  --c-focus-on-dark: var(--yellow);
+  /* semantics */
+  --c-ok: var(--green);
+  --c-ok-deep: var(--green-600);
+  --c-ok-bg: var(--paper-2);
+  --c-ok-bg-2: var(--paper-3);
+  --c-ok-border: var(--green);
+  --c-ok-on-dark: var(--green);
+  --c-warn: var(--yellow-600);
+  --c-warn-bg: var(--paper-2);
+  --c-warn-border: var(--yellow);
+  --c-warn-on-dark: var(--yellow);
+  --c-highlight: var(--yellow);
+  --c-danger: var(--red);
+  --c-danger-soft: var(--red);
+  --c-danger-bg: var(--paper-2);
+  --c-danger-bg-2: var(--paper-3);
+  --c-danger-border: var(--red);
+  --c-danger-on-dark: var(--red);
+  --c-info: var(--blue);
+  --c-info-bg: var(--paper-2);
+  --c-info-text: var(--blue-600);
+  --c-info-on-dark: var(--blue);
+  --c-info-soft-on-dark: var(--blue);
+  --c-xai-neg: var(--blue);
+  /* translucent variants */
+  --c-chrome-text-a25: color-mix(in srgb, var(--paper-3) 25%, transparent);
+  --c-danger-soft-a05: color-mix(in srgb, var(--red) 5%, transparent);
+  --c-danger-soft-a15: color-mix(in srgb, var(--red) 15%, transparent);
+  --c-danger-soft-a80: color-mix(in srgb, var(--red) 80%, transparent);
+  --c-logo-accent-a35: color-mix(in srgb, var(--yellow) 35%, transparent);
+  --c-logo-accent-a0: color-mix(in srgb, var(--yellow) 0%, transparent);
+  --c-muted-a35: color-mix(in srgb, var(--ink-2) 35%, transparent);
+  --c-ok-a40: color-mix(in srgb, var(--green) 40%, transparent);
+  --c-train-a25: color-mix(in srgb, var(--red) 25%, transparent);
+  --c-train-a85: color-mix(in srgb, var(--red) 85%, transparent);
+  --c-warn-a40: color-mix(in srgb, var(--yellow) 40%, transparent);
+  --c-xai-neg-a25: color-mix(in srgb, var(--blue) 25%, transparent);
+  --c-xai-neg-a85: color-mix(in srgb, var(--blue) 85%, transparent);
+  /* rgb triplets read by cssRgba() in app.js (must be literal edulab values) */
+  --rgb-muted: 87 83 78;
+  --rgb-chrome-text: 245 237 203;
+  --rgb-logo-accent: 255 213 0;
+  --rgb-ok: 0 166 81;
+  --rgb-warn: 240 200 0;
+  --rgb-danger-soft: 229 50 45;
+  --rgb-train: 229 50 45;
+  --rgb-model: 0 166 81;
+  --rgb-xai-neg: 30 143 194;
+  --rgb-xai-heat-pos: 229 50 45;
+  --rgb-xai-heat-neg: 30 143 194;
+  --topbar-h: 64px;
+  --co-radius: var(--r-lg);
+}
+
+/* ─── Chrome: edulab top menu ─── */
+#topbar.co-topbar {
+  background: color-mix(in srgb, var(--paper) 85%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+  padding-inline: 20px;
+}
+#logo { display: flex; align-items: center; }
+#logo .edu-wordmark { font-family: 'Raleway', var(--font-display); font-weight: 800; font-size: 22px; letter-spacing: -.02em; color: var(--ink); }
+#logo .edu-wordmark span { color: var(--blue); }
+/* The phase pills stay in the DOM for app.js but are not part of this look. */
+#flowbar { display: none; }
+#topbar-actions { margin-left: auto; }
+#topbar.co-topbar .tb-btn {
+  border: none; border-radius: var(--r-pill); background: var(--paper-2); color: var(--ink);
+  font-family: var(--font-sans); font-weight: 600; transition: background .15s, color .15s;
+}
+#topbar.co-topbar .tb-btn:hover { background: var(--paper-3); color: var(--ink); }
+#topbar.co-topbar .tb-btn.active { background: var(--blue); color: var(--blue-ink); border-color: transparent; }
+#topbar.co-topbar #btn-run {
+  background: var(--yellow); color: var(--yellow-ink); border: none; box-shadow: var(--shadow-primary);
+  border-radius: var(--r-pill); font-family: var(--font-display); font-weight: 700; font-size: 14px;
+}
+#topbar.co-topbar #btn-run:hover { background: var(--yellow-600); }
+#topbar.co-topbar #btn-run:active { transform: scale(.97); box-shadow: var(--shadow-sm); }
+#topbar.co-topbar #btn-clear { color: var(--red); }
+#co-tools-menu { border-radius: var(--r-md); box-shadow: var(--shadow-md); }
+
+/* ─── Sidebar / library: larger type, sized by importance ─── */
+:root { --sidebar-w: 288px; }
+#sidebar.co-sidebar { background: var(--paper); border-right: 1px solid var(--line); }
+/* 1. Library title: the pane's heading */
+#co-library-header { padding: 12px 14px 10px; }
+#co-library-toggle { font-family: var(--font-display); font-size: 19px; font-weight: 700; letter-spacing: -.01em; padding: 8px 10px; }
+#co-library-toggle .co-toggle-mark { font-size: 16px; }
+/* 2. Group names: section headings */
+.co-library-group-toggle { font-family: var(--font-display); font-size: 16px; font-weight: 600; padding: 12px 14px 8px; }
+.co-library-group-toggle .co-toggle-mark { font-size: 14px; }
+/* 3. Block names: the things you click */
+body.co-shell .co-library-group .palette-block { font-family: var(--font-sans); font-size: 15px; font-weight: 600; padding: 11px 12px; margin-bottom: 8px; }
+body.co-shell .co-library-group .palette-block .block-dot { width: 12px; height: 12px; }
+.co-palette-action { font-size: 13px; }
+/* 4. Supporting copy */
+.co-library-lead { font-family: var(--font-sans); font-size: 14px; line-height: 1.5; color: var(--ink-2); padding: 12px 14px 6px; }
+.co-dataset-section summary { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); padding: 6px 0 10px; }
+body.co-shell .co-dataset-section .sidebar-action-btn { font-size: 13px; padding: 9px 12px; }
+.dataset-info { font-size: 12px; }
+/* 5. Reset: important but not primary */
+#co-reset-state { font-family: var(--font-sans); font-size: 14px; padding: 12px; margin: 12px; }
+body.co-shell .palette-block {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm); font-family: var(--font-sans);
+  transition: background .15s, border-color .15s;
+}
+body.co-shell .palette-block:hover { background: var(--paper-2); border-color: var(--line-2); transform: none; }
+.co-palette-action { font-family: var(--font-mono); color: var(--ink-3); }
+#co-reset-state { border-radius: var(--r-pill); background: var(--red); color: var(--red-ink); border: none; font-weight: 600; }
+.sidebar-action-btn { border-radius: var(--r-pill); }
+
+/* ─── Canvas + cards ─── */
+#canvas { background-image: radial-gradient(circle, var(--line-2) 1px, transparent 1px); }
+.empty-title { font-family: var(--font-display); color: var(--ink); }
+.empty-subtitle, .empty-hint { color: var(--ink-2); }
+.empty-btn { border-radius: var(--r-pill); border: none; box-shadow: var(--shadow-sm); font-family: var(--font-sans); }
+.empty-btn-primary { background: var(--yellow); color: var(--yellow-ink); }
+.empty-btn-secondary { background: var(--blue); color: var(--blue-ink); }
+body.co-shell .block-card {
+  border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-md);
+  border-color: var(--line) !important;
+}
+/* ─── Calm cards: white header, phase colour only on the small badge ─── */
+.bk-header { background: var(--surface) !important; color: var(--ink); border-bottom: 1px solid var(--line); padding-top: 10px; padding-bottom: 10px; }
+.bk-header .bk-title { color: var(--ink); }
+.bk-header .drag-handle, .bk-header .bk-close, .bk-header .co-card-toggle { color: var(--ink-3); background: transparent; }
+.bk-header .bk-close:hover, .bk-header .co-card-toggle:hover { background: var(--paper-2); color: var(--ink); }
+.bk-header .order-badge { background: var(--paper-3); color: var(--ink); }
+.bk-header .bk-status { background: var(--paper-2); color: var(--ink-2); border: none; }
+.block-card.status-running .bk-header .bk-status { background: var(--yellow); color: var(--yellow-ink); }
+.block-card.status-done .bk-header .bk-status { background: var(--green); color: var(--green-ink); }
+.block-card.status-error .bk-header .bk-status { background: var(--red); color: var(--red-ink); }
+.bk-header .bk-badge { color: var(--paper); border: none; }
+.block-card[data-co-type="camera-input"] .bk-badge, .block-card[data-co-type="upload-model"] .bk-badge { background: var(--play-sky); }
+.block-card[data-co-type="label-classes"] .bk-badge, .block-card[data-co-type="camera-infer"] .bk-badge, .block-card[data-co-type="show-results"] .bk-badge { background: var(--play-grape); }
+.block-card[data-co-type="prepare-data"] .bk-badge { background: var(--play-berry); }
+.block-card[data-co-type="pretrained-model"] .bk-badge, .block-card[data-co-type="model-explorer"] .bk-badge { background: var(--green); }
+.block-card[data-co-type="train-model"] .bk-badge { background: var(--red); }
+.block-card[data-co-type="evaluate"] .bk-badge, .block-card[data-co-type="zero-shot"] .bk-badge, .block-card[data-co-type="explain-ai"] .bk-badge { background: var(--blue-600); }
+.block-card[data-co-type="save-model"] .bk-badge, .block-card[data-co-type="deploy-export"] .bk-badge { background: var(--ink); }
+/* Actions: one dark primary per card, everything else sand */
+.bk-btn[style*="background"]:not(.bk-btn--xs) { background: var(--ink) !important; color: var(--paper); }
+.bk-btn[style*="background"]:not(.bk-btn--xs):hover { background: var(--ink-2) !important; filter: none; }
+.bk-btn--neutral, .bk-btn--muted, .bk-btn--muted[style] { background: var(--paper-3) !important; color: var(--ink) !important; box-shadow: none; }
+.bk-btn--xs { filter: saturate(.8); }
+.class-capture-btn { filter: saturate(.8); }
+/* Trimmed controls: photos come from the camera in this look */
+.block-card[data-co-type="camera-input"] .bk-btn[onclick*="cam-photo-up"] { display: none; }
+.block-card[data-co-type="label-classes"] .class-capture-btn,
+.block-card[data-co-type="label-classes"] .class-tool-btn[onclick*="photo-up"] { display: none; }
+/* Show results: keep the history heading and chart; drop the timeline strip and the confidence note */
+.pred-ui .pred-history-timeline, .pred-ui .pred-caveat { display: none; }
+/* Requirement strips: neutral sand box, colour only in the small marks */
+.bk-prereq, .bk-prereq.all-ok { background: var(--paper-2); border: none; border-radius: var(--r-md); padding: 8px 10px; }
+.prereq-heading, .bk-prereq.all-ok .prereq-heading { color: var(--ink-2); font-family: var(--font-mono); }
+.prereq-pill { background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); }
+.prereq-pill.ok { background: var(--surface); border-color: var(--line); color: var(--green-600); }
+.prereq-pill.missing { background: var(--surface); border-color: var(--line); color: var(--red-600); }
+body.co-shell .block-card.dragging { box-shadow: var(--shadow-lg); }
+body.co-shell .block-card.save-prompt { animation: none; box-shadow: 0 0 0 3px var(--yellow), var(--shadow-md); }
+.bk-header { border-radius: var(--r-lg) var(--r-lg) 0 0; }
+.bk-title { font-family: var(--font-display); font-weight: 600; letter-spacing: -.01em; }
+.bk-badge, .bk-status, .order-badge { font-family: var(--font-mono); letter-spacing: .04em; }
+.bk-btn { border: none; border-radius: var(--r-pill); box-shadow: var(--shadow-sm); font-family: var(--font-sans); font-weight: 600; }
+.bk-btn:hover { filter: brightness(.95); }
+.bk-btn--muted { background: var(--paper-3) !important; color: var(--ink) !important; }
+.param-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+input, select, textarea { font-family: var(--font-sans); border-radius: var(--r-sm); }
+.co-settings-details { border-radius: var(--r-md); background: var(--paper-2); border: none; }
+.co-settings-details summary { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+.co-card-summary, .co-card-prereq { font-family: var(--font-mono); }
+.prep-split-note { border: none; border-left: none; background: var(--paper-2); color: var(--ink-2); border-radius: var(--r-md); }
+.co-card-resize { border-radius: var(--r-md) 0 var(--r-lg) 0; background: var(--paper-2); color: var(--ink-3); }
+.co-card-toggle, .bk-close { border-radius: var(--r-pill); }
+progress { accent-color: var(--yellow); }
+.train-interp { border-radius: var(--r-md); font-family: var(--font-sans); }
+.eval-verdict { border-radius: var(--r-md); }
+.eval-score-val { font-family: var(--font-display); }
+
+/* ─── Terminal: dark data panel, yellow values ─── */
+#log-panel.co-log-panel { background: var(--ink); border-left: 1px solid var(--line-2); }
+#log-header { border-bottom: 1px solid color-mix(in srgb, var(--paper) 15%, transparent); }
+#log-header-title { font-family: var(--font-mono); letter-spacing: .1em; color: var(--paper-3); }
+#log-clear { border-radius: var(--r-pill); color: var(--paper-3); }
+#log-entries { font-family: var(--font-mono); }
+.log-line { color: var(--paper-3); }
+.ll-step { color: var(--yellow); }
+.ll-success { color: var(--green); }
+.ll-error { color: var(--red); }
+.ll-warn { color: var(--yellow-600); }
+.ll-data { color: var(--blue); }
+.ll-info { color: var(--ink-3); }
+#co-log-resize { border-left-color: var(--line-2); }
+#co-log-resize:hover, #co-log-resize:focus-visible { border-color: var(--yellow); background: color-mix(in srgb, var(--yellow) 35%, transparent); }
+
+/* ─── Toasts, dialogs ─── */
+.toast { border: none; border-radius: var(--r-md); box-shadow: var(--shadow-lg); background: var(--ink); color: var(--paper); font-family: var(--font-sans); }
+.toast-success { background: var(--green); color: var(--green-ink); }
+.toast-warn { background: var(--yellow); color: var(--yellow-ink); }
+.toast-error { background: var(--red); color: var(--red-ink); }
+.modal-box { border-radius: var(--r-xl); border: 1px solid var(--line); box-shadow: var(--shadow-lg); }
+.modal-title { font-family: var(--font-display); }
+.modal-close-btn { border-radius: var(--r-pill); background: var(--yellow); color: var(--yellow-ink); border: none; }
+#trash-zone { border-radius: var(--r-lg); }
+
+  </style>
 </head>
 
 <body class="co-shell" data-library-open="true">
   <!-- TOPBAR -->
   <div id="topbar" class="co-topbar">
-    <div id="logo">Klocki<span>AI</span></div>
+    <div id="logo"><span class="edu-wordmark">Klocki<span>AI</span></span></div>
 
     <div id="flowbar" aria-label="Pipeline">
       <div class="flow-pill" data-phase="data"><span data-i18n="phase_data">Dane</span></div>
@@ -190,6 +622,91 @@
 
   <script src="app.js"></script>
   <script src="workspace.js"></script>
+  <script>
+    // Class swatches are JS data (app.js CLASS_COLORS), so CSS tokens cannot
+    // reach them: use the edulab play palette literally (sky, grape, berry,
+    // coral, grass, blue-600). Mutated in place so app.js keeps its reference.
+    CLASS_COLORS.splice(0, CLASS_COLORS.length, '#1E8FC2', '#7A5AC2', '#C6478B', '#E5322D', '#00A651', '#177AA8');
+    // The default two classes copied their colours at load time.
+    classColors = classColors.map((_, i) => CLASS_COLORS[i % CLASS_COLORS.length]);
+  </script>
+  <script>
+    // ─── Lucide icons in place of the app's emoji / glyphs ───
+    // app.js and workspace.js write emoji into text nodes (buttons, badges,
+    // verdicts). This layer swaps each known glyph for an inline SVG and
+    // keeps doing so as the DOM changes, without touching the shipped code.
+    const EDU_ICON_MAP = {
+      '✓': 'check', '✅': 'circle-check', '⚠️': 'triangle-alert', '⚠': 'triangle-alert',
+      '›': 'chevron-right', '⌄': 'chevron-down', '⌃': 'chevron-up', '✕': 'x', '◢': 'move-diagonal-2', '⠸': 'grip-vertical',
+      '🚀': 'rocket', '▶': 'play', '🎓': 'graduation-cap', '🗑': 'trash-2', '🔍': 'search', '📁': 'folder-open', '📂': 'folder-open',
+      '💾': 'save', '📷': 'camera', '🔮': 'sparkles', '📉': 'trending-down', '👁': 'eye', '🎉': 'party-popper', '⬇': 'download',
+      '➡': 'arrow-right', '❄': 'snowflake', '🔬': 'microscope', '📤': 'upload', '📊': 'chart-column', '🏷': 'tag', '🎯': 'target',
+      '🌍': 'globe', '⚙': 'settings', '🧠': 'brain', '🧹': 'eraser'
+    };
+    // Longest glyphs first so '⚠️' wins over '⚠'; trailing variation selectors are absorbed.
+    const EDU_ICON_RE = new RegExp('(' + Object.keys(EDU_ICON_MAP).sort((a, b) => b.length - a.length).map(g => g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')[\uFE0F\u20E3]?', 'g');
+    const EDU_ICON_SKIP = 'script,style,input,textarea,select,option,#log-entries,svg';
+    const eduToPascal = name => name.split('-').map(part => part[0].toUpperCase() + part.slice(1)).join('');
+
+    function eduIconify(root) {
+      if (!window.lucide || !root || root.nodeType !== 1) return;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode: node => {
+          EDU_ICON_RE.lastIndex = 0;
+          if (!node.nodeValue || !EDU_ICON_RE.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+          return node.parentElement && node.parentElement.closest(EDU_ICON_SKIP) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      const targets = [];
+      while (walker.nextNode()) targets.push(walker.currentNode);
+      targets.forEach(node => {
+        const frag = document.createDocumentFragment();
+        const text = node.nodeValue;
+        let last = 0;
+        EDU_ICON_RE.lastIndex = 0;
+        let match;
+        while ((match = EDU_ICON_RE.exec(text))) {
+          if (match.index > last) frag.appendChild(document.createTextNode(text.slice(last, match.index)));
+          const icon = lucide.icons[eduToPascal(EDU_ICON_MAP[match[1]])];
+          if (icon) {
+            const svg = lucide.createElement(icon, { 'aria-hidden': 'true' });
+            svg.classList.add('edu-icon'); /* lucide sets its own class attribute */
+            frag.appendChild(svg);
+          }
+          else { console.warn('edu icons: no lucide icon for', match[1], EDU_ICON_MAP[match[1]]); frag.appendChild(document.createTextNode(match[0])); }
+          last = match.index + match[0].length;
+        }
+        const rest = text.slice(last);
+        if (rest) frag.appendChild(document.createTextNode(rest));
+        node.parentNode.replaceChild(frag, node);
+      });
+    }
+
+    let eduIconPending = false;
+    const eduIconQueue = new Set();
+    function eduScheduleIconify(target) {
+      const root = target.nodeType === Node.TEXT_NODE ? target.parentElement : target;
+      if (!root) return;
+      eduIconQueue.add(root);
+      if (eduIconPending) return;
+      eduIconPending = true;
+      requestAnimationFrame(() => {
+        eduIconPending = false;
+        const roots = Array.from(eduIconQueue); eduIconQueue.clear();
+        roots.forEach(eduIconify);
+      });
+    }
+
+    window.addEventListener('load', () => {
+      eduIconify(document.body);
+      new MutationObserver(records => {
+        records.forEach(record => {
+          if (record.type === 'characterData') eduScheduleIconify(record.target);
+          record.addedNodes.forEach(node => { if (node.nodeType === 1 || node.nodeType === 3) eduScheduleIconify(node); });
+        });
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    });
+  </script>
 </body>
 
 </html>
