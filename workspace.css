@@ -1,5 +1,5 @@
 /*
- * KlockiAI guided workspace
+ * KlockiAI workspace shell
  *
  * app.js remains the single source of truth for block markup and runtime
  * state. These tokens and selectors only change the way that state is
@@ -27,10 +27,6 @@
 }
 
 body.co-shell {
-  --log-w: 220px;
-}
-
-body.co-shell[data-log-open="true"] {
   --log-w: var(--co-terminal-width);
 }
 
@@ -38,26 +34,6 @@ body.co-shell[data-log-open="true"] {
 #topbar.co-topbar {
   gap: 10px;
   padding-inline: 14px;
-}
-
-#co-topbar-context {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--c-chrome-text);
-  font-size: var(--co-size-xs);
-  font-family: var(--co-font-data);
-  white-space: nowrap;
-  padding: 5px 8px;
-  border-left: 1px solid var(--c-chrome-3);
-}
-
-#co-topbar-context::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--c-logo-accent);
 }
 
 #topbar.co-topbar #topbar-actions {
@@ -75,17 +51,6 @@ body.co-shell[data-log-open="true"] {
   padding: 7px 13px;
   border-width: 2px;
   box-shadow: 3px 3px 0 var(--c-ink);
-}
-
-#topbar.co-topbar #co-view-toggle {
-  background: var(--c-chrome-2);
-  color: var(--c-chrome-text);
-}
-
-#topbar.co-topbar #co-view-toggle[data-view="free"] {
-  background: var(--c-info-on-dark);
-  color: var(--c-topbar);
-  border-color: var(--c-info-on-dark);
 }
 
 #co-tools {
@@ -127,7 +92,8 @@ body.co-shell[data-log-open="true"] {
   color: var(--c-surface);
 }
 
-/* Keep the playful block language, but let hierarchy come from spacing
+/* Keep the playful block language,
+but let hierarchy come from spacing
    and colour rather than a second heavy black outline on every control. */
 body.co-shell .palette-block {
   border-color: var(--c-border-strong);
@@ -201,8 +167,7 @@ body.co-shell .empty-btn:active {
   background: var(--co-panel);
 }
 
-#co-library-toggle,
-#co-log-toggle {
+#co-library-toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -218,8 +183,7 @@ body.co-shell .empty-btn:active {
   text-align: left;
 }
 
-#co-library-toggle:hover,
-#co-log-toggle:hover {
+#co-library-toggle:hover {
   background: var(--co-panel-soft);
 }
 
@@ -356,249 +320,6 @@ body.co-shell .co-dataset-section .sidebar-action-btn {
   min-width: 0;
 }
 
-#co-guided-panel {
-  position: relative;
-  z-index: 12;
-  margin: 14px 16px 0;
-  padding: 14px 16px 12px;
-  border: 1px solid var(--co-line);
-  border-radius: var(--co-radius);
-  background: var(--co-panel);
-  box-shadow: 3px 3px 0 var(--c-border-strong);
-}
-
-#co-guided-panel[hidden] {
-  display: none;
-}
-
-.co-guided-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.co-guided-kicker {
-  color: var(--c-model);
-  font-family: var(--co-font-data);
-  font-size: var(--co-size-xs);
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-
-.co-guided-heading h1 {
-  margin-top: 3px;
-  color: var(--co-copy);
-  font-size: var(--co-size-lg);
-  line-height: 1.2;
-}
-
-.co-guided-heading p {
-  max-width: 620px;
-  margin-top: 4px;
-  color: var(--co-muted);
-  font-size: var(--co-size-sm);
-  line-height: 1.45;
-}
-
-#co-expand-all {
-  flex-shrink: 0;
-  padding: 7px 9px;
-  border: 1px solid var(--co-line);
-  border-radius: 8px;
-  background: var(--co-panel-soft);
-  color: var(--co-copy);
-  font-family: var(--co-font-ui);
-  font-size: var(--co-size-xs);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-#co-expand-all:hover {
-  border-color: var(--c-info);
-}
-
-#co-progress-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 13px;
-}
-
-#co-progress-track {
-  flex: 1;
-  height: 6px;
-  overflow: hidden;
-  border-radius: 99px;
-  background: var(--co-line);
-}
-
-#co-progress-fill {
-  width: 0;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--c-model);
-  transition: width .2s ease;
-}
-
-#co-progress-label {
-  flex-shrink: 0;
-  color: var(--co-muted);
-  font-family: var(--co-font-data);
-  font-size: var(--co-size-xs);
-  white-space: nowrap;
-}
-
-#co-step-list {
-  display: flex;
-  gap: 6px;
-  margin-top: 12px;
-  overflow-x: auto;
-  padding: 2px 2px 4px;
-  scrollbar-width: thin;
-}
-
-.co-step-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  max-width: 190px;
-  padding: 6px 8px;
-  border: 1px solid var(--co-line);
-  border-radius: 8px;
-  background: var(--co-panel-soft);
-  color: var(--co-muted);
-  font-family: var(--co-font-ui);
-  font-size: var(--co-size-xs);
-  text-align: left;
-}
-
-.co-step-button:hover,
-.co-step-button:focus-visible {
-  color: var(--co-copy);
-  border-color: var(--c-info);
-}
-
-.co-step-button[data-active="true"] {
-  color: var(--co-copy);
-  border-color: var(--c-model);
-  background: var(--c-ok-bg);
-  font-weight: 700;
-}
-
-.co-step-button[data-done="true"] .co-step-number {
-  background: var(--c-ok);
-  color: var(--c-surface);
-}
-
-.co-step-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 19px;
-  height: 19px;
-  border-radius: 50%;
-  background: var(--co-line);
-  color: var(--co-copy);
-  font-family: var(--co-font-data);
-  font-size: var(--co-size-xs);
-}
-
-.co-step-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-#co-current-step {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 10px;
-  min-height: 22px;
-}
-
-#co-current-label {
-  flex-shrink: 0;
-  color: var(--c-model);
-  font-size: var(--co-size-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-}
-
-#co-current-copy {
-  color: var(--co-muted);
-  font-size: var(--co-size-sm);
-  line-height: 1.4;
-}
-
-.co-guided-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.co-guided-actions button {
-  padding: 6px 10px;
-  border: 1px solid var(--co-line);
-  border-radius: 7px;
-  background: var(--co-panel-soft);
-  color: var(--co-copy);
-  font-family: var(--co-font-ui);
-  font-size: var(--co-size-xs);
-  font-weight: 700;
-}
-
-.co-guided-actions button:hover:not(:disabled) {
-  border-color: var(--c-info);
-}
-
-.co-guided-actions button:disabled {
-  cursor: not-allowed;
-  opacity: .45;
-}
-
-body[data-view="free"] #co-guided-panel {
-  display: none;
-}
-
-body[data-view="guided"] .block-card {
-  z-index: 2;
-}
-
-body[data-view="guided"] .bk-header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 6px;
-}
-
-body[data-view="guided"] .bk-header .drag-handle { display: none; }
-body[data-view="guided"] .bk-header .order-badge { grid-area: 1 / 1; }
-body[data-view="guided"] .bk-header .bk-title {
-  grid-area: 1 / 2;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-body[data-view="guided"] .bk-header .bk-close { grid-area: 1 / 3; }
-body[data-view="guided"] .bk-header .co-card-toggle { grid-area: 1 / 4; }
-body[data-view="guided"] .bk-header .bk-badge { grid-area: 2 / 1 / 3 / 3; justify-self: start; }
-body[data-view="guided"] .bk-header .bk-status { grid-area: 2 / 3 / 3 / 5; justify-self: end; }
-
-body[data-view="guided"] .block-card[data-active="true"] {
-  outline: 2px solid var(--c-model);
-  outline-offset: 3px;
-}
-
-/* The guided view does not use the free-canvas connector layer while cards
-   occupy a left-to-right grid. The free view restores it. */
-body[data-view="guided"] #pipeline-connectors {
-  display: none;
-}
-
 /* ─── Explicit card controls and progressive disclosure ─── */
 .co-card-summary {
   display: none;
@@ -609,8 +330,7 @@ body[data-view="guided"] #pipeline-connectors {
   line-height: 1.35;
 }
 
-.block-card.collapsed .co-card-summary,
-body[data-view="guided"] .block-card .co-card-summary {
+.block-card.collapsed .co-card-summary {
   display: block;
 }
 
@@ -687,13 +407,6 @@ body[data-view="guided"] .block-card .co-card-summary {
 }
 
 #log-header { flex-shrink: 0; }
-#co-log-toggle-open {
-  background: var(--c-chrome-2);
-  color: var(--c-chrome-text);
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: var(--co-size-xs);
-}
 #log-entries { min-height: 0; }
 #co-log-resize {
   position: absolute;
@@ -704,63 +417,36 @@ body[data-view="guided"] .block-card .co-card-summary {
   touch-action: none;
   border-left: 3px solid var(--c-chrome-3);
 }
-#co-log-resize:hover, #co-log-resize:focus-visible {
+#co-log-resize:hover,
+#co-log-resize:focus-visible {
   border-color: var(--c-logo-accent);
   background: var(--c-logo-accent-a35);
 }
-body[data-log-open="false"] #co-log-resize { display: none; }
 body[data-terminal-resizing="true"] { user-select: none; }
 
-#co-log-summary-row {
+#log-header {
   display: flex;
-  align-items: center;
-  justify-content: stretch;
-  min-height: 56px;
-  padding: 8px;
-  color: var(--c-log-muted);
 }
 
-body[data-log-open="true"] #co-log-summary-row {
+#log-entries {
+  display: flex;
+}
+
+/* This shell places cards freely; the connector lines only add noise. */
+body.co-shell #pipeline-connectors {
   display: none;
 }
 
-#co-log-summary-row #co-log-toggle {
-  justify-content: space-between;
-  width: 100%;
-  min-height: 42px;
+/* ─── Prepare-data note ─── */
+.prep-split-note {
+  margin: 2px 0 8px;
   padding: 8px 10px;
-  color: var(--c-chrome-text);
-  font-family: var(--co-font-data);
-  font-size: var(--co-size-xs);
-  writing-mode: horizontal-tb;
-  text-orientation: mixed;
-}
-
-#co-log-error-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 17px;
-  height: 17px;
-  margin-left: 5px;
-  border-radius: 99px;
-  background: var(--c-danger);
-  color: var(--c-surface);
-  font-family: var(--co-font-data);
-  font-size: var(--co-size-xs);
-}
-
-body[data-log-open="false"] #log-header,
-body[data-log-open="false"] #log-entries {
-  display: none;
-}
-
-body[data-log-open="true"] #log-header {
-  display: flex;
-}
-
-body[data-log-open="true"] #log-entries {
-  display: flex;
+  border-left: 3px solid var(--c-eval);
+  border-radius: 6px;
+  background: var(--co-panel-soft);
+  color: var(--co-copy);
+  font-size: var(--co-size-sm);
+  line-height: 1.45;
 }
 
 /* ─── Card handles and reset action ─── */
@@ -795,35 +481,12 @@ body.co-shell .block-card:not(.collapsed) > .bk-body { padding-bottom: 28px; }
 body[data-library-open="false"] #co-reset-state { display: none; }
 #log-entries > .log-line { flex-shrink: 0; }
 
-#log-header #co-log-toggle {
-  width: auto;
-  padding: 4px 6px;
-  color: var(--c-log-muted);
-  font-family: var(--co-font-data);
-  font-size: var(--co-size-xs);
-}
-
-#co-log-latest {
-  overflow: hidden;
-  max-width: 220px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* ─── Mobile ─── */
 @media (max-width: 768px) {
   body.co-shell { --log-w: 100%; }
 
   #topbar.co-topbar {
     padding: 8px 10px;
-  }
-
-  #co-topbar-context {
-    order: 3;
-    flex-basis: 100%;
-    border-left: 0;
-    border-top: 1px solid var(--c-chrome-3);
-    padding: 5px 0 0;
   }
 
   #topbar.co-topbar #topbar-actions {
@@ -852,42 +515,11 @@ body[data-library-open="false"] #co-reset-state { display: none; }
     overflow: visible;
   }
 
-  #co-guided-panel {
-    position: relative;
-    margin: 10px 10px 0;
-    padding: 12px;
-  }
-
-  body[data-view="guided"] #co-guided-panel {
-    margin-bottom: 22px;
-  }
-
-  .co-guided-heading {
-    display: block;
-  }
-
-  #co-expand-all {
-    margin-top: 9px;
-  }
-
-  #co-current-step {
-    display: block;
-  }
-
-  #co-current-copy {
-    display: block;
-    margin-top: 3px;
-  }
-
-  body[data-view="guided"] .block-card {
-    max-width: calc(100% - 32px);
-  }
-
   #log-panel.co-log-panel {
     width: 100%;
   }
 
-  body[data-log-open="true"] #log-panel.co-log-panel { height: var(--co-terminal-height); }
+  #log-panel.co-log-panel { height: var(--co-terminal-height); }
   #co-log-resize {
     inset: 0 0 auto 0;
     width: 100%;
@@ -896,34 +528,11 @@ body[data-library-open="false"] #co-reset-state { display: none; }
     border-left: 0;
     border-top: 3px solid var(--c-chrome-3);
   }
-
-  body[data-log-open="false"] #log-panel.co-log-panel {
-    height: 56px;
-  }
-
-  #co-log-summary-row {
-    justify-content: stretch;
-    padding: 5px 10px;
-  }
-
-  #co-log-summary-row #co-log-toggle {
-    justify-content: space-between;
-    width: 100%;
-    min-height: 42px;
-    padding: 8px 10px;
-    writing-mode: horizontal-tb;
-    text-orientation: mixed;
-  }
-
-  #co-log-latest {
-    max-width: calc(100vw - 60px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   #sidebar.co-sidebar,
-  #log-panel.co-log-panel,
-  #co-progress-fill {
+#log-panel.co-log-panel {
     transition: none;
   }
 }

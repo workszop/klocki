@@ -1,65 +1,23 @@
-/* ─── Guided workspace constants ─── */
+/* ─── Workspace shell constants ─── */
 const CO_STRINGS = {
   pl: {
     reset_state: 'Resetuj stan aplikacji', resize_card: 'Zmień rozmiar: przeciągnij lub użyj strzałek. Home lub dwuklik przywraca rozmiar.',
-    context_guided: 'Widok prowadzony', context_free: 'Canvas swobodny',
     run_pipeline: 'Uruchom pipeline', guide_button: 'Pomoc', tools: 'Narzędzia', tidy: 'Uporządkuj bloki', clear: 'Wyczyść tablicę',
     library_title: 'Biblioteka bloków', library_lead: 'Wybierz blok, aby dodać go do tablicy. Grupowanie pokazuje rolę każdego kroku.',
     group_build: 'Buduj i trenuj', group_test: 'Testuj i przewiduj', group_understand: 'Zrozum model', group_share: 'Zapisz i udostępnij',
-    dataset_title: 'Dataset i pliki', guided_kicker: 'Widok prowadzony', guided_title: 'Zbuduj model krok po kroku',
-    guided_intro: 'Zobacz pełną ścieżkę, skup się na jednym kroku i rozwijaj szczegóły wtedy, gdy są potrzebne.',
-    expand_all: 'Rozwiń szczegóły', collapse_all: 'Zwiń szczegóły', current_step: 'Bieżący krok',
-    previous_step: 'Poprzedni', next_step: 'Następny krok', first_step: 'To początek ścieżki', last_step: 'To ostatni krok',
-    log_summary_ready: 'Ostatni status', log_close: 'Zwiń', log_open: 'Otwórz log', log_error_prefix: 'Błąd: ',
+    dataset_title: 'Dataset i pliki',
     details_open: 'Ukryj szczegóły', details_closed: 'Pokaż szczegóły', settings: 'Ustawienia', already_added: 'Blok już dodany', terminal_resize: 'Zmień rozmiar terminala: przeciągnij krawędź lub użyj strzałek',
-    status_done: 'gotowe', status_idle: 'oczekuje', status_running: 'działa', status_error: 'błąd',
-    step_camera: 'Zbierz dane', step_labels: 'Nazwij klasy', step_prepare: 'Przygotuj dane', step_base: 'Wczytaj model bazowy',
-    step_train: 'Wytrenuj model', step_evaluate: 'Sprawdź na nowych danych', step_save: 'Zapisz model', step_export: 'Udostępnij aplikację',
-    step_upload: 'Wczytaj model', step_infer_camera: 'Uruchom kamerę predykcji', step_results: 'Zobacz wyniki', step_zero: 'Sprawdź model bazowy',
-    step_explain: 'Wyjaśnij decyzję', step_explorer: 'Poznaj architekturę',
-    desc_camera: 'Zbieramy przykłady, na których model będzie się uczył.', desc_labels: 'Etykiety mówią modelowi, do której klasy należy każdy obraz.',
-    desc_prepare: 'Obrazy są ujednolicane, a augmentacja tworzy bezpieczną różnorodność.', desc_base: 'Model bazowy dostarcza cechy wyuczone na dużym zbiorze obrazów.',
-    desc_train: 'Trening dopasowuje ostatnią część modelu do Twoich klas.', desc_evaluate: 'Test na niewidzianych 20% danych pokazuje, czy model uogólnia.',
-    desc_save: 'Zachowaj wytrenowane wagi w przeglądarce lub pobierz pliki.', desc_export: 'Eksport tworzy samodzielną aplikację z modelem w środku.',
-    desc_upload: 'Wczytaj wcześniej zapisane wagi, aby wrócić do pracy.', desc_infer_camera: 'Kamera dostarcza klatki do bieżącej predykcji.',
-    desc_results: 'Paski pewności pokazują, jak rozkładają się przewidywania klas.', desc_zero: 'Porównaj predykcję modelu bazowego przed treningiem.',
-    desc_explain: 'Zobacz, które fragmenty obrazu wpłynęły na decyzję.', desc_explorer: 'Przejdź przez architekturę warstwa po warstwie.'
+    status_done: 'gotowe', status_idle: 'oczekuje', status_running: 'działa', status_error: 'błąd'
   },
   en: {
     reset_state: 'Reset app state', resize_card: 'Resize: drag or use arrow keys. Home or double-click restores the default size.',
-    context_guided: 'Guided view', context_free: 'Free canvas',
     run_pipeline: 'Run pipeline', guide_button: 'Help', tools: 'Tools', tidy: 'Tidy blocks', clear: 'Clear canvas',
     library_title: 'Block library', library_lead: 'Choose a block to add it to the canvas. Groups show the role of each step.',
     group_build: 'Build and train', group_test: 'Test and predict', group_understand: 'Understand the model', group_share: 'Save and share',
-    dataset_title: 'Dataset and files', guided_kicker: 'Guided view', guided_title: 'Build a model step by step',
-    guided_intro: 'See the full path, focus on one step, and reveal details only when you need them.',
-    expand_all: 'Expand details', collapse_all: 'Collapse details', current_step: 'Current step',
-    previous_step: 'Previous', next_step: 'Next step', first_step: 'This is the first step', last_step: 'This is the last step',
-    log_summary_ready: 'Latest status', log_close: 'Collapse', log_open: 'Open log', log_error_prefix: 'Error: ',
+    dataset_title: 'Dataset and files',
     details_open: 'Hide details', details_closed: 'Show details', settings: 'Settings', already_added: 'Block already added', terminal_resize: 'Resize terminal: drag the edge or use arrow keys',
-    status_done: 'ready', status_idle: 'waiting', status_running: 'running', status_error: 'error',
-    step_camera: 'Collect data', step_labels: 'Name classes', step_prepare: 'Prepare data', step_base: 'Load base model',
-    step_train: 'Train the model', step_evaluate: 'Test on new data', step_save: 'Save the model', step_export: 'Share the app',
-    step_upload: 'Load a model', step_infer_camera: 'Start prediction camera', step_results: 'See results', step_zero: 'Check the base model',
-    step_explain: 'Explain a decision', step_explorer: 'Explore the architecture',
-    desc_camera: 'Collect examples for the model to learn from.', desc_labels: 'Labels tell the model which class each image belongs to.',
-    desc_prepare: 'Images are standardised and augmentation adds safe variety.', desc_base: 'The base model provides features learned from a large image collection.',
-    desc_train: 'Training adapts the final part of the model to your classes.', desc_evaluate: 'A hold-out test on unseen 20% shows whether the model generalises.',
-    desc_save: 'Keep the trained weights in the browser or download the files.', desc_export: 'Export creates a standalone app with the model inside.',
-    desc_upload: 'Load previously saved weights to continue working.', desc_infer_camera: 'The camera supplies frames for live prediction.',
-    desc_results: 'Confidence bars show how class predictions are distributed.', desc_zero: 'Compare the base model before training.',
-    desc_explain: 'See which image regions influenced the decision.', desc_explorer: 'Inspect the architecture layer by layer.'
+    status_done: 'ready', status_idle: 'waiting', status_running: 'running', status_error: 'error'
   }
-};
-
-const CO_STEP_META = {
-  'camera-input': ['step_camera', 'desc_camera'], 'label-classes': ['step_labels', 'desc_labels'],
-  'prepare-data': ['step_prepare', 'desc_prepare'], 'pretrained-model': ['step_base', 'desc_base'],
-  'train-model': ['step_train', 'desc_train'], 'evaluate': ['step_evaluate', 'desc_evaluate'],
-  'save-model': ['step_save', 'desc_save'], 'deploy-export': ['step_export', 'desc_export'],
-  'upload-model': ['step_upload', 'desc_upload'], 'camera-infer': ['step_infer_camera', 'desc_infer_camera'],
-  'show-results': ['step_results', 'desc_results'], 'zero-shot': ['step_zero', 'desc_zero'],
-  'explain-ai': ['step_explain', 'desc_explain'], 'model-explorer': ['step_explorer', 'desc_explorer']
 };
 
 const CO_SETTINGS = {
@@ -75,13 +33,10 @@ const CO_SETTINGS = {
 
 /* ─── Alternative shell state ─── */
 const CO_STATE = {
-  view: 'free', libraryOpen: true, logOpen: true, activeId: null,
+  libraryOpen: true,
   groupOpen: { build: true, test: false, understand: false, share: false },
-  freePositions: new Map(), freeWidths: new Map(), freeCollapse: new Map(), freeSettings: new Map(),
-  manualCollapse: new Map(),
   cardSizes: {},
-  terminalWidth: 320, terminalHeight: 240, terminalDrag: null,
-  logErrors: 0, latestLog: ''
+  terminalWidth: 320, terminalHeight: 240, terminalDrag: null
 };
 
 const CO = window.CO = {
@@ -89,23 +44,17 @@ const CO = window.CO = {
   probe() {
     const cards = Array.from(document.querySelectorAll('.block-card'));
     const palette = Array.from(document.querySelectorAll('.palette-block')).map(el => el.dataset.type);
-    const active = cards.filter(card => card.dataset.active === 'true');
     const result = {
-      ok: document.body.dataset.view === 'guided' || document.body.dataset.view === 'free',
-      view: document.body.dataset.view,
+      ok: true,
       libraryOpen: document.body.dataset.libraryOpen === 'true',
-      logOpen: document.body.dataset.logOpen === 'true',
       paletteTypes: palette,
       paletteCount: palette.length,
       blockCount: cards.length,
-      activeCardCount: active.length,
-      activeCardId: CO_STATE.activeId,
-      allCardsHaveActiveContract: cards.every(card => card.dataset.active === 'true' || card.dataset.active === 'false'),
       logEntryCount: document.querySelectorAll('#log-entries .log-line').length,
-      errorCount: CO_STATE.logErrors
+      errorCount: document.querySelectorAll('#log-entries .log-line.ll-error').length
     };
     result.uniqueBlockTypes = new Set(cards.map(card => card.dataset.coType)).size === cards.length;
-    result.ok = result.ok && result.paletteCount === 14 && result.allCardsHaveActiveContract && result.uniqueBlockTypes;
+    result.ok = result.paletteCount === 14 && result.uniqueBlockTypes;
     return result;
   }
 };
@@ -212,34 +161,14 @@ function coRestoreValues(snapshot) {
   });
 }
 
-function coFreePositionSnapshot(force) {
-  document.querySelectorAll('.block-card').forEach(card => {
-    if (force || !CO_STATE.freePositions.has(card.id)) {
-      CO_STATE.freePositions.set(card.id, { left: card.style.left, top: card.style.top });
-      CO_STATE.freeWidths.set(card.id, card.style.width || '');
-      CO_STATE.freeCollapse.set(card.id, card.classList.contains('collapsed'));
-    }
-  });
-}
-
 /* The card's own left/top is the source of truth: app.js writes it on drag
    end and tidy. Restoring a snapshot here would snap a freshly dragged card
    back to where it was before the drag. */
 function coPositionCardsFree() {
   document.querySelectorAll('.block-card').forEach(card => {
-    card.style.width = CO_STATE.freeWidths.get(card.id) || '';
     const size = coCardSize(card);
-    if (size) card.style.width = size.width + 'px';
-    const wasCollapsed = CO_STATE.freeCollapse.get(card.id);
-    if (wasCollapsed !== undefined) card.classList.toggle('collapsed', wasCollapsed);
+    card.style.width = size ? size.width + 'px' : '';
   });
-}
-
-function coSaveNewFreePosition(card) {
-  if (!card || CO_STATE.freePositions.has(card.id)) return;
-  CO_STATE.freePositions.set(card.id, { left: card.style.left, top: card.style.top });
-  CO_STATE.freeWidths.set(card.id, card.style.width || '');
-  CO_STATE.freeCollapse.set(card.id, card.classList.contains('collapsed'));
 }
 
 function coSettingsValue(card, idPart) {
@@ -331,11 +260,7 @@ function coEnsureCardControls(card, type) {
     toggle.addEventListener('touchstart', event => event.stopPropagation(), { passive: true });
     toggle.addEventListener('click', event => {
       event.stopPropagation();
-      const wasCollapsed = card.classList.contains('collapsed');
       if (typeof window.toggleCollapse === 'function') window.toggleCollapse(card.id);
-      const isCollapsed = !wasCollapsed;
-      CO_STATE.manualCollapse.set(card.id, isCollapsed);
-      if (!isCollapsed) CO_STATE.activeId = card.id;
       coSyncCards();
     });
     header.appendChild(toggle);
@@ -404,7 +329,6 @@ function coEnsureCardResize(card) {
     };
     const reset = () => {
       delete CO_STATE.cardSizes[card.dataset.coType];
-      CO_STATE.freeWidths.delete(card.id);
       coSaveCardSizes();
       coSyncCards();
     };
@@ -466,115 +390,6 @@ function coUpdateCardControl(card) {
   }
 }
 
-function coSetActive(id, focusCard) {
-  CO_STATE.activeId = id || null;
-  coSyncCards();
-  if (focusCard) {
-    const card = document.getElementById(id);
-    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-}
-
-function coCurrentIndex(records) {
-  if (!records.length) return -1;
-  const found = records.findIndex(record => record.id === CO_STATE.activeId);
-  return found >= 0 ? found : 0;
-}
-
-function coLayoutGuided(records) {
-  if (CO_STATE.view !== 'guided') return;
-  const canvas = document.getElementById('canvas');
-  if (!canvas) return;
-  const panel = document.getElementById('co-guided-panel');
-  const startY = (panel ? panel.offsetTop + panel.offsetHeight : 0) + 42;
-  const gutter = window.innerWidth <= 768 ? 16 : 24;
-  const gap = 16;
-  const availableWidth = Math.max(1, canvas.clientWidth - gutter * 2);
-  /* Fixed default width: cards pack left-to-right and wrap, they never
-     stretch to fill the row. Phones get one full-width column. */
-  const cardWidth = window.innerWidth <= 768 ? availableWidth : Math.min(coCardDefaults().width, availableWidth);
-  let y = startY;
-  let rowHeight = 0;
-  let x = 0, row = 1, column = 0, maxColumns = 0;
-  records.forEach((record, index) => {
-    const card = record.card || document.getElementById(record.id);
-    if (!card) return;
-    coSaveNewFreePosition(card);
-    const size = coCardSize(card);
-    const width = size ? size.width : cardWidth;
-    if (column > 0 && x + width > availableWidth + 0.5) {
-      y += rowHeight + 22;
-      rowHeight = 0;
-      x = 0; column = 0; row++;
-    }
-    card.dataset.gridRow = String(row);
-    card.dataset.gridColumn = String(column + 1);
-    card.style.left = (gutter + x) + 'px';
-    card.style.top = y + 'px';
-    card.style.width = width + 'px';
-    x += width + gap;
-    column++;
-    maxColumns = Math.max(maxColumns, column);
-    /* Cards open unfolded; only an explicit learner choice collapses one. */
-    card.classList.toggle('collapsed', CO_STATE.manualCollapse.get(record.id) === true);
-    coUpdateCardControl(card);
-    rowHeight = Math.max(rowHeight, card.offsetHeight);
-  });
-  const contentHeight = Math.ceil(y + rowHeight + 28);
-  canvas.dataset.guidedColumns = String(maxColumns);
-  canvas.dataset.guidedRows = String(row);
-  const inner = document.getElementById('canvas-inner');
-  if (inner) {
-    /* Absolute cards do not reliably contribute to a scroll container's
-       scrollHeight. A transparent spacer does, without making the flex
-       canvas itself taller than the viewport on desktop. */
-    inner.style.inset = '0 auto auto 0';
-    inner.style.width = '100%';
-    inner.style.height = contentHeight + 'px';
-  }
-  if (canvas) canvas.style.minHeight = window.innerWidth <= 768 ? contentHeight + 'px' : '0px';
-}
-
-function coRenderStepList(records) {
-  const list = document.getElementById('co-step-list');
-  if (!list) return;
-  const activeIndex = coCurrentIndex(records);
-  list.innerHTML = '';
-  records.forEach((record, index) => {
-    const type = coCardType(record);
-    const meta = CO_STEP_META[type] || ['step_' + type, 'desc_' + type];
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'co-step-button';
-    button.dataset.coStep = String(index);
-    button.dataset.active = String(index === activeIndex);
-    button.dataset.done = String(coCardStatus(record) === 'done');
-    button.setAttribute('role', 'listitem');
-    button.innerHTML = '<span class="co-step-number">' + (index + 1) + '</span><span class="co-step-title"></span>';
-    button.querySelector('.co-step-title').textContent = coText(meta[0]);
-    button.addEventListener('click', () => coSetActive(record.id, true));
-    list.appendChild(button);
-  });
-  const progress = document.getElementById('co-progress-fill');
-  const label = document.getElementById('co-progress-label');
-  const doneCount = records.filter(record => coCardStatus(record) === 'done').length;
-  const pct = records.length ? Math.round((doneCount / records.length) * 100) : 0;
-  if (progress) progress.style.width = pct + '%';
-  if (label) label.textContent = records.length ? doneCount + ' / ' + records.length : '0 / 0';
-  const track = document.getElementById('co-progress-track');
-  if (track) track.setAttribute('aria-valuenow', String(pct));
-  const current = records[activeIndex];
-  const copy = document.getElementById('co-current-copy');
-  if (copy) {
-    const metaCurrent = current && (CO_STEP_META[coCardType(current)] || []);
-    copy.textContent = current && metaCurrent.length ? coText(metaCurrent[1]) : (coLang() === 'pl' ? 'Dodaj blok, aby rozpocząć.' : 'Add a block to begin.');
-  }
-  const prev = document.getElementById('co-guided-prev');
-  const next = document.getElementById('co-guided-next');
-  if (prev) prev.disabled = activeIndex <= 0;
-  if (next) next.disabled = activeIndex < 0 || activeIndex >= records.length - 1;
-}
-
 function coUpdateOrderBadges(records) {
   const counters = [0, 0];
   records.forEach(record => {
@@ -604,66 +419,14 @@ function coSyncCards() {
     const card = record.card || document.getElementById(record.id);
     if (!card) return;
     const type = coCardType(record);
-    coSaveNewFreePosition(card);
     coEnsureCardControls(card, type);
-  });
-  if (records.length && !CO_STATE.activeId) CO_STATE.activeId = records[0].id;
-  const activeIndex = coCurrentIndex(records);
-  records.forEach((record, index) => {
-    const card = record.card || document.getElementById(record.id);
-    if (!card) return;
-    card.dataset.active = String(index === activeIndex);
     coUpdateCardControl(card);
   });
-  if (CO_STATE.view === 'guided') coLayoutGuided(records);
-  else coPositionCardsFree();
-  coUpdateToggleAllButton(records);
+  coPositionCardsFree();
   /* app.js numbers badges by its historical rank (save before evaluate).
-     The alternative lesson presents the hold-out check first, so keep the
-     visible step numbers aligned with the guided lane. */
+     This shell presents the hold-out check first, so renumber to match. */
   coUpdateOrderBadges(records);
-  coRenderStepList(records);
-  CO_STATE.view = document.body.dataset.view || CO_STATE.view;
   CO_STATE.libraryOpen = document.body.dataset.libraryOpen === 'true';
-  CO_STATE.logOpen = document.body.dataset.logOpen === 'true';
-}
-
-function coSetView(view) {
-  const nextView = view === 'free' ? 'free' : 'guided';
-  if (nextView === CO_STATE.view) return;
-  if (nextView === 'guided') {
-    /* Capture the live free-canvas coordinates, not only the initial
-       snapshot. A user may have moved a card by dragging or an integration
-       may have updated b.x/b.y while the free view was open. */
-    coFreePositionSnapshot(true);
-    document.body.dataset.view = 'guided';
-    CO_STATE.view = 'guided';
-    coSyncCards();
-  } else {
-    /* Guided mode temporarily changes the visible collapse classes. Do
-       not write those presentation classes back into the free-canvas
-       snapshot: returning to free must restore the learner's own state. */
-    document.body.dataset.view = 'free';
-    CO_STATE.view = 'free';
-    const canvas = document.getElementById('canvas');
-    if (canvas) canvas.style.minHeight = window.innerWidth <= 768 ? '' : '0px';
-    const inner = document.getElementById('canvas-inner');
-    if (inner) {
-      inner.style.inset = '';
-      inner.style.width = '';
-      inner.style.height = '';
-    }
-    coPositionCardsFree();
-    coSyncCards();
-  }
-  const button = document.getElementById('co-view-toggle');
-  if (button) {
-    button.dataset.view = nextView;
-    button.setAttribute('aria-pressed', String(nextView === 'free'));
-    button.textContent = coLang() === 'pl' ? (nextView === 'guided' ? 'Canvas swobodny' : 'Widok prowadzony') : (nextView === 'guided' ? 'Free canvas' : 'Guided view');
-  }
-  const context = document.getElementById('co-topbar-context');
-  if (context) context.textContent = coText(nextView === 'guided' ? 'context_guided' : 'context_free');
 }
 
 function coTerminalLimits() {
@@ -757,25 +520,6 @@ function coToggleLibrary() {
   coScheduleSync();
 }
 
-function coToggleLog(open) {
-  const next = open === undefined ? document.body.dataset.logOpen !== 'true' : !!open;
-  document.body.dataset.logOpen = String(next);
-  CO_STATE.logOpen = next;
-  const summaryButton = document.getElementById('co-log-toggle');
-  const openButton = document.getElementById('co-log-toggle-open');
-  if (summaryButton) {
-    summaryButton.setAttribute('aria-expanded', String(next));
-    summaryButton.setAttribute('aria-label', next ? coText('log_close') : coText('log_open'));
-  }
-  if (openButton) openButton.setAttribute('aria-label', coText('log_close'));
-  if (next) {
-    const entries = document.getElementById('log-entries');
-    if (entries) entries.scrollTop = entries.scrollHeight;
-  }
-  coApplyTerminalSize();
-  coScheduleSync();
-}
-
 function coToggleGroup(group) {
   const section = document.querySelector('.co-library-group[data-group="' + group + '"]');
   if (!section) return;
@@ -784,30 +528,6 @@ function coToggleGroup(group) {
   CO_STATE.groupOpen[group] = open;
   const button = section.querySelector('.co-library-group-toggle');
   if (button) button.setAttribute('aria-expanded', String(open));
-}
-
-/* The button reflects the cards: it offers to collapse while any card is
-   open and to expand once every card is folded. */
-function coUpdateToggleAllButton(records) {
-  const button = document.getElementById('co-expand-all');
-  if (!button) return;
-  const anyOpen = records.some(record => !(record.card || document.getElementById(record.id))?.classList.contains('collapsed'));
-  button.setAttribute('aria-pressed', String(!anyOpen));
-  button.textContent = coText(anyOpen ? 'collapse_all' : 'expand_all');
-}
-
-function coToggleAll() {
-  const records = coRecords();
-  const anyOpen = records.some(record => !(record.card || document.getElementById(record.id))?.classList.contains('collapsed'));
-  records.forEach(record => CO_STATE.manualCollapse.set(record.id, anyOpen));
-  coSyncCards();
-}
-
-function coMoveActive(delta) {
-  const records = coRecords();
-  const index = coCurrentIndex(records);
-  const next = Math.max(0, Math.min(records.length - 1, index + delta));
-  if (records[next]) coSetActive(records[next].id, true);
 }
 
 let coSyncPending = false;
@@ -825,8 +545,7 @@ function coHandleResize() {
   const isMobile = window.innerWidth <= 768;
   if (coWasMobile && !isMobile) {
     /* A mobile canvas has its own scroll position. Returning to the wide
-       layout should show the guided header again rather than a blank
-       middle section. */
+       layout should start at the top rather than a blank middle section. */
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
     const canvas = document.getElementById('canvas');
@@ -841,27 +560,6 @@ function coHandleResize() {
   coScheduleSync();
 }
 
-function coUpdateLogSummary() {
-  const entries = Array.from(document.querySelectorAll('#log-entries .log-line'));
-  const latestLine = entries.length ? entries[entries.length - 1] : null;
-  const latestText = latestLine ? latestLine.textContent.trim() : coText('log_summary_ready');
-  const latestErrorLine = [...entries].reverse().find(el => el.classList.contains('ll-error'));
-  const latestErrorText = latestErrorLine ? latestErrorLine.textContent.trim() : '';
-  const latest = latestErrorText && latestErrorLine !== latestLine
-    ? coText('log_error_prefix') + latestErrorText + ' · ' + latestText
-    : latestText;
-  const errors = entries.filter(el => el.classList.contains('ll-error')).length;
-  CO_STATE.latestLog = latest;
-  CO_STATE.logErrors = errors;
-  const latestEl = document.getElementById('co-log-latest');
-  const errorEl = document.getElementById('co-log-error-count');
-  if (latestEl) latestEl.textContent = latest;
-  if (errorEl) {
-    errorEl.textContent = String(errors);
-    errorEl.setAttribute('aria-label', String(errors) + ' ' + (coLang() === 'pl' ? 'błędów' : 'errors'));
-  }
-}
-
 function coOpenGuide() {
   if (typeof CO_NATIVE_SHOW_GUIDE === 'function') CO_NATIVE_SHOW_GUIDE();
 }
@@ -871,7 +569,6 @@ function coQuickStartTraining() {
   const present = new Set(coRecords().map(record => coCardType(record)));
   types.forEach((type, index) => { if (!present.has(type)) window.placeBlock(type, 16 + index * 296, 40); });
   try { log('step', t('log_qs_train')); } catch (_) { /* app may still be loading */ }
-  CO_STATE.activeId = null;
   coSyncCards();
 }
 
@@ -880,7 +577,6 @@ function coQuickStartInference() {
   const present = new Set(coRecords().map(record => coCardType(record)));
   types.forEach((type, index) => { if (!present.has(type)) window.placeBlock(type, 16 + index * 296, 40); });
   try { log('step', t('log_qs_infer')); } catch (_) { /* app may still be loading */ }
-  CO_STATE.activeId = null;
   coSyncCards();
 }
 
@@ -889,10 +585,7 @@ const CO_NATIVE_PLACE_BLOCK = window.placeBlock;
 const CO_NATIVE_REMOVE_BLOCK = window.removeBlock;
 const CO_NATIVE_CLEAR_CANVAS = window.clearCanvas;
 const CO_NATIVE_TOGGLE_COLLAPSE = window.toggleCollapse;
-const CO_NATIVE_CARD_DRAG_START = window.cardDragStart;
 const CO_NATIVE_APPLY_LANG = window.applyLang;
-const CO_NATIVE_LOG = window.log;
-const CO_NATIVE_CLEAR_LOG = window.clearLog;
 const CO_NATIVE_SET_STATUS = window.setBlockStatus;
 const CO_NATIVE_TIDY = window.tidyUpCanvas;
 const CO_NATIVE_SHOW_GUIDE = window.showGuide;
@@ -967,10 +660,6 @@ if (typeof CO_NATIVE_PLACE_BLOCK === 'function') {
         const record = placedBlocks.find(item => item.id === id);
         if (record) { record.x = slot.x; record.y = slot.y; }
       }
-      /* app.js already synced once (via setBlockStatus) with the pre-slot
-         coordinates, so overwrite the snapshot rather than keep the first. */
-      CO_STATE.freePositions.set(id, { left: card.style.left, top: card.style.top });
-      coSaveNewFreePosition(card);
     }
     coSyncCards();
     return id;
@@ -980,11 +669,6 @@ if (typeof CO_NATIVE_PLACE_BLOCK === 'function') {
 if (typeof CO_NATIVE_REMOVE_BLOCK === 'function') {
   window.removeBlock = function (id) {
     const result = CO_NATIVE_REMOVE_BLOCK(id);
-    if (CO_STATE.activeId === id) CO_STATE.activeId = null;
-    CO_STATE.freePositions.delete(id);
-    CO_STATE.freeWidths.delete(id);
-    CO_STATE.freeCollapse.delete(id);
-    CO_STATE.manualCollapse.delete(id);
     coSyncCards();
     return result;
   };
@@ -993,19 +677,6 @@ if (typeof CO_NATIVE_REMOVE_BLOCK === 'function') {
 if (typeof CO_NATIVE_CLEAR_CANVAS === 'function') {
   window.clearCanvas = async function () {
     const result = await CO_NATIVE_CLEAR_CANVAS();
-    /* uiConfirm returns without mutating placedBlocks when Cancel is
-       chosen. Only discard shell snapshots after the native canvas is
-       genuinely empty; a cancelled clear must be a no-op for view state. */
-    const canvasEmpty = Array.isArray(placedBlocks)
-      ? placedBlocks.length === 0
-      : document.querySelectorAll('.block-card').length === 0;
-    if (canvasEmpty) {
-      CO_STATE.activeId = null;
-      CO_STATE.freePositions.clear();
-      CO_STATE.freeWidths.clear();
-      CO_STATE.freeCollapse.clear();
-      CO_STATE.manualCollapse.clear();
-    }
     coSyncCards();
     return result;
   };
@@ -1015,21 +686,8 @@ if (typeof CO_NATIVE_TOGGLE_COLLAPSE === 'function') {
   window.toggleCollapse = function (id) {
     const result = CO_NATIVE_TOGGLE_COLLAPSE(id);
     const card = document.getElementById(id);
-    if (card) {
-      if (CO_STATE.view === 'free') CO_STATE.freeCollapse.set(id, card.classList.contains('collapsed'));
-      coUpdateCardControl(card);
-    }
+    if (card) coUpdateCardControl(card);
     return result;
-  };
-}
-
-if (typeof CO_NATIVE_CARD_DRAG_START === 'function') {
-  window.cardDragStart = function (event, id) {
-    if (CO_STATE.view === 'guided') {
-      event.preventDefault();
-      return;
-    }
-    return CO_NATIVE_CARD_DRAG_START(event, id);
   };
 }
 
@@ -1040,7 +698,6 @@ if (typeof CO_NATIVE_APPLY_LANG === 'function') {
     /* app.js rebuilds idle bodies. Recreate this shell's settings
        disclosures before restoring their open state and field values. */
     coSyncCards();
-    snapshot.cards.forEach(item => CO_STATE.manualCollapse.set(item.id, item.collapsed));
     coRestoreValues(snapshot);
     coApplyLanguage();
     window.PREDICTION_UI?.refreshAll();
@@ -1050,30 +707,11 @@ if (typeof CO_NATIVE_APPLY_LANG === 'function') {
   };
 }
 
-if (typeof CO_NATIVE_LOG === 'function') {
-  window.log = function (type, message) {
-    const result = CO_NATIVE_LOG(type, message);
-    coUpdateLogSummary();
-    return result;
-  };
-}
-
-if (typeof CO_NATIVE_CLEAR_LOG === 'function') {
-  window.clearLog = function () {
-    const result = CO_NATIVE_CLEAR_LOG();
-    coUpdateLogSummary();
-    return result;
-  };
-}
-
 if (typeof CO_NATIVE_SET_STATUS === 'function') {
   window.setBlockStatus = function (card, status) {
-    if (card && (status === 'running' || status === 'error')) {
-      CO_STATE.activeId = card.id;
-      /* A failure or an in-flight step must remain visible even when the
-         learner previously collapsed that card manually. */
-      CO_STATE.manualCollapse.set(card.id, false);
-    }
+    /* A failure or an in-flight step must remain visible even when the
+       learner previously collapsed that card. */
+    if (card && (status === 'running' || status === 'error')) card.classList.remove('collapsed');
     const result = CO_NATIVE_SET_STATUS(card, status);
     coSyncCards();
     return result;
@@ -1091,12 +729,6 @@ if (typeof CO_NATIVE_UPDATE_ORDER === 'function') {
 if (typeof CO_NATIVE_TIDY === 'function') {
   window.tidyUpCanvas = function () {
     const result = CO_NATIVE_TIDY();
-    if (CO_STATE.view === 'free') {
-      coFreePositionSnapshot();
-      document.querySelectorAll('.block-card').forEach(card => {
-        CO_STATE.freePositions.set(card.id, { left: card.style.left, top: card.style.top });
-      });
-    }
     coSyncCards();
     return result;
   };
@@ -1126,10 +758,8 @@ function coApplyLanguage() {
   document.getElementById('sidebar')?.setAttribute('aria-label', coLang() === 'pl' ? 'Biblioteka bloków' : 'Block library');
   document.getElementById('canvas')?.setAttribute('aria-label', coLang() === 'pl' ? 'Obszar roboczy' : 'Workspace');
   document.getElementById('flowbar')?.setAttribute('aria-label', coLang() === 'pl' ? 'Pipeline' : 'Pipeline');
-  document.getElementById('co-step-list')?.setAttribute('aria-label', coLang() === 'pl' ? 'Kroki pipeline' : 'Pipeline steps');
   document.getElementById('log-panel')?.setAttribute('aria-label', coLang() === 'pl' ? 'Dziennik pipeline' : 'Pipeline log');
   document.title = 'KlockiAI';
-  coUpdateLogSummary();
   document.querySelectorAll('.block-card').forEach(coUpdateCardControl);
   coApplyTerminalSize();
 }
@@ -1144,11 +774,6 @@ function coInitialise() {
      so the alternative shell never changes the page's normal API after
      boot. */
   if (CO_STORAGE_PROTO.getItem === CO_STORAGE_WRAPPED_GET) CO_STORAGE_PROTO.getItem = CO_NATIVE_STORAGE_GET;
-  /* Single mode: the free canvas with the terminal always visible. */
-  document.body.dataset.view = 'free';
-  CO_STATE.view = 'free';
-  document.body.dataset.logOpen = 'true';
-  CO_STATE.logOpen = true;
   CO_STATE.libraryOpen = document.body.dataset.libraryOpen !== 'false';
   /* On a narrow first view, put the learner's current task before the
      catalogue. The library remains one tap away and is never collapsed
@@ -1176,8 +801,6 @@ function coInitialise() {
       menu.hidden = true;
       document.getElementById('co-tools-toggle')?.setAttribute('aria-expanded', 'false');
     }
-    const card = event.target.closest && event.target.closest('.block-card');
-    if (card && CO_STATE.view === 'guided' && !event.target.closest('button, input, select, textarea, summary, a')) coSetActive(card.id, false);
   });
   document.addEventListener('input', event => {
     if (event.target.closest && event.target.closest('.block-card')) coSyncCards();
@@ -1185,19 +808,11 @@ function coInitialise() {
   document.addEventListener('change', event => {
     if (event.target.closest && event.target.closest('.block-card')) coSyncCards();
   });
-  /* Guided cards are absolutely positioned only to keep the existing
-     canvas engine untouched. Reflow after viewport changes and native
-     <details> toggles so the next compact card never overlaps a newly
-     expanded body. */
+  /* Reflow after viewport changes and native <details> toggles. */
   window.addEventListener('resize', coHandleResize, { passive: true });
   document.addEventListener('toggle', event => {
     if (event.target.matches && event.target.matches('details.co-settings-details')) coScheduleSync();
   }, true);
-  const logEntries = document.getElementById('log-entries');
-  if (logEntries) {
-    const observer = new MutationObserver(() => coUpdateLogSummary());
-    observer.observe(logEntries, { childList: true });
-  }
   const canvas = document.getElementById('canvas');
   if (canvas) {
     const observer = new MutationObserver(records => {
@@ -1207,7 +822,6 @@ function coInitialise() {
   }
   coApplyLanguage();
   coSyncCards();
-  coUpdateLogSummary();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', coInitialise, { once: true });

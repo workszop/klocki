@@ -286,6 +286,7 @@ const STRINGS = {
     ph_class_name: 'nazwa klasy...',
     btn_capture_short: 'zbierz',
     prep_hint: 'Przeskaluj zebrane zdjęcia do rozmiaru modelu. Opcjonalnie augmentuj dane, aby zwiększyć liczbę próbek.',
+    prep_split_note: 'Zbiór testowy: blok „Sprawdź na nowych danych” odkłada 20% zdjęć jako zbiór testowy, którego model nie widzi podczas treningu. Uczy się na pozostałych 80%, a wynik na tych 20% pokazuje, czy model uogólnia.',
     opt_prepare_only: 'Tylko przygotowanie',
     btn_preview_aug: '👁 Podgląd augmentacji',
     btn_prepare: 'Przygotuj dane',
@@ -575,6 +576,7 @@ const STRINGS = {
     ph_class_name: 'class name...',
     btn_capture_short: 'capture',
     prep_hint: 'Resize captured images to model input size. Optionally augment to increase sample count.',
+    prep_split_note: 'Test set: the “Test on new data” block sets aside 20% of the images as a test set the model never sees during training. It learns on the other 80%, and the score on those 20% shows whether the model generalises.',
     opt_prepare_only: 'Prepare only',
     btn_preview_aug: '👁 Preview augmentation',
     btn_prepare: 'Prepare data',
@@ -2270,6 +2272,7 @@ function buildPrepareDataBody(id) {
   const hint = t('prep_hint');
   return `
 <div style="font-size:12px;color:var(--c-muted);line-height:1.4;padding-bottom:4px">${hint}</div>
+<div class="prep-split-note" role="note">${t('prep_split_note')}</div>
 ${makeParam(t('param_augment'), `<select id="aug-${id}" onchange="previewAugmentation('${id}')">
   <option value="none" selected>${t('opt_prepare_only')}</option>
   <option value="all">Flip + Brightness + Zoom + Skew</option>
