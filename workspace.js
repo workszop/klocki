@@ -75,7 +75,7 @@ const CO_SETTINGS = {
 
 /* ─── Alternative shell state ─── */
 const CO_STATE = {
-  view: 'guided', libraryOpen: true, logOpen: false, activeId: null,
+  view: 'free', libraryOpen: true, logOpen: true, activeId: null,
   groupOpen: { build: true, test: false, understand: false, share: false },
   freePositions: new Map(), freeWidths: new Map(), freeCollapse: new Map(), freeSettings: new Map(),
   manualCollapse: new Map(),
@@ -222,13 +222,11 @@ function coFreePositionSnapshot(force) {
   });
 }
 
+/* The card's own left/top is the source of truth: app.js writes it on drag
+   end and tidy. Restoring a snapshot here would snap a freshly dragged card
+   back to where it was before the drag. */
 function coPositionCardsFree() {
   document.querySelectorAll('.block-card').forEach(card => {
-    const position = CO_STATE.freePositions.get(card.id);
-    if (position) {
-      card.style.left = position.left;
-      card.style.top = position.top;
-    }
     card.style.width = CO_STATE.freeWidths.get(card.id) || '';
     const size = coCardSize(card);
     if (size) card.style.width = size.width + 'px';
@@ -923,6 +921,31 @@ if (typeof CO_NATIVE_PIPELINE_SORTED === 'function') {
   };
 }
 
+/* New cards land in the first free slot of a left-to-right grid sized from
+   the default card, so a pipeline grows in an orderly way while every card
+   the learner already dragged stays where it is. */
+function coNextFreeSlot(newCard) {
+  const canvas = document.getElementById('canvas');
+  const defaults = coCardDefaults();
+  const gutter = 24, gap = 16, rowGap = 22, startY = 24;
+  const available = Math.max(defaults.width, (canvas ? canvas.clientWidth : 1200) - gutter * 2);
+  const cols = Math.max(1, Math.floor((available + gap) / (defaults.width + gap)));
+  const taken = Array.from(document.querySelectorAll('.block-card')).filter(card => card !== newCard).map(card => ({
+    left: parseFloat(card.style.left) || 0, top: parseFloat(card.style.top) || 0,
+    width: card.offsetWidth || defaults.width, height: card.offsetHeight || defaults.height
+  }));
+  const overlaps = (x, y) => taken.some(rect =>
+    x < rect.left + rect.width && x + defaults.width > rect.left && y < rect.top + rect.height && y + defaults.height > rect.top);
+  for (let row = 0; row < 200; row++) {
+    const y = startY + row * (defaults.height + rowGap);
+    for (let col = 0; col < cols; col++) {
+      const x = gutter + col * (defaults.width + gap);
+      if (!overlaps(x, y)) return { x, y };
+    }
+  }
+  return { x: gutter, y: startY };
+}
+
 if (typeof CO_NATIVE_PLACE_BLOCK === 'function') {
   window.placeBlock = function (type, x, y) {
     /* Saved layouts can outlive a removed block type. Refuse unknown
@@ -934,6 +957,19 @@ if (typeof CO_NATIVE_PLACE_BLOCK === 'function') {
     const card = document.getElementById(id);
     if (card) {
       card.dataset.coType = type;
+      /* Restored layouts keep their saved coordinates; only cards added at
+         runtime are slotted into the grid. */
+      const restoring = typeof canvasStateRestoring !== 'undefined' && canvasStateRestoring;
+      if (!restoring) {
+        const slot = coNextFreeSlot(card);
+        card.style.left = slot.x + 'px';
+        card.style.top = slot.y + 'px';
+        const record = placedBlocks.find(item => item.id === id);
+        if (record) { record.x = slot.x; record.y = slot.y; }
+      }
+      /* app.js already synced once (via setBlockStatus) with the pre-slot
+         coordinates, so overwrite the snapshot rather than keep the first. */
+      CO_STATE.freePositions.set(id, { left: card.style.left, top: card.style.top });
       coSaveNewFreePosition(card);
     }
     coSyncCards();
@@ -1087,27 +1123,12 @@ function coApplyLanguage() {
   document.querySelectorAll('[data-co-i18n]').forEach(el => {
     el.textContent = coText(el.dataset.coI18n);
   });
-  const context = document.getElementById('co-topbar-context');
-  if (context) context.textContent = coText(CO_STATE.view === 'guided' ? 'context_guided' : 'context_free');
   document.getElementById('sidebar')?.setAttribute('aria-label', coLang() === 'pl' ? 'Biblioteka bloków' : 'Block library');
   document.getElementById('canvas')?.setAttribute('aria-label', coLang() === 'pl' ? 'Obszar roboczy' : 'Workspace');
   document.getElementById('flowbar')?.setAttribute('aria-label', coLang() === 'pl' ? 'Pipeline' : 'Pipeline');
   document.getElementById('co-step-list')?.setAttribute('aria-label', coLang() === 'pl' ? 'Kroki pipeline' : 'Pipeline steps');
   document.getElementById('log-panel')?.setAttribute('aria-label', coLang() === 'pl' ? 'Dziennik pipeline' : 'Pipeline log');
-  const button = document.getElementById('co-view-toggle');
-  if (button) {
-    button.textContent = coLang() === 'pl' ? (CO_STATE.view === 'guided' ? 'Canvas swobodny' : 'Widok prowadzony') : (CO_STATE.view === 'guided' ? 'Free canvas' : 'Guided view');
-  }
-  const logToggle = document.getElementById('co-log-toggle');
-  const logToggleOpen = document.getElementById('co-log-toggle-open');
-  if (logToggle) {
-    logToggle.setAttribute('aria-expanded', String(CO_STATE.logOpen));
-    logToggle.setAttribute('aria-label', coText(CO_STATE.logOpen ? 'log_close' : 'log_open'));
-  }
-  if (logToggleOpen) logToggleOpen.setAttribute('aria-label', coText('log_close'));
-  const errorCount = document.getElementById('co-log-error-count');
-  if (errorCount) errorCount.setAttribute('aria-label', String(CO_STATE.logErrors) + ' ' + (coLang() === 'pl' ? 'błędów' : 'errors'));
-  document.title = coLang() === 'pl' ? 'KlockiAI - widok prowadzony' : 'KlockiAI - guided view';
+  document.title = 'KlockiAI';
   coUpdateLogSummary();
   document.querySelectorAll('.block-card').forEach(coUpdateCardControl);
   coApplyTerminalSize();
@@ -1123,9 +1144,12 @@ function coInitialise() {
      so the alternative shell never changes the page's normal API after
      boot. */
   if (CO_STORAGE_PROTO.getItem === CO_STORAGE_WRAPPED_GET) CO_STORAGE_PROTO.getItem = CO_NATIVE_STORAGE_GET;
-  CO_STATE.view = document.body.dataset.view === 'free' ? 'free' : 'guided';
+  /* Single mode: the free canvas with the terminal always visible. */
+  document.body.dataset.view = 'free';
+  CO_STATE.view = 'free';
+  document.body.dataset.logOpen = 'true';
+  CO_STATE.logOpen = true;
   CO_STATE.libraryOpen = document.body.dataset.libraryOpen !== 'false';
-  CO_STATE.logOpen = document.body.dataset.logOpen === 'true';
   /* On a narrow first view, put the learner's current task before the
      catalogue. The library remains one tap away and is never collapsed
      again by a resize or by this shell. */
@@ -1135,18 +1159,7 @@ function coInitialise() {
   }
   document.getElementById('co-library-toggle')?.setAttribute('aria-expanded', String(CO_STATE.libraryOpen));
   coInitTerminalResize();
-  const viewButton = document.getElementById('co-view-toggle');
-  if (viewButton) {
-    viewButton.addEventListener('click', () => coSetView(CO_STATE.view === 'guided' ? 'free' : 'guided'));
-    viewButton.dataset.view = CO_STATE.view;
-    viewButton.setAttribute('aria-pressed', String(CO_STATE.view === 'free'));
-  }
   document.getElementById('co-library-toggle')?.addEventListener('click', coToggleLibrary);
-  document.getElementById('co-log-toggle')?.addEventListener('click', () => coToggleLog());
-  document.getElementById('co-log-toggle-open')?.addEventListener('click', () => coToggleLog(false));
-  document.getElementById('co-expand-all')?.addEventListener('click', coToggleAll);
-  document.getElementById('co-guided-prev')?.addEventListener('click', () => coMoveActive(-1));
-  document.getElementById('co-guided-next')?.addEventListener('click', () => coMoveActive(1));
   document.querySelectorAll('.co-library-group-toggle').forEach(button => {
     button.addEventListener('click', () => coToggleGroup(button.closest('.co-library-group')?.dataset.group));
   });

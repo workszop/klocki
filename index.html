@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>KlockiAI - widok prowadzony</title>
+  <title>KlockiAI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -15,11 +15,10 @@
   <link rel="stylesheet" href="workspace.css">
 </head>
 
-<body class="co-shell" data-view="guided" data-library-open="true" data-log-open="false">
+<body class="co-shell" data-view="free" data-library-open="true" data-log-open="true">
   <!-- TOPBAR -->
   <div id="topbar" class="co-topbar">
     <div id="logo">Klocki<span>AI</span></div>
-    <div id="co-topbar-context" role="status" aria-live="polite">Widok prowadzony</div>
 
     <div id="flowbar" aria-label="Pipeline">
       <div class="flow-pill" data-phase="data"><span data-i18n="phase_data">Dane</span></div>
@@ -39,14 +38,13 @@
 
     <div id="topbar-actions">
       <button id="btn-run" class="tb-btn" onclick="runPipeline()" data-co-i18n="run_pipeline" data-i18n-title="title_run">Uruchom pipeline</button>
-      <button id="co-view-toggle" class="tb-btn" type="button" data-view="guided" aria-pressed="false">Canvas swobodny</button>
+      <button id="btn-clear" class="tb-btn" type="button" onclick="clearCanvas()" data-co-i18n="clear">Wyczyść tablicę</button>
       <button id="btn-edu" class="tb-btn" onclick="toggleEduMode()" data-i18n="btn_edu" data-i18n-title="title_edu">🎓 Edu</button>
       <button id="btn-guide" class="tb-btn" type="button" onclick="coOpenGuide()" data-co-i18n="guide_button" data-i18n-title="title_guide">Pomoc</button>
       <div id="co-tools">
         <button id="co-tools-toggle" class="tb-btn" type="button" aria-expanded="false" aria-controls="co-tools-menu" data-co-i18n="tools">Narzędzia</button>
         <div id="co-tools-menu" hidden>
           <button id="co-tidy" type="button" onclick="tidyUpCanvas()" data-co-i18n="tidy">Uporządkuj bloki</button>
-          <button id="co-clear" type="button" onclick="clearCanvas()" data-co-i18n="clear">Wyczyść tablicę</button>
         </div>
       </div>
       <button id="btn-lang" class="tb-btn" onclick="toggleLang()" data-i18n-title="title_lang" data-i18n-aria="title_lang">EN</button>
@@ -152,32 +150,6 @@
 
     <!-- CANVAS -->
     <main id="canvas" class="co-canvas" ondragover="canvasDragOver(event)" ondrop="canvasDrop(event)" aria-label="Obszar roboczy">
-      <section id="co-guided-panel" aria-labelledby="co-guided-title">
-        <div class="co-guided-heading">
-          <div>
-            <div class="co-guided-kicker" data-co-i18n="guided_kicker">Widok prowadzony</div>
-            <h1 id="co-guided-title" data-co-i18n="guided_title">Zbuduj model krok po kroku</h1>
-            <p data-co-i18n="guided_intro">Zobacz pełną ścieżkę, skup się na jednym kroku i rozwijaj szczegóły wtedy, gdy są potrzebne.</p>
-          </div>
-          <button id="co-expand-all" type="button" aria-pressed="false" data-co-i18n="collapse_all">Zwiń szczegóły</button>
-        </div>
-        <div id="co-progress-row">
-          <div id="co-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="co-progress-label">
-            <div id="co-progress-fill"></div>
-          </div>
-          <span id="co-progress-label">0 / 0</span>
-        </div>
-        <div id="co-step-list" role="list" aria-label="Kroki pipeline"></div>
-        <div id="co-current-step">
-          <span id="co-current-label" data-co-i18n="current_step">Bieżący krok</span>
-          <span id="co-current-copy" aria-live="polite"></span>
-        </div>
-        <div class="co-guided-actions">
-          <button id="co-guided-prev" type="button" data-co-i18n="previous_step">Poprzedni</button>
-          <button id="co-guided-next" type="button" data-co-i18n="next_step">Następny krok</button>
-        </div>
-      </section>
-
       <div id="canvas-inner"></div>
       <div id="empty-state">
         <div class="empty-title" data-i18n="empty_title">Pusty obszar roboczy</div>
@@ -194,15 +166,8 @@
     <!-- LOG DRAWER -->
     <aside id="log-panel" class="co-log-panel" aria-label="Pipeline Log">
       <div id="co-log-resize" role="separator" tabindex="0" aria-controls="log-panel" aria-orientation="vertical" aria-label="Zmień rozmiar terminala" aria-valuemin="200" aria-valuemax="800" aria-valuenow="320"></div>
-      <div id="co-log-summary-row">
-        <button id="co-log-toggle" type="button" aria-expanded="false" aria-controls="log-entries">
-          <span id="co-log-latest" data-co-i18n="log_summary_ready">Ostatni status</span>
-          <span id="co-log-error-count" aria-label="0 błędów">0</span>
-        </button>
-      </div>
       <div id="log-header">
         <div id="log-header-title" data-i18n="log_title">Pipeline Log</div>
-        <button id="co-log-toggle-open" type="button" data-co-i18n="log_close">Zwiń</button>
         <button id="log-clear" onclick="clearLog()" data-i18n-title="title_log_clear" data-i18n-aria="title_log_clear">CLR</button>
       </div>
       <div id="log-entries" role="log" aria-live="polite"></div>
