@@ -183,7 +183,7 @@ const STRINGS = {
     btn_pick_files: 'Wybierz plik (.json)', param_model_name: 'Nazwa modelu', lbl_no_saved_models: 'Brak zapisanych modeli',
     btn_train: 'Trenuj', btn_stop_train: 'Zatrzymaj',
     btn_freeze_frame: 'Zamroź klatkę', btn_run_xai: '🔍 Dlaczego? (Analizuj)',
-    lbl_class: 'Klasa', lbl_samples: 'próbek', lbl_accuracy: 'Dokładność',
+    lbl_class: 'Klasa', lbl_samples: 'próbek', lbl_accuracy: 'Dokładność', lbl_val_accuracy: 'Dokładność na odłożonych 20%',
     lbl_no_model: 'Brak modelu – najpierw wczytaj lub załaduj',
     lbl_classes: 'Klasy', lbl_timestamp: 'Data treningu',
     log_camera_start: 'Kamera uruchomiona', log_camera_err: 'Błąd kamery: ',
@@ -195,8 +195,10 @@ const STRINGS = {
     log_model_loaded: 'Model bazowy załadowany ✓',
     log_model_err: 'Błąd ładowania modelu: ',
     log_train_start: (e) => `Trening – ${e} epok`,
-    log_train_epoch: (e, l, a) => `Epoka ${e}: strata=${l.toFixed(4)}, dokł.=${(a * 100).toFixed(1)}%`,
-    log_train_done: (a) => `Trening zakończony – dokładność ${(a * 100).toFixed(1)}%`,
+    log_train_epoch: (e, l, a, v) => `Epoka ${e}: strata=${l.toFixed(4)}, dokł.=${(a * 100).toFixed(1)}%` + (v != null ? `, test=${(v * 100).toFixed(1)}%` : ''),
+    log_train_done: (a, v) => `Trening zakończony – dokładność ${(a * 100).toFixed(1)}%` + (v != null ? ` na danych treningowych, ${(v * 100).toFixed(1)}% na odłożonych 20%` : ''),
+    log_train_split: (n, v) => `Podział: ${n} próbek treningowych, ${v} odłożonych do testu (20%, nie biorą udziału w treningu)`,
+    log_train_no_holdout: 'Za mało próbek na zbiór testowy – trening na wszystkich danych, bez sprawdzenia na odłożonych zdjęciach.',
     log_train_cancel: 'Trening przerwany przez użytkownika',
     log_save_idb: 'Model zapisany w IndexedDB ✓',
     log_download: 'Pobieranie plików modelu...',
@@ -286,7 +288,7 @@ const STRINGS = {
     ph_class_name: 'nazwa klasy...',
     btn_capture_short: 'zbierz',
     prep_hint: 'Przeskaluj zebrane zdjęcia do rozmiaru modelu. Opcjonalnie augmentuj dane, aby zwiększyć liczbę próbek.',
-    prep_split_note: 'Zbiór testowy: blok „Sprawdź na nowych danych” odkłada 20% zdjęć jako zbiór testowy, którego model nie widzi podczas treningu. Uczy się na pozostałych 80%, a wynik na tych 20% pokazuje, czy model uogólnia.',
+    prep_split_note: 'Zbiór testowy: 20% zdjęć jest odkładane jako zbiór testowy, którego model nie widzi podczas treningu. Blok „Trenuj model” uczy się na pozostałych 80% (wraz z ich augmentacjami) i po każdej epoce sprawdza wynik na odłożonych 20%. Blok „Sprawdź na nowych danych” używa tego samego podziału.',
     opt_prepare_only: 'Tylko przygotowanie',
     btn_preview_aug: '👁 Podgląd augmentacji',
     btn_prepare: 'Przygotuj dane',
@@ -301,7 +303,7 @@ const STRINGS = {
     xai_howto: 'Podświetlone obszary to te, na które model patrzył, podejmując decyzję. Czerwone = główny dowód.',
     explorer_desc: 'Eksploruj architekturę MobileNet V3 Small – warstwy, mapy cech i inferencję na żywo.',
     btn_open_explorer: 'Otwórz eksplorator',
-    eval_hint: 'Dzieli próbki 80/20, trenuje świeży model na 80% i testuje na niewidzianych 20% – prawdziwy sprawdzian generalizacji.',
+    eval_hint: 'Sprawdza wytrenowany model na odłożonych 20% zdjęć, których nie widział w treningu – prawdziwy sprawdzian generalizacji. Bez aktualnego modelu trenuje świeży model na 80% i testuje go na tych samych odłożonych 20%.',
     btn_evaluate: '▶ Oceń model',
     deploy_hint: 'Eksportuj samodzielną stronę HTML z Twoim modelem w środku – działa offline, klasyfikuje z kamery. Podziel się nią z innymi!',
     btn_export_app: '🚀 Eksportuj aplikację',
@@ -341,7 +343,8 @@ const STRINGS = {
     interp_falling: '📉 Strata spada – model się uczy!',
     interp_flat: '➡️ Strata się wypłaszcza – bliski końca nauki.',
     interp_progress: (pct) => `Uczenie w toku – dokładność ${pct}%.`,
-    chart_loss: 'strata', chart_acc: 'dokł.',
+    interp_gap: (a, v) => `⚠️ ${a}% na danych treningowych, ale tylko ${v}% na odłożonych zdjęciach – model zapamiętuje. Dodaj więcej różnorodnych zdjęć.`,
+    chart_loss: 'strata', chart_acc: 'dokł.', chart_val: 'test',
     val_min_classes: (n) => `Trening wymaga co najmniej 2 klas z próbkami (masz ${n}). Zbierz próbki dla dwóch lub więcej klas.`,
     btn_continue_anyway: 'Kontynuuj mimo to',
     val_too_few: (min, list) => `Niektóre klasy mają mniej niż ${min} próbek: ${list}. Modele potrzebują kilku przykładów na klasę. Kontynuować mimo to?`,
@@ -359,6 +362,9 @@ const STRINGS = {
     eval_extracting: 'Ekstrakcja cech...',
     eval_training: 'Trening na 80% (świeży model)...',
     eval_testing: 'Test na 20% (niewidziane)...',
+    eval_testing_trained: 'Test wytrenowanego modelu na odłożonych 20%...',
+    log_eval_trained: 'Ocena: wytrenowany model, test na odłożonych 20% zdjęć',
+    log_eval_fresh: 'Ocena: brak aktualnego wytrenowanego modelu – trenuję świeży model na 80% i testuję na odłożonych 20%',
     log_eval_settings: (e, lr, bs, fromTrain) => `Ocena: ${e} epok, lr ${lr}, batch ${bs} (${fromTrain ? 'ustawienia z bloku Trenuj model' : 'ustawienia domyślne'})`,
     log_eval_done: (pct, n) => `Test na niewidzianych 20%: ${pct}% z ${n} zdjęć`,
     err_eval: 'Błąd oceny: ',
@@ -473,7 +479,7 @@ const STRINGS = {
     btn_pick_files: 'Pick file (.json)', param_model_name: 'Model name', lbl_no_saved_models: 'No saved models',
     btn_train: 'Train', btn_stop_train: 'Stop',
     btn_freeze_frame: 'Freeze Frame', btn_run_xai: '🔍 Why? (Analyze)',
-    lbl_class: 'Class', lbl_samples: 'samples', lbl_accuracy: 'Accuracy',
+    lbl_class: 'Class', lbl_samples: 'samples', lbl_accuracy: 'Accuracy', lbl_val_accuracy: 'Accuracy on held-out 20%',
     lbl_no_model: 'No model – load or train one first',
     lbl_classes: 'Classes', lbl_timestamp: 'Trained on',
     log_camera_start: 'Camera started', log_camera_err: 'Camera error: ',
@@ -485,8 +491,10 @@ const STRINGS = {
     log_model_loaded: 'Base model loaded ✓',
     log_model_err: 'Model load error: ',
     log_train_start: (e) => `Training – ${e} epochs`,
-    log_train_epoch: (e, l, a) => `Epoch ${e}: loss=${l.toFixed(4)}, acc=${(a * 100).toFixed(1)}%`,
-    log_train_done: (a) => `Training complete – accuracy ${(a * 100).toFixed(1)}%`,
+    log_train_epoch: (e, l, a, v) => `Epoch ${e}: loss=${l.toFixed(4)}, acc=${(a * 100).toFixed(1)}%` + (v != null ? `, test=${(v * 100).toFixed(1)}%` : ''),
+    log_train_done: (a, v) => `Training complete – accuracy ${(a * 100).toFixed(1)}%` + (v != null ? ` on training data, ${(v * 100).toFixed(1)}% on the held-out 20%` : ''),
+    log_train_split: (n, v) => `Split: ${n} training samples, ${v} held out for testing (20%, never used in training)`,
+    log_train_no_holdout: 'Too few samples for a test set – training on all data, with no held-out check.',
     log_train_cancel: 'Training cancelled',
     log_save_idb: 'Model saved to IndexedDB ✓',
     log_download: 'Downloading model files...',
@@ -576,7 +584,7 @@ const STRINGS = {
     ph_class_name: 'class name...',
     btn_capture_short: 'capture',
     prep_hint: 'Resize captured images to model input size. Optionally augment to increase sample count.',
-    prep_split_note: 'Test set: the “Test on new data” block sets aside 20% of the images as a test set the model never sees during training. It learns on the other 80%, and the score on those 20% shows whether the model generalises.',
+    prep_split_note: 'Test set: 20% of the images are set aside as a test set the model never sees during training. The “Train model” block learns on the other 80% (plus their augmentations) and checks the score on the held-out 20% after every epoch. The “Test on new data” block uses the same split.',
     opt_prepare_only: 'Prepare only',
     btn_preview_aug: '👁 Preview augmentation',
     btn_prepare: 'Prepare data',
@@ -591,7 +599,7 @@ const STRINGS = {
     xai_howto: 'The highlighted areas are what the model looked at to decide. Red = its main evidence.',
     explorer_desc: 'Explore MobileNet V3 Small – layers, feature maps and live inference.',
     btn_open_explorer: 'Open Explorer',
-    eval_hint: 'Splits 80/20, trains a fresh model on 80%, and tests on the unseen 20% – a true generalisation check.',
+    eval_hint: 'Checks the trained model on the held-out 20% of images it never saw in training – a true generalisation check. Without an up-to-date model it trains a fresh one on the 80% and tests it on the same held-out 20%.',
     btn_evaluate: '▶ Evaluate model',
     deploy_hint: 'Export a self-contained HTML page with your model baked in – works offline, classifies from the camera. Share it with anyone!',
     btn_export_app: '🚀 Export app',
@@ -631,7 +639,8 @@ const STRINGS = {
     interp_falling: '📉 Loss is dropping – the model is learning!',
     interp_flat: '➡️ Loss is flattening out – learning is levelling off.',
     interp_progress: (pct) => `Learning in progress – accuracy ${pct}%.`,
-    chart_loss: 'loss', chart_acc: 'acc',
+    interp_gap: (a, v) => `⚠️ ${a}% on training data but only ${v}% on the held-out images – the model is memorising. Add more varied images.`,
+    chart_loss: 'loss', chart_acc: 'acc', chart_val: 'test',
     val_min_classes: (n) => `Training needs at least 2 classes with samples (you have ${n}). Collect samples for two or more classes.`,
     btn_continue_anyway: 'Continue anyway',
     val_too_few: (min, list) => `Some classes have fewer than ${min} samples: ${list}. Models need several examples per class. Continue anyway?`,
@@ -649,6 +658,9 @@ const STRINGS = {
     eval_extracting: 'Extracting features...',
     eval_training: 'Training on 80% (fresh model)...',
     eval_testing: 'Testing on 20% (unseen)...',
+    eval_testing_trained: 'Testing the trained model on the held-out 20%...',
+    log_eval_trained: 'Evaluate: trained model, testing on the held-out 20% of images',
+    log_eval_fresh: 'Evaluate: no up-to-date trained model – training a fresh model on 80% and testing on the held-out 20%',
     log_eval_settings: (e, lr, bs, fromTrain) => `Evaluate: ${e} epochs, lr ${lr}, batch ${bs} (${fromTrain ? 'settings from the Train Model block' : 'default settings'})`,
     log_eval_done: (pct, n) => `Hold-out test on unseen 20%: ${pct}% of ${n} images`,
     err_eval: 'Evaluation error: ',
@@ -1050,7 +1062,7 @@ const EDU_ANNOTATIONS = {
   'zero-shot':        { pl: '🌍 1001 klas ImageNet – to, co MobileNet już zna',      en: '🌍 1001 ImageNet classes – what MobileNet already knows' },
   'explain-ai':       { pl: '🔍 Sprawdzamy które fragmenty obrazu wpływają na decyzję', en: '🔍 Find which image regions drove the decision' },
   'model-explorer':   { pl: '🔬 Architektura warstwa po warstwie',                   en: '🔬 Architecture layer by layer' },
-  'evaluate':         { pl: '📊 Prawdziwy test: trenuje na 80%, sprawdza na niewidzianych 20%', en: '📊 True hold-out: trains on 80%, tests on the unseen 20%' },
+  'evaluate':         { pl: '📊 Test na odłożonych 20% zdjęć, których model nie widział w treningu', en: '📊 Tests on the held-out 20% the model never saw in training' },
   'deploy-export':    { pl: '🚀 Eksportuj działającą aplikację z modelem w środku',   en: '🚀 Export a working app with the model baked in' }
 };
 function getEduAnnotation(type) {
@@ -1666,6 +1678,7 @@ function resetAppMemory() {
   datasetVersion++;
   lossHistory = [];
   accHistory = [];
+  valAccHistory = [];
   predHistory = [];
   frozenFrame = false;
   predSnapshots.clear();
@@ -3322,7 +3335,11 @@ async function runLoadBaseModel(id) {
 // ============================================================
 
 // ===== TRAINING =====
-let lossHistory = [], accHistory = [];
+let lossHistory = [], accHistory = [], valAccHistory = [];
+// datasetVersion at the moment fullModel was trained. Evaluate reuses the
+// trained head only while the dataset (and therefore the hold-out split) is
+// unchanged; otherwise a previously-trained image could land in the test set.
+let trainedDatasetVersion = -1;
 
 // The classifier head trained on frozen MobileNet features. Built here for
 // both Train and Evaluate so the hold-out verdict is about the same
@@ -3358,7 +3375,7 @@ function readTrainSettings(trainId) {
 // Narrate the training curve in plain language so students can read the chart.
 // Reacts to the loss trend and warns about the classic "100% accuracy on very
 // few samples = memorising, not learning" overfitting trap.
-function updateTrainInterpretation(id, epoch, acc) {
+function updateTrainInterpretation(id, epoch, acc, valAcc) {
   const el = document.getElementById('train-interp-' + id);
   if (!el) return;
   const totalSamples = capturedSamples.reduce((s, a) => s + (a ? a.length : 0), 0);
@@ -3366,9 +3383,13 @@ function updateTrainInterpretation(id, epoch, acc) {
   const n = lossHistory.length;
   const fallingFast = n >= 3 && lossHistory[n - 1] < lossHistory[Math.max(0, n - 3)] - 0.02;
   const flat = n >= 4 && Math.abs(lossHistory[n - 1] - lossHistory[n - 4]) < 0.01;
+  const gap = valAcc != null ? acc - valAcc : 0;
   if (acc >= 0.999 && totalSamples < 20) {
     tone = 'warn';
     msg = t('interp_overfit');
+  } else if (valAcc != null && n >= 3 && gap >= 0.25 && acc > 0.8) {
+    tone = 'warn';
+    msg = t('interp_gap', (acc * 100).toFixed(0), (valAcc * 100).toFixed(0));
   } else if (fallingFast) {
     msg = t('interp_falling');
   } else if (flat) {
@@ -3450,6 +3471,8 @@ function drawChart(canvasId) {
   }
   // Accuracy: bounded 0..1, drawn against left axis ticks directly.
   drawLine(accHistory, cssToken('--c-model'), v => v);
+  // Held-out accuracy: same scale, evaluation colour.
+  drawLine(valAccHistory, cssToken('--c-eval'), v => v);
   // Loss: scale into [0..1] for plotting only (right-side y label shows real value).
   drawLine(lossHistory, cssToken('--c-train'), v => (v - lossMin) / lossRange);
 
@@ -3463,6 +3486,11 @@ function drawChart(canvasId) {
   ctx.fillText(t('chart_loss') + (lastLoss != null ? ` ${lastLoss.toFixed(3)}` : ''), PAD_L + 4, 1);
   ctx.fillStyle = cssToken('--c-model');
   ctx.fillText(t('chart_acc') + (lastAcc != null ? ` ${(lastAcc * 100).toFixed(1)}%` : ''), PAD_L + 80, 1);
+  const lastVal = valAccHistory[valAccHistory.length - 1];
+  if (lastVal != null) {
+    ctx.fillStyle = cssToken('--c-eval');
+    ctx.fillText(t('chart_val') + ` ${(lastVal * 100).toFixed(1)}%`, PAD_L + 150, 1);
+  }
 }
 
 // Train pre-flight validation. Returns true if training should proceed.
@@ -3525,7 +3553,7 @@ async function runTraining(id) {
   trainingInProgress = true;
 
   trainingCancelled = false;
-  lossHistory = []; accHistory = [];
+  lossHistory = []; accHistory = []; valAccHistory = [];
   const { epochs, lr, batchSize } = readTrainSettings(id);
   const info = document.getElementById('train-info-' + id);
   const numClasses = preparedData.numClasses;
@@ -3538,6 +3566,7 @@ async function runTraining(id) {
   // FEATURE CACHE and must never be disposed here.
   let ysTensor = null;
   let classifier = null;    // disposed in finally unless training committed it
+  let trainFeat = null, valFeat = null, valYs = null; // ours; featsTensor stays cached
   let committed = false;
   const prevModel = fullModel; // freed AFTER the new model is live (see below)
 
@@ -3561,12 +3590,37 @@ async function runTraining(id) {
     if (appResetting) throw new Error('resetting');
     const featSize = featsTensor.shape[1];
 
-    // Dispose the index tensor immediately after oneHot consumes it
-    const idxTensor = tf.tensor1d(rawYs, 'int32');
-    ysTensor = tf.oneHot(idxTensor, numClasses);
-    idxTensor.dispose();
-
     log('info', t('log_feat_shape', rawXs.length, featSize));
+
+    // ── STEP 1b: Hold out 20% of the originals ──
+    // Prepared row i derives from original (i % nOriginals): the first block
+    // is the originals in capture order, later blocks are augmented copies in
+    // the same order. Every copy of a held-out image is excluded from
+    // training, and only the untouched originals form the validation set, so
+    // the score is a genuine test on images the head never saw.
+    const { heldOut, total: nOriginals } = holdoutSplit();
+    const trainRows = [], valRows = [];
+    const consistent = nOriginals > 0 && rawXs.length % nOriginals === 0;
+    rawXs.forEach((_, i) => {
+      const origin = consistent ? i % nOriginals : -1;
+      if (heldOut.has(origin)) { if (i < nOriginals) valRows.push(i); }
+      else trainRows.push(i);
+    });
+    const hasVal = consistent && valRows.length > 0 && trainRows.length > 0;
+    if (!hasVal) {
+      trainRows.length = 0; valRows.length = 0;
+      rawXs.forEach((_, i) => trainRows.push(i));
+      log('warn', t('log_train_no_holdout'));
+    } else {
+      log('info', t('log_train_split', trainRows.length, valRows.length));
+    }
+    const oneHotFor = rows => tf.tidy(() => tf.oneHot(tf.tensor1d(rows.map(i => rawYs[i]), 'int32'), numClasses));
+    trainFeat = tf.tidy(() => tf.gather(featsTensor, tf.tensor1d(trainRows, 'int32')));
+    ysTensor = oneHotFor(trainRows);
+    if (hasVal) {
+      valFeat = tf.tidy(() => tf.gather(featsTensor, tf.tensor1d(valRows, 'int32')));
+      valYs = oneHotFor(valRows);
+    }
 
     // ── STEP 2: Train small classifier on bottleneck features ──
     // The base model (GraphModel) cannot be fine-tuned in TF.js - it is always frozen.
@@ -3574,8 +3628,9 @@ async function runTraining(id) {
     classifier = buildHead(featSize, numClasses, lr);
 
     const startTime = Date.now();
-    await classifier.fit(featsTensor, ysTensor, {
+    await classifier.fit(trainFeat, ysTensor, {
       epochs, batchSize, shuffle: true,
+      validationData: hasVal ? [valFeat, valYs] : undefined,
       callbacks: {
         onEpochBegin: async (epoch) => {
           if (trainingCancelled || appResetting) throw new Error(appResetting ? 'resetting' : 'cancelled');
@@ -3583,6 +3638,8 @@ async function runTraining(id) {
         onEpochEnd: async (epoch, logs) => {
           lossHistory.push(logs.loss);
           accHistory.push(logs.acc || logs.accuracy || 0);
+          const valAcc = hasVal ? (logs.val_acc ?? logs.val_accuracy ?? null) : null;
+          if (valAcc != null) valAccHistory.push(valAcc);
           drawChart('chart-' + id);
           const elapsed = (Date.now() - startTime) / 1000;
           const perEpoch = elapsed / (epoch + 1);
@@ -3591,8 +3648,8 @@ async function runTraining(id) {
           if (info) info.textContent = t('train_eta', epoch + 1, epochs, remaining);
           const chartEl = document.getElementById('chart-' + id);
           if (chartEl) chartEl.setAttribute('aria-label', t('aria_chart', epoch + 1, logs.loss.toFixed(3), (acc * 100).toFixed(1)));
-          updateTrainInterpretation(id, epoch, acc);
-          log('data', t('log_train_epoch', epoch + 1, logs.loss, acc));
+          updateTrainInterpretation(id, epoch, acc, valAcc);
+          log('data', t('log_train_epoch', epoch + 1, logs.loss, acc, valAcc));
           await tf.nextFrame();
         }
       }
@@ -3605,15 +3662,19 @@ async function runTraining(id) {
     // Both fullModel (for save) and inferModel (for same-session prediction) point to the
     // same trained classifier instance; baseModel is required at inference time.
     const finalAcc = accHistory[accHistory.length - 1] || 0;
+    const finalValAcc = valAccHistory.length ? valAccHistory[valAccHistory.length - 1] : null;
     modelMetadata = {
       schemaVersion: SCHEMA_VERSION,
       classLabels: classNames.slice(0, numClasses),
       inputSize: 224,
       trainingAccuracy: finalAcc,
+      validationAccuracy: finalValAcc,
+      holdoutSamples: hasVal ? valRows.length : 0,
       baseModel: 'MobileNetV3-Small',
       timestamp: new Date().toISOString()
     };
     fullModel = classifier;
+    trainedDatasetVersion = datasetVersion;
     inferModel = classifier;       // available immediately for same-session inference
     inferMetadata = modelMetadata; // so inference blocks see the right class labels
     committed = true;              // ownership transferred – don't dispose in finally
@@ -3625,7 +3686,7 @@ async function runTraining(id) {
     }
 
     log('info', t('log_model_ready'));
-    log('success', t('log_train_done', finalAcc));
+    log('success', t('log_train_done', finalAcc, finalValAcc));
     setBlockStatus(document.getElementById(id), 'done');
     modelSaved = false; // freshly trained, not yet saved
     evaluatePipelineState();
@@ -3642,8 +3703,8 @@ async function runTraining(id) {
     }
     return false;
   } finally {
-    // The label tensor is ours; the feature tensor stays in featureCache.
-    if (ysTensor) ysTensor.dispose();
+    // Gathered rows and label tensors are ours; the feature tensor stays in featureCache.
+    [ysTensor, trainFeat, valFeat, valYs].forEach(tensor => { if (tensor) tensor.dispose(); });
     // The freshly-built classifier leaks if training was cancelled or errored
     // before ownership transferred to fullModel.
     if (classifier && !committed) { try { classifier.dispose(); } catch (_) {} }
@@ -3655,6 +3716,32 @@ async function runTraining(id) {
 function stopTraining(id) {
   trainingCancelled = true;
   log('warn', t('log_train_stopping'));
+}
+
+// ===== HOLD-OUT SPLIT (shared by Train and Evaluate) =====
+// Stratified 20% hold-out over the captured samples, flattened class by class
+// (the order runPrepare and Evaluate both use). Deterministic seeded
+// Fisher-Yates per class, so the same images are held out on every click and
+// in both blocks. Classes with fewer than 2 samples contribute nothing to the
+// hold-out. Returns { heldOut: Set<flatIndex>, total }.
+function holdoutSplit() {
+  const heldOut = new Set();
+  let offset = 0;
+  capturedSamples.forEach((arr, c) => {
+    const n = (arr || []).length;
+    if (n >= 2) {
+      const order = Array.from({ length: n }, (_, i) => offset + i);
+      const rng = mulberry32(n * 1000 + c);
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+      const nTest = Math.max(1, Math.round(n * 0.2));
+      order.slice(0, nTest).forEach(gi => heldOut.add(gi));
+    }
+    offset += n;
+  });
+  return { heldOut, total: offset };
 }
 
 // ===== MODEL EVALUATION (train/test split) =====
@@ -3757,24 +3844,12 @@ async function runEvaluate(id) {
   // keep the test ImageData refs for the thumbnails.
   const flatSamples = [];
   const trainIdx = [], trainLabels = [], testIdx = [], testLabels = [], testSamples = [];
+  const { heldOut } = holdoutSplit();
   for (let c = 0; c < numClasses; c++) {
-    const arr = capturedSamples[c] || [];
-    const offset = flatSamples.length;
-    arr.forEach(s => flatSamples.push(s));
-    const order = arr.map((_, i) => offset + i);
-    if (arr.length < 2) { order.forEach(gi => { trainIdx.push(gi); trainLabels.push(c); }); continue; }
-    // Deterministic seeded Fisher-Yates so the split is stable across clicks
-    // but still a real per-class permutation (the old index-only formula gave
-    // one fixed pattern for every class, so the same capture indices were
-    // always held out).
-    const rng = mulberry32(arr.length * 1000 + c);
-    for (let i = order.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [order[i], order[j]] = [order[j], order[i]];
-    }
-    const nTest = Math.max(1, Math.round(arr.length * 0.2));
-    order.forEach((gi, i) => {
-      if (i < nTest) { testIdx.push(gi); testLabels.push(c); testSamples.push(flatSamples[gi]); }
+    (capturedSamples[c] || []).forEach(s => {
+      const gi = flatSamples.length;
+      flatSamples.push(s);
+      if (heldOut.has(gi)) { testIdx.push(gi); testLabels.push(c); testSamples.push(s); }
       else { trainIdx.push(gi); trainLabels.push(c); }
     });
   }
@@ -3785,7 +3860,14 @@ async function runEvaluate(id) {
   const { epochs, lr, batchSize } = trainBlock
     ? readTrainSettings(trainBlock.id)
     : { epochs: 20, lr: 0.001, batchSize: 16 };
-  log('info', t('log_eval_settings', epochs, lr, batchSize, !!trainBlock));
+  // The Train block holds out the same 20%, so an up-to-date trained head is
+  // tested directly. Without one (or after the dataset changed), a fresh head
+  // is trained on the 80% here so the test is still genuinely held out.
+  const useTrained = !!(fullModel && modelMetadata && modelMetadata.holdoutSamples > 0
+    && trainedDatasetVersion === datasetVersion
+    && (modelMetadata.classLabels || []).length === numClasses);
+  log('info', t(useTrained ? 'log_eval_trained' : 'log_eval_fresh'));
+  if (!useTrained) log('info', t('log_eval_settings', epochs, lr, batchSize, !!trainBlock));
   let trainFeat = null, testFeat = null, ysTensor = null, classifier = null, trainProbT = null, testProbT = null;
   try {
     setStatus(t('eval_extracting'));
@@ -3799,29 +3881,33 @@ async function runEvaluate(id) {
     testFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(testIdx, 'int32')));
     const featSize = trainFeat.shape[1];
 
-    const idxT = tf.tensor1d(trainLabels, 'int32');
-    ysTensor = tf.oneHot(idxT, numClasses);
-    idxT.dispose();
+    let head = fullModel;
+    if (!useTrained) {
+      const idxT = tf.tensor1d(trainLabels, 'int32');
+      ysTensor = tf.oneHot(idxT, numClasses);
+      idxT.dispose();
 
-    setStatus(t('eval_training'));
-    classifier = buildHead(featSize, numClasses, lr);
-    await classifier.fit(trainFeat, ysTensor, {
-      epochs, batchSize, shuffle: true,
-      // Yield between epochs so the tab stays responsive and the status line
-      // actually repaints.
-      callbacks: {
-        onEpochEnd: async (epoch) => {
-          if (evaluateCancelled || appResetting) throw new Error(appResetting ? 'resetting' : 'cancelled');
-          setStatus(t('eval_epoch', epoch + 1, epochs));
-          await tf.nextFrame();
+      setStatus(t('eval_training'));
+      classifier = buildHead(featSize, numClasses, lr);
+      await classifier.fit(trainFeat, ysTensor, {
+        epochs, batchSize, shuffle: true,
+        // Yield between epochs so the tab stays responsive and the status line
+        // actually repaints.
+        callbacks: {
+          onEpochEnd: async (epoch) => {
+            if (evaluateCancelled || appResetting) throw new Error(appResetting ? 'resetting' : 'cancelled');
+            setStatus(t('eval_epoch', epoch + 1, epochs));
+            await tf.nextFrame();
+          }
         }
-      }
-    });
-    if (appResetting || evaluateCancelled) throw new Error(appResetting ? 'resetting' : 'cancelled');
+      });
+      if (appResetting || evaluateCancelled) throw new Error(appResetting ? 'resetting' : 'cancelled');
+      head = classifier;
+    }
 
-    setStatus(t('eval_testing'));
-    trainProbT = classifier.predict(trainFeat);
-    testProbT = classifier.predict(testFeat);
+    setStatus(t(useTrained ? 'eval_testing_trained' : 'eval_testing'));
+    trainProbT = head.predict(trainFeat);
+    testProbT = head.predict(testFeat);
     const trainProbs = await trainProbT.data();
     const testProbs = await testProbT.data();
 
@@ -4341,6 +4427,7 @@ function processLoadedMeta(id, meta) {
     el.innerHTML = `
   <b>${t('lbl_classes')}:</b> ${inferLabels().map(escapeHtml).join(', ')}<br>
   <b>${t('lbl_accuracy')}:</b> ${meta.trainingAccuracy ? (meta.trainingAccuracy * 100).toFixed(1) + '%' : '–'}<br>
+  <b>${t('lbl_val_accuracy')}:</b> ${meta.validationAccuracy != null ? (meta.validationAccuracy * 100).toFixed(1) + '%' : '–'}<br>
   <b>${t('lbl_timestamp')}:</b> ${meta.timestamp ? new Date(meta.timestamp).toLocaleString() : '–'}
 `;
   }
