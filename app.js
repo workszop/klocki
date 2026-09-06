@@ -219,6 +219,12 @@ const STRINGS = {
     eval_epoch: (e, n) => `Trening na 80% (świeży model): epoka ${e}/${n}`,
     confirm_clear_canvas: 'Wyczyścić obszar roboczy? Bloki i wczytane modele zostaną usunięte. Dataset pozostanie w pamięci przeglądarki.',
     confirm_clear_canvas_model: 'Wytrenowany model nie został jeszcze zapisany i zostanie utracony. Wyczyścić obszar roboczy? Dataset pozostanie w pamięci przeglądarki.',
+    confirm_reset_state: 'To trwale usunie zebrane zdjęcia, nazwy etykiet, zapisane modele, układ klocków i ustawienia tej aplikacji. Tej operacji nie można cofnąć. Język interfejsu zostanie zachowany. Kontynuować?',
+    btn_reset_state: 'Resetuj wszystko',
+    log_reset_state: 'Resetowanie danych aplikacji...',
+    log_reset_state_done: 'Dane aplikacji usunięte. Odświeżam aplikację...',
+    err_reset_state: 'Nie udało się wyczyścić wszystkich danych aplikacji: ',
+    err_reset_tf: 'TensorFlow.js nie jest jeszcze gotowy, więc zapisane modele nie mogły zostać usunięte. Spróbuj ponownie.',
     empty_title: 'Pusty obszar roboczy',
     empty_subtitle: 'Kliknij lub przeciągnij blok z lewej strony albo użyj szablonu',
     empty_qs_train: '🎓 Szybki start: Trening',
@@ -502,6 +508,12 @@ const STRINGS = {
     eval_epoch: (e, n) => `Training on 80% (fresh model): epoch ${e}/${n}`,
     confirm_clear_canvas: 'Clear the workspace? Blocks and loaded models will be removed. The dataset stays in browser storage.',
     confirm_clear_canvas_model: 'The trained model has not been saved yet and will be lost. Clear the workspace? The dataset stays in browser storage.',
+    confirm_reset_state: 'This permanently deletes collected images, label names, saved models, the block layout and this app\'s settings. This cannot be undone. The interface language will be kept. Continue?',
+    btn_reset_state: 'Reset everything',
+    log_reset_state: 'Resetting application data...',
+    log_reset_state_done: 'Application data deleted. Reloading the app...',
+    err_reset_state: 'Could not clear all application data: ',
+    err_reset_tf: 'TensorFlow.js is not ready, so saved models could not be deleted. Please try again.',
     empty_title: 'Empty workspace',
     empty_subtitle: 'Click or drag a block from the left, or use a template',
     empty_qs_train: '🎓 Quick start: Training',
@@ -796,6 +808,8 @@ let classNames = ['Klasa 1', 'Klasa 2'];
 let classColors = CLASS_COLORS.slice(0, 2);
 let capturedSamples = [[], []]; // per class, array of ImageData – dynamic
 let preparedData = null; // {xs, ys}
+let prepareWorker = null;
+let prepareCleanup = null;
 // Bumped on every sample/class change. runPrepare records it on entry and
 // discards a worker result produced from an older snapshot.
 let datasetVersion = 0;
@@ -834,6 +848,14 @@ let prepareInProgress = false;
 let baseModelLoading = false;
 let modelFileLoading = false;
 let evaluateInProgress = false;
+let evaluateCancelled = false;
+// Destructive reset is a single-flight operation. Once confirmed, all
+// persistence writers must become no-ops until the page reloads, otherwise a
+// late debounced save could resurrect data the learner just deleted.
+let appResetting = false;
+let appResetConfirming = false;
+let appResetPromise = null;
+const activePersistenceTasks = new Set();
 // True once the current fullModel has been saved/downloaded; drives the Save
 // pill, the remove/clear confirms and the beforeunload warning.
 let modelSaved = false;
@@ -915,18 +937,42 @@ function toggleLang() {
 
 // ===== LOG PANEL =====
 const LOG_MAX_ENTRIES = 500;
+// True while the user is reading the newest lines. Updated from scroll events
+// (not measured inside log()), so a terminal resize that changes clientHeight
+// or rewraps lines cannot silently switch autoscroll off.
+let logFollowTail = true;
+function logPinToTail() {
+  const entries = document.getElementById('log-entries');
+  if (entries && logFollowTail) entries.scrollTop = entries.scrollHeight;
+}
+function initLogPanel() {
+  const entries = document.getElementById('log-entries');
+  if (!entries) return;
+  entries.addEventListener('scroll', () => {
+    logFollowTail = entries.scrollHeight - entries.clientHeight - entries.scrollTop < 40;
+  }, { passive: true });
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => logPinToTail()).observe(entries);
+  }
+  window.addEventListener('resize', logPinToTail, { passive: true });
+}
 function log(type, msg) {
   const el = document.createElement('div');
   el.className = `log-line ll-${type}`;
   const ts = new Date().toLocaleTimeString(lang === 'pl' ? 'pl-PL' : 'en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   el.textContent = `[${ts}] ${msg}`;
   const entries = document.getElementById('log-entries');
+  if (!entries) return;
   entries.appendChild(el);
   // Keep the panel bounded: inference logs ~1 line/s for the whole session.
   while (entries.childElementCount > LOG_MAX_ENTRIES) entries.removeChild(entries.firstChild);
-  entries.scrollTop = entries.scrollHeight;
+  entries.dataset.entryCount = String(entries.childElementCount);
+  logPinToTail();
 }
-function clearLog() { document.getElementById('log-entries').innerHTML = ''; }
+function clearLog() {
+  const entries = document.getElementById('log-entries');
+  if (entries) { entries.replaceChildren(); entries.dataset.entryCount = '0'; logFollowTail = true; }
+}
 
 // ===== DRAG & DROP – PALETTE =====
 function paletteDragStart(e) {
@@ -1010,6 +1056,27 @@ function getEduAnnotation(type) {
   return a ? (a[lang] || a.en) : '';
 }
 
+// Track asynchronous writes so reset can wait for an already-running IDB or
+// model save before removing its storage record. Promise rejection is observed
+// here, while the original promise is still returned to its caller.
+function trackPersistenceTask(task) {
+  const promise = Promise.resolve(task);
+  activePersistenceTasks.add(promise);
+  promise.then(
+    () => activePersistenceTasks.delete(promise),
+    () => activePersistenceTasks.delete(promise)
+  );
+  return promise;
+}
+
+async function waitForPersistenceTasks() {
+  // A writer can enqueue a second writer while the first one is settling, so
+  // drain the set in rounds rather than taking one snapshot only.
+  while (activePersistenceTasks.size) {
+    await Promise.allSettled(Array.from(activePersistenceTasks));
+  }
+}
+
 // ===== DATASET PERSISTENCE (IndexedDB) =====
 // Each class's captured ImageData objects are JPEG-encoded and stored in IDB.
 // JPEG at quality 0.82 reduces each 224×224 sample from ~200 KB to ~10-15 KB,
@@ -1023,6 +1090,7 @@ const DATASET_DB_NAME = 'ml-blocks-v2';
 const DATASET_STORE   = 'dataset';
 let _datasetDB = null;
 let _saveDebounceTimers = {};
+let _saveDebounceResolvers = {};
 
 function openDatasetDB() {
   if (_datasetDB) return Promise.resolve(_datasetDB);
@@ -1105,6 +1173,8 @@ function decodeSampleJPEG(buf) {
 function cancelAllPendingSaves() {
   Object.values(_saveDebounceTimers).forEach(clearTimeout);
   _saveDebounceTimers = {};
+  Object.values(_saveDebounceResolvers).forEach(resolve => resolve());
+  _saveDebounceResolvers = {};
   Object.values(_nameSaveTimers).forEach(clearTimeout);
   _nameSaveTimers = {};
 }
@@ -1115,9 +1185,11 @@ function cancelAllPendingSaves() {
 // skipped; its first full write will carry the current name anyway.
 let _nameSaveTimers = {};
 function saveClassNameToIDB(classIdx) {
+  if (appResetting) return;
   clearTimeout(_nameSaveTimers[classIdx]);
   _nameSaveTimers[classIdx] = setTimeout(async () => {
     delete _nameSaveTimers[classIdx];
+    if (appResetting) return;
     try {
       await writeClassNameToIDB(classIdx);
     } catch (err) {
@@ -1125,9 +1197,16 @@ function saveClassNameToIDB(classIdx) {
     }
   }, 600);
 }
-async function writeClassNameToIDB(classIdx) {
+function writeClassNameToIDB(classIdx) {
+  return trackPersistenceTask(writeClassNameToIDBNow(classIdx));
+}
+
+async function writeClassNameToIDBNow(classIdx) {
+  if (appResetting) return;
   if (datasetLoadPromise) await datasetLoadPromise;
+  if (appResetting) return;
   const db = await openDatasetDB();
+  if (appResetting) return;
   await new Promise((res, rej) => {
     const tx = db.transaction(DATASET_STORE, 'readwrite');
     const store = tx.objectStore(DATASET_STORE);
@@ -1146,11 +1225,18 @@ async function writeClassNameToIDB(classIdx) {
 
 // Actually encode + persist one class. Returns a promise that resolves when the
 // IDB write commits, so callers that need durability (import, delete) can await.
-async function writeClassToIDB(classIdx) {
+function writeClassToIDB(classIdx) {
+  return trackPersistenceTask(writeClassToIDBNow(classIdx));
+}
+
+async function writeClassToIDBNow(classIdx) {
+  if (appResetting) return;
   // A write racing the initial load would store only the samples captured so
   // far and drop the ones still being decoded from IDB for that class.
   if (datasetLoadPromise) await datasetLoadPromise;
+  if (appResetting) return;
   const db = await openDatasetDB();
+  if (appResetting) return;
   const samples = capturedSamples[classIdx] || [];
   // Only samples captured since the last save are actually encoded.
   const jpegData = await Promise.all(samples.map(encodeSampleJPEG));
@@ -1166,23 +1252,30 @@ async function writeClassToIDB(classIdx) {
 // encoder during rapid capture bursts. Returns a promise that resolves once the
 // scheduled write completes (immediate=true skips the debounce).
 function saveClassToIDB(classIdx, immediate) {
-  if (!classIdx && classIdx !== 0) return Promise.resolve();
+  if (appResetting || (!classIdx && classIdx !== 0)) return Promise.resolve();
   // Any change to the captured samples invalidates the prepared training
   // snapshot – otherwise training silently runs on stale data.
   invalidatePreparedData();
   clearTimeout(_saveDebounceTimers[classIdx]);
+  if (_saveDebounceResolvers[classIdx]) _saveDebounceResolvers[classIdx]();
   const delay = immediate ? 0 : 600;
-  return new Promise(resolve => {
+  const task = new Promise(resolve => {
+    _saveDebounceResolvers[classIdx] = resolve;
     _saveDebounceTimers[classIdx] = setTimeout(async () => {
+      delete _saveDebounceTimers[classIdx];
       try {
         await writeClassToIDB(classIdx);
       } catch (err) {
         console.warn('saveClassToIDB failed:', err);
       } finally {
-        resolve();
+        if (_saveDebounceResolvers[classIdx] === resolve) {
+          delete _saveDebounceResolvers[classIdx];
+          resolve();
+        }
       }
     }, delay);
   });
+  return trackPersistenceTask(task);
 }
 
 // Restore all classes from IDB into classNames / classColors / capturedSamples.
@@ -1474,17 +1567,241 @@ async function clearDatasetFromIDB() {
   }
 }
 
+// Remove every piece of state owned by this app. The confirmation is kept here
+// rather than in the shell so the same destructive action behaves identically
+// in the original and guided views.
+async function removeSavedAppModels() {
+  if (typeof tf === 'undefined' || !tf.io || typeof tf.io.listModels !== 'function') {
+    throw new Error(t('err_reset_tf'));
+  }
+  const stored = await tf.io.listModels();
+  const ownedUrls = Object.keys(stored).filter(url =>
+    /^(?:indexeddb|localstorage):\/\/ml-blocks-/.test(url)
+  );
+  if (typeof tf.io.removeModel !== 'function') {
+    if (ownedUrls.length) throw new Error('TensorFlow.js model removal is unavailable');
+    return;
+  }
+  await Promise.all(ownedUrls.map(async url => {
+    await tf.io.removeModel(url);
+  }));
+}
+
+function removeAppLocalStorage() {
+  const preserve = new Set(['ml-blocks-lang']);
+  const ownedExact = new Set(['co-terminal-size', 'co-card-sizes']);
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && ((key.startsWith('ml-blocks-') && !preserve.has(key)) || ownedExact.has(key))) keys.push(key);
+  }
+  keys.forEach(key => localStorage.removeItem(key));
+  // Keep the current language even if the stored preference was malformed.
+  localStorage.setItem('ml-blocks-lang', STRINGS[lang] ? lang : 'pl');
+}
+
+function stopAppRuntime() {
+  const stop = stream => {
+    try { stream?.getTracks?.().forEach(track => track.stop()); } catch (_) {}
+  };
+  Object.values(cameraStreams).forEach(stop);
+  Object.values(zsStreams).forEach(stop);
+  stop(inferCameraStream);
+  cameraStreams = {};
+  invalidateCameraOpenings();
+  zsStreams = {};
+  Object.keys(zsIntervals).forEach(id => clearInterval(zsIntervals[id]));
+  zsIntervals = {};
+  Object.keys(captureBusy).forEach(id => delete captureBusy[id]);
+  Object.keys(zsBusy).forEach(id => delete zsBusy[id]);
+  if (inferInterval) clearInterval(inferInterval);
+  inferInterval = null;
+  inferCameraStream = null;
+  inferVideoEl = null;
+  document.querySelectorAll('video').forEach(video => {
+    try { video.pause(); } catch (_) {}
+    try { video.srcObject = null; } catch (_) {}
+  });
+  trainingCancelled = true;
+  evaluateCancelled = true;
+  xaiCancelled = true;
+  if (prepareCleanup) prepareCleanup(false);
+  else if (prepareWorker) {
+    try { prepareWorker.terminate(); } catch (_) {}
+    prepareWorker = null;
+    prepareInProgress = false;
+  }
+}
+
+function disposeAppModels() {
+  disposeFeatureCache();
+  const models = new Set([baseModel, fullModel, inferModel, zeroShotModel].filter(Boolean));
+  models.forEach(model => { try { model.dispose(); } catch (_) {} });
+  baseModel = null;
+  fullModel = null;
+  inferModel = null;
+  zeroShotModel = null;
+  zeroShotModelLoading = null;
+  inferMetadata = null;
+  modelMetadata = null;
+  modelSaved = false;
+}
+
+function resetAppMemory() {
+  stopAppRuntime();
+  disposeAppModels();
+  placedBlocks.forEach(block => block.card?.remove());
+  document.getElementById('pipeline-connectors')?.replaceChildren();
+  placedBlocks = [];
+  blocksByType = {};
+  blockIdCounter = 0;
+  classNames = t('default_class_names').slice();
+  classColors = CLASS_COLORS.slice(0, 2);
+  capturedSamples = [[], []];
+  preparedData = null;
+  datasetLoadedFromIDB = true;
+  datasetLoadPromise = null;
+  datasetVersion++;
+  lossHistory = [];
+  accHistory = [];
+  predHistory = [];
+  frozenFrame = false;
+  predSnapshots.clear();
+  predFrameSeq = 0;
+  _lastLoggedClass = -1;
+  _lastLogTime = 0;
+  imagenetLabels = null;
+  Object.keys(xaiStates).forEach(id => delete xaiStates[id]);
+  xaiRunning = false;
+  xaiActiveId = null;
+  xaiCancelled = false;
+  xaiFrameCounter = 0;
+  trainingInProgress = false;
+  pipelineRunning = false;
+  prepareInProgress = false;
+  baseModelLoading = false;
+  modelFileLoading = false;
+  evaluateInProgress = false;
+  evaluateCancelled = false;
+  canvasStateRestoring = false;
+  eduMode = false;
+  window.activeClass = 0;
+  document.body?.classList.remove('edu-mode');
+  clearFlowPhase();
+  clearLog();
+  refreshEmptyState();
+  refreshDatasetInfo();
+  evaluatePipelineState();
+}
+
+// Every storage step gets its own deadline: a wedged IndexedDB request must
+// not leave appResetting stuck at true (which silently disables the whole UI).
+const RESET_STEP_TIMEOUT_MS = 8000;
+// sessionStorage survives the reload that ends the reset; the boot path reads
+// it to tell the learner which step failed. (removeAppLocalStorage only touches
+// localStorage, so this key is never wiped by the reset itself.)
+const RESET_ERROR_KEY = 'ml-blocks-reset-error';
+
+function withTimeout(promise, ms) {
+  let timer = null;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('timeout')), ms);
+  });
+  return Promise.race([Promise.resolve(promise), deadline]).finally(() => clearTimeout(timer));
+}
+
+// The reset is destructive and cannot be rolled back, so once the first store
+// is touched it always finishes with a reload: a half-wiped store plus stale
+// in-memory classes would otherwise persist only the next captured class and
+// silently lose the rest. Failures are collected, not thrown.
+async function performAppStateReset() {
+  if (typeof tf === 'undefined' || !tf.io || typeof tf.io.listModels !== 'function' || typeof tf.io.removeModel !== 'function') {
+    throw new Error(t('err_reset_tf'));
+  }
+  appResetting = true;
+  log('warn', t('log_reset_state'));
+  stopAppRuntime();
+  cancelAllPendingSaves();
+  const failures = [];
+  const step = async (label, run) => {
+    try { await withTimeout(run(), RESET_STEP_TIMEOUT_MS); }
+    catch (err) { failures.push(label + ': ' + (err?.message || String(err))); }
+  };
+  // Dataset loading is read-only, but waiting for it prevents a decoder from
+  // changing the in-memory arrays while the reset is taking its snapshot.
+  if (datasetLoadPromise) {
+    try { await withTimeout(datasetLoadPromise, RESET_STEP_TIMEOUT_MS); } catch (_) {}
+  }
+  await step('drain', waitForPersistenceTasks);
+  await step('dataset', clearDatasetStore);
+  // A model save may have finished between the first drain and the dataset
+  // clear. Drain once more before deleting TensorFlow.js model records.
+  await step('drain', waitForPersistenceTasks);
+  await step('models', removeSavedAppModels);
+  try { removeAppLocalStorage(); } catch (err) { failures.push('settings: ' + (err?.message || String(err))); }
+  if (_datasetDB) {
+    try { _datasetDB.close(); } catch (_) {}
+    _datasetDB = null;
+  }
+  if (failures.length) {
+    console.error('resetAppState: partial failure', failures);
+    try { sessionStorage.setItem(RESET_ERROR_KEY, failures.join('; ')); } catch (_) {}
+  }
+  resetAppMemory();
+  log(failures.length ? 'error' : 'success', t('log_reset_state_done'));
+  window.location.reload();
+  return failures.length === 0;
+}
+
+// Boot-path companion: surface a partial reset failure from the previous page.
+function reportPendingResetError() {
+  let message = null;
+  try {
+    message = sessionStorage.getItem(RESET_ERROR_KEY);
+    if (message) sessionStorage.removeItem(RESET_ERROR_KEY);
+  } catch (_) {}
+  if (!message) return;
+  log('error', t('err_reset_state') + message);
+  showToast(t('err_reset_state') + message, 'error', { duration: 8000 });
+}
+
+// Called by the shell's reset button. Cancel is a strict no-op: no storage,
+// runtime state, or DOM is touched until uiConfirm resolves true.
+window.resetAppState = function resetAppState() {
+  if (appResetting || appResetConfirming) return Promise.resolve(false);
+  appResetConfirming = true;
+  return uiConfirm(t('confirm_reset_state'), {
+    okLabel: t('btn_reset_state'),
+    danger: true,
+    defaultCancel: true
+  }).then(ok => {
+    appResetConfirming = false;
+    if (!ok) return false;
+    appResetPromise = performAppStateReset().catch(err => {
+      // Only the pre-flight check can reject; nothing was wiped, so re-enable the UI.
+      console.error('resetAppState failed:', err);
+      appResetting = false;
+      showToast(t('err_reset_state') + (err?.message || String(err)), 'error', { duration: 6000 });
+      return false;
+    });
+    return appResetPromise;
+  }, err => {
+    appResetConfirming = false;
+    throw err;
+  });
+};
+
 // ===== CANVAS STATE PERSISTENCE =====
 // Save the *layout* (block types + positions) and class names to localStorage
 // after every relevant change. Restore on DOMContentLoaded so an accidental
 // page reload doesn't wipe out the user's setup. Trained models and samples
 // are intentionally NOT persisted – they're large and live in IndexedDB
 // (Save Model block) where the user explicitly opted in.
-const CANVAS_STATE_KEY = 'ml-blocks-canvas-v1';
+const CANVAS_STATE_KEY = document.body.dataset.layoutKey || 'ml-blocks-canvas-v1';
 let canvasStateRestoring = false;
 
 function persistCanvasState() {
-  if (canvasStateRestoring) return; // avoid clobbering during initial restore
+  if (canvasStateRestoring || appResetting) return; // avoid clobbering during initial restore/reset
   try {
     const state = {
       blocks: placedBlocks.map(b => ({ type: b.type, x: b.x, y: b.y })),
@@ -1535,6 +1852,7 @@ function restoreCanvasState() {
 // Toggle EDU/teaching mode at runtime. Persisted in localStorage so the next
 // visit remembers the setting. Annotations re-render via refreshAllAnnotations.
 function toggleEduMode() {
+  if (appResetting) return;
   eduMode = !eduMode;
   localStorage.setItem('ml-blocks-edu', eduMode ? '1' : '0');
   document.body.classList.toggle('edu-mode', eduMode);
@@ -1778,8 +2096,10 @@ async function uploadPhotosToClass(classIdx, input) {
   const SIZE = 224;
   let added = 0;
   for (const f of files) {
+    if (appResetting) break;
     try {
       const bmp = await createImageBitmap(f);
+      if (appResetting) { if (bmp.close) bmp.close(); break; }
       const cv = document.createElement('canvas');
       cv.width = SIZE; cv.height = SIZE;
       const ctx = cv.getContext('2d');
@@ -1794,6 +2114,7 @@ async function uploadPhotosToClass(classIdx, input) {
       console.warn('Photo decode failed:', e);
     }
   }
+  if (appResetting) return;
   if (added) {
     invalidatePreparedData();              // dataset changed → snapshot stale
     saveClassToIDB(classIdx);
@@ -2161,6 +2482,7 @@ ${makeBtn(t('btn_export_app'), `runDeployExport('${id}')`, 'var(--c-deploy)')}
 
 // ===== BLOCK PLACEMENT =====
 function placeBlock(type, x, y) {
+  if (appResetting) return null;
   const id = 'blk-' + (++blockIdCounter);
   const card = document.createElement('div');
   card.className = 'block-card status-idle';
@@ -2354,6 +2676,9 @@ function removeBlock(id) {
   const block = placedBlocks.find(b => b.id === id);
   // Stop streams/intervals associated with this block before tearing it down
   if (block) {
+    if (block.type === 'camera-infer') cancelCameraOpening('infer');
+    else if (block.type === 'zero-shot') cancelCameraOpening('zs-' + id);
+    else if (block.type === 'camera-input') cancelCameraOpening(id);
     if (cameraStreams[id]) {
       try { cameraStreams[id].getTracks().forEach(t => t.stop()); } catch (_) {}
       delete cameraStreams[id];
@@ -2415,6 +2740,7 @@ async function clearCanvas() {
   cancelAllPendingSaves();
   pendingClasses.forEach(i => saveClassToIDB(i, true));
   // Stop any running camera/inference streams attached to soon-to-be-removed blocks
+  invalidateCameraOpenings();
   Object.keys(cameraStreams).forEach(id => {
     try { cameraStreams[id].getTracks().forEach(t => t.stop()); } catch (_) {}
   });
@@ -2504,6 +2830,31 @@ let cameraStreams = {};
 // rapid clicks both pass the existing-stream check and open two streams – the
 // first is overwritten and never stopped (camera LED stays on).
 let cameraOpening = {};
+let cameraOpeningGeneration = 0;
+
+function beginCameraOpening(key) {
+  if (cameraOpening[key]) return null;
+  const token = { generation: cameraOpeningGeneration };
+  cameraOpening[key] = token;
+  return token;
+}
+
+function isCameraOpeningCurrent(key, token) {
+  return cameraOpening[key] === token && token?.generation === cameraOpeningGeneration;
+}
+
+function finishCameraOpening(key, token) {
+  if (cameraOpening[key] === token) delete cameraOpening[key];
+}
+
+function cancelCameraOpening(key) {
+  delete cameraOpening[key];
+}
+
+function invalidateCameraOpenings() {
+  cameraOpeningGeneration++;
+  cameraOpening = {};
+}
 
 function isBlockPlaced(id) {
   return placedBlocks.some(b => b.id === id);
@@ -2536,20 +2887,25 @@ async function getCameraStream() {
 }
 
 async function blockStartCamera(id) {
-  if (cameraOpening[id]) return;
-  cameraOpening[id] = true;
+  if (appResetting) return;
+  const opening = beginCameraOpening(id);
+  if (!opening) return;
   try {
     if (cameraStreams[id]) {
       cameraStreams[id].getTracks().forEach(t => t.stop());
     }
     const stream = await getCameraStream();
-    if (!isBlockPlaced(id)) { stopStream(stream); return; } // removed during the permission prompt
+    if (!isCameraOpeningCurrent(id, opening) || appResetting || !isBlockPlaced(id)) {
+      stopStream(stream);
+      return;
+    } // stopped, removed, or reset during the permission prompt
     cameraStreams[id] = stream;
     const vid = document.getElementById('vid-' + id);
     if (vid) { vid.srcObject = stream; vid.play().catch(() => {}); }
     setBlockStatus(document.getElementById(id), 'running');
     log('success', t('log_camera_start'));
   } catch (err) {
+    if (!isCameraOpeningCurrent(id, opening) || appResetting) return;
     let msg = t('log_camera_err') + err.message;
     if (location.protocol === 'file:') {
       msg += t('hint_file_protocol');
@@ -2557,7 +2913,7 @@ async function blockStartCamera(id) {
     log('error', msg);
     setBlockStatus(document.getElementById(id), 'error');
   } finally {
-    cameraOpening[id] = false;
+    finishCameraOpening(id, opening);
   }
 }
 
@@ -2791,6 +3147,7 @@ function previewAugmentation(id) {
 // Resolves true when preparedData is ready, false otherwise (runPipeline stops
 // on false).
 async function runPrepare(id) {
+  if (appResetting) return false;
   const totalSamples = capturedSamples.reduce((s, a) => s + a.length, 0);
   if (totalSamples === 0) { log('warn', t('log_no_data')); return false; }
 
@@ -2840,6 +3197,7 @@ async function runPrepare(id) {
   const blob = new Blob([WORKER_CODE], { type: 'application/javascript' });
   const workerURL = URL.createObjectURL(blob);
   const worker = new Worker(workerURL);
+  prepareWorker = worker;
 
   return new Promise((resolve) => {
     // Tear down worker + blob URL + guard exactly once, whatever the outcome.
@@ -2849,9 +3207,12 @@ async function runPrepare(id) {
       settled = true;
       try { worker.terminate(); } catch (_) {}
       URL.revokeObjectURL(workerURL);
+      if (prepareWorker === worker) prepareWorker = null;
+      if (prepareCleanup === cleanup) prepareCleanup = null;
       prepareInProgress = false;
       resolve(!!ok);
     };
+    prepareCleanup = cleanup;
     // Without these, a worker exception left the promise pending forever -
     // runPipeline would hang and the progress bar freeze with no error.
     worker.onerror = (err) => {
@@ -2869,6 +3230,7 @@ async function runPrepare(id) {
         if (prog) prog.value = e.data.pct;
         if (status) status.textContent = e.data.pct + '%';
       } else if (e.data.type === 'done') {
+        if (appResetting) { cleanup(false); return; }
         // Samples changed while the worker ran (capture, upload, delete...):
         // the snapshot is stale, so leave preparedData null instead of
         // overwriting the invalidation with old data.
@@ -2914,6 +3276,7 @@ async function runPrepare(id) {
 // Returns true when the base model is available afterwards (runPipeline stops
 // on false).
 async function runLoadBaseModel(id) {
+  if (appResetting) return false;
   if (baseModel) { log('info', t('info_base_already')); setBlockStatus(document.getElementById(id), 'done'); return true; }
   // Guard against a double-click racing two ~3 MB downloads (the second would
   // overwrite baseModel and leak the first GraphModel's weights).
@@ -2924,12 +3287,17 @@ async function runLoadBaseModel(id) {
   const prog = document.getElementById('prog-' + id);
   const mstat = document.getElementById('model-status-' + id);
   try {
-    baseModel = await tf.loadGraphModel(MODEL_URL, {
+    const loadedModel = await tf.loadGraphModel(MODEL_URL, {
       onProgress: (frac) => {
         if (prog) prog.value = Math.round(frac * 100);
         if (mstat) mstat.textContent = Math.round(frac * 100) + '%';
       }
     });
+    if (appResetting) {
+      try { loadedModel.dispose(); } catch (_) {}
+      return false;
+    }
+    baseModel = loadedModel;
 
     if (prog) prog.value = 100;
     if (mstat) mstat.textContent = t('status_base_loaded');
@@ -3127,6 +3495,7 @@ async function validateTrainingData() {
 // Resolves true when a trained model is live afterwards, false on a guard,
 // cancel or error (runPipeline stops on false).
 async function runTraining(id) {
+  if (appResetting) return false;
   if (!preparedData) {
     log('warn', t('log_no_data'));
     if (!placedBlocks.some(b => b.type === 'prepare-data')) {
@@ -3181,11 +3550,12 @@ async function runTraining(id) {
       rawXs,
       preparedData.rawOrder ? 'raw' : rawXs,
       {
-        shouldCancel: () => trainingCancelled,
+        shouldCancel: () => trainingCancelled || appResetting,
         onProgress: (done, total) => {
           if (info) info.textContent = t('feat_progress', done, total);
-        }
-      });
+      }
+    });
+    if (appResetting) throw new Error('resetting');
     const featSize = featsTensor.shape[1];
 
     // Dispose the index tensor immediately after oneHot consumes it
@@ -3205,7 +3575,7 @@ async function runTraining(id) {
       epochs, batchSize, shuffle: true,
       callbacks: {
         onEpochBegin: async (epoch) => {
-          if (trainingCancelled) throw new Error('cancelled');
+          if (trainingCancelled || appResetting) throw new Error(appResetting ? 'resetting' : 'cancelled');
         },
         onEpochEnd: async (epoch, logs) => {
           lossHistory.push(logs.loss);
@@ -3224,6 +3594,7 @@ async function runTraining(id) {
         }
       }
     });
+    if (appResetting) throw new Error('resetting');
 
     // ── STEP 3: Store classifier and wire up inference ──
     // Inference is always two-step: baseModel (frozen GraphModel from CDN) → classifier.
@@ -3258,7 +3629,7 @@ async function runTraining(id) {
     notifyModelTrained();
     return true;
   } catch (err) {
-    if (err.message === 'cancelled') {
+    if (err.message === 'cancelled' || err.message === 'resetting' || appResetting) {
       log('warn', t('log_train_cancel'));
       setBlockStatus(document.getElementById(id), 'idle');
     } else {
@@ -3348,6 +3719,7 @@ async function getCachedFeatures(source, samples, ident, opts) {
 }
 
 async function runEvaluate(id) {
+  if (appResetting) return;
   // TRUE hold-out evaluation. Split samples 80/20 (stratified), train a FRESH
   // head on the 80% only, then test on the 20% the fresh head has never seen.
   // (The deployed model can't give a genuine hold-out because it trained on all
@@ -3367,6 +3739,7 @@ async function runEvaluate(id) {
   }
   if (evaluateInProgress) return;
   evaluateInProgress = true;
+  evaluateCancelled = false;
 
   const statusEl = document.getElementById('eval-status-' + id);
   const resEl = document.getElementById('eval-results-' + id);
@@ -3415,8 +3788,10 @@ async function runEvaluate(id) {
     setStatus(t('eval_extracting'));
     // Owned by featureCache (never disposed here); trainFeat/testFeat are ours.
     const allFeat = await getCachedFeatures('raw', flatSamples, 'raw', {
+      shouldCancel: () => evaluateCancelled || appResetting,
       onProgress: (done, total) => setStatus(t('feat_progress', done, total))
     });
+    if (appResetting || evaluateCancelled) throw new Error(appResetting ? 'resetting' : 'cancelled');
     trainFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(trainIdx, 'int32')));
     testFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(testIdx, 'int32')));
     const featSize = trainFeat.shape[1];
@@ -3433,11 +3808,13 @@ async function runEvaluate(id) {
       // actually repaints.
       callbacks: {
         onEpochEnd: async (epoch) => {
+          if (evaluateCancelled || appResetting) throw new Error(appResetting ? 'resetting' : 'cancelled');
           setStatus(t('eval_epoch', epoch + 1, epochs));
           await tf.nextFrame();
         }
       }
     });
+    if (appResetting || evaluateCancelled) throw new Error(appResetting ? 'resetting' : 'cancelled');
 
     setStatus(t('eval_testing'));
     trainProbT = classifier.predict(trainFeat);
@@ -3470,6 +3847,7 @@ async function runEvaluate(id) {
     setBlockStatus(document.getElementById(id), 'done');
     log('success', t('log_eval_done', (acc * 100).toFixed(0), testLabels.length));
   } catch (err) {
+    if (appResetting || err.message === 'resetting' || err.message === 'cancelled') return;
     log('error', t('err_eval') + err.message);
     console.error(err);
     setStatus(t('err_prefix') + err.message);
@@ -3482,6 +3860,7 @@ async function runEvaluate(id) {
     if (testProbT) testProbT.dispose();
     if (classifier) { try { classifier.dispose(); } catch (_) {} }
     evaluateInProgress = false;
+    evaluateCancelled = false;
   }
 }
 
@@ -3578,11 +3957,19 @@ const BASE_MODEL_IDB_KEY = 'indexeddb://ml-blocks-base-v1';
 
 // Shared by the Save Model block and the post-train toast: the small head is
 // saved under the chosen name, the backbone once under BASE_MODEL_IDB_KEY.
-async function saveModelToBrowser(name) {
+function saveModelToBrowser(name) {
+  return trackPersistenceTask(saveModelToBrowserNow(name));
+}
+
+async function saveModelToBrowserNow(name) {
+  if (appResetting) throw new Error('resetting');
   fullModel.userDefinedMetadata = modelMetadata; // bake labels into model JSON
   await fullModel.save('indexeddb://ml-blocks-' + name);
+  if (appResetting) throw new Error('resetting');
   const stored = await tf.io.listModels();
+  if (appResetting) throw new Error('resetting');
   if (!stored[BASE_MODEL_IDB_KEY]) await baseModel.save(BASE_MODEL_IDB_KEY);
+  if (appResetting) throw new Error('resetting');
   localStorage.setItem('ml-blocks-meta-' + name, JSON.stringify(modelMetadata));
   modelSaved = true;
   evaluatePipelineState();
@@ -3607,6 +3994,7 @@ async function runSaveIDB(id) {
     const el = document.getElementById('save-info-' + id);
     if (el) el.textContent = t('log_save_idb');
   } catch (err) {
+    if (appResetting || err.message === 'resetting') return; // reset in progress, page is about to reload
     log('error', t('err_save') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   }
@@ -4046,9 +4434,11 @@ async function loadZeroShotModel(statusEl) {
 }
 
 async function startZeroShot(id) {
+  if (appResetting) return;
   const statusEl = document.getElementById('zs-status-' + id);
-  if (cameraOpening['zs-' + id]) return;
-  cameraOpening['zs-' + id] = true;
+  const openingKey = 'zs-' + id;
+  const opening = beginCameraOpening(openingKey);
+  if (!opening) return;
   if (zsStreams[id]) zsStreams[id].getTracks().forEach(t => t.stop());
   try {
     setBlockStatus(document.getElementById(id), 'running');
@@ -4056,10 +4446,14 @@ async function startZeroShot(id) {
       if (statusEl) statusEl.textContent = t('zs_downloading');
       await loadZeroShotModel(statusEl);
     }
+    if (!isCameraOpeningCurrent(openingKey, opening) || appResetting || !isBlockPlaced(id)) return;
     if (statusEl) statusEl.textContent = '';
     loadImagenetLabels();
     const stream = await getCameraStream();
-    if (!isBlockPlaced(id)) { stopStream(stream); return; } // removed during the permission prompt
+    if (!isCameraOpeningCurrent(openingKey, opening) || appResetting || !isBlockPlaced(id)) {
+      stopStream(stream);
+      return;
+    } // stopped, removed, or reset during model/camera startup
     zsStreams[id] = stream;
     const vid = document.getElementById('zsvid-' + id);
     if (vid) { vid.srcObject = stream; vid.play().catch(() => {}); }
@@ -4069,15 +4463,17 @@ async function startZeroShot(id) {
     zsIntervals[id] = setInterval(() => runZeroShot(id), interval);
     log('success', t('log_zs_started'));
   } catch (err) {
+    if (!isCameraOpeningCurrent(openingKey, opening) || appResetting) return;
     if (statusEl) statusEl.textContent = err.message || '';
     log('error', t('err_zs') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   } finally {
-    cameraOpening['zs-' + id] = false;
+    finishCameraOpening(openingKey, opening);
   }
 }
 
 function stopZeroShot(id) {
+  cancelCameraOpening('zs-' + id);
   if (zsIntervals[id]) { clearInterval(zsIntervals[id]); delete zsIntervals[id]; }
   if (zsStreams[id]) { zsStreams[id].getTracks().forEach(t => t.stop()); delete zsStreams[id]; }
   setBlockStatus(document.getElementById(id), 'idle');
@@ -4174,15 +4570,20 @@ async function runZeroShot(id) {
 }
 
 async function startInferCamera(id) {
-  if (cameraOpening['infer']) return;
-  cameraOpening['infer'] = true;
+  if (appResetting) return;
+  const openingKey = 'infer';
+  const opening = beginCameraOpening(openingKey);
+  if (!opening) return;
   try {
     if (inferCameraStream) inferCameraStream.getTracks().forEach(t => t.stop());
     // Clear any leftover freeze from a previous session – otherwise the
     // inference loop early-returns forever and predictions never resume.
     frozenFrame = false;
     const stream = await getCameraStream();
-    if (!isBlockPlaced(id)) { stopStream(stream); return; } // removed during the permission prompt
+    if (!isCameraOpeningCurrent(openingKey, opening) || appResetting || !isBlockPlaced(id)) {
+      stopStream(stream);
+      return;
+    } // stopped, removed, or reset during the permission prompt
     inferCameraStream = stream;
     const vid = document.getElementById('vid-' + id);
     if (vid) { vid.srcObject = inferCameraStream; vid.play().catch(() => {}); }
@@ -4201,14 +4602,16 @@ async function startInferCamera(id) {
     if (resultBlock) renderPredictionState(resultBlock.id, 'waiting');
     evaluatePipelineState();
   } catch (err) {
+    if (!isCameraOpeningCurrent(openingKey, opening) || appResetting) return;
     log('error', t('log_camera_err') + err.message);
     setBlockStatus(document.getElementById(id), 'error');
   } finally {
-    cameraOpening['infer'] = false;
+    finishCameraOpening(openingKey, opening);
   }
 }
 
 function stopInferCamera(id) {
+  cancelCameraOpening('infer');
   if (inferInterval) { clearInterval(inferInterval); inferInterval = null; }
   if (inferCameraStream) { inferCameraStream.getTracks().forEach(t => t.stop()); inferCameraStream = null; }
   // Detach the dead stream from the <video> (mirrors removeBlock) so XAI cannot
@@ -5906,6 +6309,7 @@ async function quickSaveModel() {
     log('success', t('log_save_idb'));
     showToast(t('toast_saved_as', name), 'success', { duration: 3000 });
   } catch (err) {
+    if (appResetting || err.message === 'resetting') return; // reset in progress, page is about to reload
     log('error', t('err_save') + err.message);
     showToast(t('err_save') + err.message, 'error');
   }
@@ -6056,12 +6460,17 @@ function uiConfirm(message, opts) {
     box.querySelector('.confirm-cancel').onclick = () => close(false);
     overlay.onclick = (e) => { if (e.target === overlay) close(false); };
     document.addEventListener('keydown', onKey);
-    requestAnimationFrame(() => box.querySelector('.confirm-ok').focus());
+    requestAnimationFrame(() => {
+      const initial = opts.defaultCancel ? box.querySelector('.confirm-cancel') : box.querySelector('.confirm-ok');
+      initial?.focus();
+    });
   });
 }
 
-// Warn before unload if a fresh model has not been saved.
+// Warn before unload if a fresh model has not been saved. A confirmed reset is
+// already an explicit discard, so it must not trigger a second browser prompt.
 window.addEventListener('beforeunload', (e) => {
+  if (appResetting) return;
   if (fullModel && !modelSaved) {
     e.preventDefault();
     e.returnValue = '';
@@ -6208,6 +6617,7 @@ function handleGlobalShortcut(e) {
   }
 }
 function saveGuidePrefs() {
+  if (appResetting) return;
   const chk = document.getElementById('chk-no-guide');
   localStorage.setItem('ml-blocks-no-guide', chk && chk.checked ? '1' : '0');
 }
@@ -6389,6 +6799,7 @@ window.activeClass = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
   applyLang();
+  initLogPanel();
   renderGuideSteps();
   if (eduMode) {
     document.body.classList.add('edu-mode');
@@ -6424,6 +6835,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   log('step', t('log_ready'));
+  reportPendingResetError();
   log('info', 'TensorFlow.js ' + (tf.version?.tfjs || tf.version || ''));
   // Wait for TF.js to fully initialize WebGL backend before reading it
   tf.ready().then(() => {

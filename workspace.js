@@ -1,6 +1,7 @@
 /* ─── Guided workspace constants ─── */
 const CO_STRINGS = {
   pl: {
+    reset_state: 'Resetuj stan aplikacji', resize_card: 'Zmień rozmiar: przeciągnij lub użyj strzałek. Home lub dwuklik przywraca rozmiar.',
     context_guided: 'Widok prowadzony', context_free: 'Canvas swobodny',
     run_pipeline: 'Uruchom pipeline', guide_button: 'Pomoc', tools: 'Narzędzia', tidy: 'Uporządkuj bloki', clear: 'Wyczyść tablicę',
     library_title: 'Biblioteka bloków', library_lead: 'Wybierz blok, aby dodać go do tablicy. Grupowanie pokazuje rolę każdego kroku.',
@@ -25,6 +26,7 @@ const CO_STRINGS = {
     desc_explain: 'Zobacz, które fragmenty obrazu wpłynęły na decyzję.', desc_explorer: 'Przejdź przez architekturę warstwa po warstwie.'
   },
   en: {
+    reset_state: 'Reset app state', resize_card: 'Resize: drag or use arrow keys. Home or double-click restores the default size.',
     context_guided: 'Guided view', context_free: 'Free canvas',
     run_pipeline: 'Run pipeline', guide_button: 'Help', tools: 'Tools', tidy: 'Tidy blocks', clear: 'Clear canvas',
     library_title: 'Block library', library_lead: 'Choose a block to add it to the canvas. Groups show the role of each step.',
@@ -74,9 +76,10 @@ const CO_SETTINGS = {
 /* ─── Alternative shell state ─── */
 const CO_STATE = {
   view: 'guided', libraryOpen: true, logOpen: false, activeId: null,
-  allExpanded: false, groupOpen: { build: true, test: false, understand: false, share: false },
+  groupOpen: { build: true, test: false, understand: false, share: false },
   freePositions: new Map(), freeWidths: new Map(), freeCollapse: new Map(), freeSettings: new Map(),
   manualCollapse: new Map(),
+  cardSizes: {},
   terminalWidth: 320, terminalHeight: 240, terminalDrag: null,
   logErrors: 0, latestLog: ''
 };
@@ -227,6 +230,8 @@ function coPositionCardsFree() {
       card.style.top = position.top;
     }
     card.style.width = CO_STATE.freeWidths.get(card.id) || '';
+    const size = coCardSize(card);
+    if (size) card.style.width = size.width + 'px';
     const wasCollapsed = CO_STATE.freeCollapse.get(card.id);
     if (wasCollapsed !== undefined) card.classList.toggle('collapsed', wasCollapsed);
   });
@@ -303,6 +308,7 @@ function coSettingsGroup(card, type) {
   if (!rows.length) return;
   const details = document.createElement('details');
   details.className = 'co-settings-details';
+  details.open = true; /* options stay visible; the learner can fold them */
   details.dataset.coSettings = config.summary;
   const summary = document.createElement('summary');
   summary.textContent = coText('settings');
@@ -342,6 +348,104 @@ function coEnsureCardControls(card, type) {
   coEnsureSummary(card, card.dataset.coType);
   coEnsurePrereqSummary(card);
   coUpdateCardControl(card);
+  coEnsureCardResize(card);
+}
+
+/* ─── Card sizing ─── */
+/* Every card opens at one fixed default size (the size it has when packed
+   next to its neighbours) regardless of viewport width. Only a card the
+   learner resized by hand deviates from it. The defaults live in the
+   --co-card-width / --co-open-card-height tokens; the numbers here are
+   fallbacks for a missing stylesheet. */
+function coCardDefaults() {
+  const style = getComputedStyle(document.documentElement);
+  const width = parseFloat(style.getPropertyValue('--co-card-width'));
+  const height = parseFloat(style.getPropertyValue('--co-open-card-height'));
+  return { width: Number.isFinite(width) ? width : 360, height: Number.isFinite(height) ? height : 640 };
+}
+
+function coCardMaxWidth() {
+  return Math.max(160, (document.getElementById('canvas')?.clientWidth || 320) - (window.innerWidth <= 768 ? 32 : 48));
+}
+
+function coCardSize(card) {
+  const stored = CO_STATE.cardSizes[card.dataset.coType];
+  const maxWidth = coCardMaxWidth();
+  const size = stored && Number.isFinite(stored.width) && Number.isFinite(stored.height)
+    ? { width: Math.max(Math.min(220, maxWidth), Math.min(maxWidth, stored.width)), height: Math.max(320, Math.min(1200, stored.height)) } : null;
+  /* Only a manual size is written inline, so the stylesheet token stays the
+     default and a theme or breakpoint can still change it. */
+  if (size) card.style.setProperty('--co-card-height', size.height + 'px');
+  else card.style.removeProperty('--co-card-height');
+  card.dataset.manualSize = String(!!size);
+  return size;
+}
+
+function coSaveCardSizes() {
+  try { localStorage.setItem('co-card-sizes', JSON.stringify(CO_STATE.cardSizes)); } catch (_) { /* Session sizing still works without storage. */ }
+}
+
+function coEnsureCardResize(card) {
+  coCardSize(card);
+  let handle = card.querySelector(':scope > .co-card-resize');
+  if (!handle) {
+    handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'co-card-resize';
+    handle.textContent = '◢';
+    handle.setAttribute('aria-controls', card.id);
+    card.appendChild(handle);
+    let drag = null;
+    /* pointermove fires up to 120×/s: touch only the dragged card here and
+       let the rAF-coalesced sync re-flow the rest of the layout. */
+    const resize = (width, height) => {
+      CO_STATE.cardSizes[card.dataset.coType] = { width, height };
+      const size = coCardSize(card);
+      if (size) card.style.width = size.width + 'px';
+      coScheduleSync();
+    };
+    const reset = () => {
+      delete CO_STATE.cardSizes[card.dataset.coType];
+      CO_STATE.freeWidths.delete(card.id);
+      coSaveCardSizes();
+      coSyncCards();
+    };
+    ['mousedown', 'touchstart', 'click'].forEach(type => handle.addEventListener(type, event => event.stopPropagation()));
+    handle.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      event.preventDefault(); event.stopPropagation();
+      const rect = card.getBoundingClientRect();
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, width: rect.width, height: rect.height };
+      handle.setPointerCapture(event.pointerId);
+      handle.focus({ preventScroll: true });
+      document.body.dataset.cardResizing = 'true';
+    });
+    handle.addEventListener('pointermove', event => {
+      if (!drag || drag.id !== event.pointerId) return;
+      resize(drag.width + event.clientX - drag.x, drag.height + event.clientY - drag.y);
+    });
+    const finish = event => {
+      if (!drag || drag.id !== event.pointerId) return;
+      drag = null;
+      document.body.dataset.cardResizing = 'false';
+      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+      coSaveCardSizes();
+      coSyncCards();
+    };
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => handle.addEventListener(type, finish));
+    handle.addEventListener('dblclick', reset);
+    handle.addEventListener('keydown', event => {
+      if (event.key === 'Home') { event.preventDefault(); event.stopPropagation(); reset(); return; }
+      const delta = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+      if (!delta) return;
+      event.preventDefault(); event.stopPropagation();
+      const rect = card.getBoundingClientRect(), step = event.shiftKey ? 50 : 20;
+      resize(rect.width + delta[0] * step, rect.height + delta[1] * step);
+      coSaveCardSizes();
+    });
+  }
+  handle.title = coText('resize_card');
+  handle.setAttribute('aria-label', coText('resize_card'));
 }
 
 function coUpdateCardControl(card) {
@@ -388,35 +492,39 @@ function coLayoutGuided(records) {
   const gutter = window.innerWidth <= 768 ? 16 : 24;
   const gap = 16;
   const availableWidth = Math.max(1, canvas.clientWidth - gutter * 2);
-  const capacity = window.innerWidth <= 768 ? 1 : Math.max(1, Math.floor((availableWidth + gap) / (220 + gap)));
-  const columns = Math.max(1, Math.min(records.length, capacity));
-  const cardWidth = (availableWidth - gap * (columns - 1)) / columns;
-  canvas.dataset.guidedColumns = String(columns);
-  canvas.dataset.guidedRows = String(Math.ceil(records.length / columns));
+  /* Fixed default width: cards pack left-to-right and wrap, they never
+     stretch to fill the row. Phones get one full-width column. */
+  const cardWidth = window.innerWidth <= 768 ? availableWidth : Math.min(coCardDefaults().width, availableWidth);
   let y = startY;
   let rowHeight = 0;
-  const activeIndex = coCurrentIndex(records);
+  let x = 0, row = 1, column = 0, maxColumns = 0;
   records.forEach((record, index) => {
     const card = record.card || document.getElementById(record.id);
     if (!card) return;
     coSaveNewFreePosition(card);
-    const column = index % columns;
-    if (column === 0 && index > 0) {
+    const size = coCardSize(card);
+    const width = size ? size.width : cardWidth;
+    if (column > 0 && x + width > availableWidth + 0.5) {
       y += rowHeight + 22;
       rowHeight = 0;
+      x = 0; column = 0; row++;
     }
-    card.dataset.gridRow = String(Math.floor(index / columns) + 1);
+    card.dataset.gridRow = String(row);
     card.dataset.gridColumn = String(column + 1);
-    card.style.left = (gutter + column * (cardWidth + gap)) + 'px';
+    card.style.left = (gutter + x) + 'px';
     card.style.top = y + 'px';
-    card.style.width = cardWidth + 'px';
-    const manual = CO_STATE.manualCollapse.get(record.id);
-    const shouldCollapse = CO_STATE.allExpanded ? false : (manual === undefined ? index !== activeIndex : manual);
-    card.classList.toggle('collapsed', shouldCollapse);
+    card.style.width = width + 'px';
+    x += width + gap;
+    column++;
+    maxColumns = Math.max(maxColumns, column);
+    /* Cards open unfolded; only an explicit learner choice collapses one. */
+    card.classList.toggle('collapsed', CO_STATE.manualCollapse.get(record.id) === true);
     coUpdateCardControl(card);
     rowHeight = Math.max(rowHeight, card.offsetHeight);
   });
   const contentHeight = Math.ceil(y + rowHeight + 28);
+  canvas.dataset.guidedColumns = String(maxColumns);
+  canvas.dataset.guidedRows = String(row);
   const inner = document.getElementById('canvas-inner');
   if (inner) {
     /* Absolute cards do not reliably contribute to a scroll container's
@@ -494,7 +602,6 @@ function coSyncCards() {
     const indicator = item.querySelector('.co-palette-action');
     if (indicator) indicator.textContent = added ? '✓' : '+';
   });
-  if (CO_STATE.allExpanded) CO_STATE.manualCollapse.clear();
   records.forEach(record => {
     const card = record.card || document.getElementById(record.id);
     if (!card) return;
@@ -512,6 +619,7 @@ function coSyncCards() {
   });
   if (CO_STATE.view === 'guided') coLayoutGuided(records);
   else coPositionCardsFree();
+  coUpdateToggleAllButton(records);
   /* app.js numbers badges by its historical rank (save before evaluate).
      The alternative lesson presents the hold-out check first, so keep the
      visible step numbers aligned with the guided lane. */
@@ -532,7 +640,6 @@ function coSetView(view) {
     coFreePositionSnapshot(true);
     document.body.dataset.view = 'guided';
     CO_STATE.view = 'guided';
-    CO_STATE.allExpanded = false;
     coSyncCards();
   } else {
     /* Guided mode temporarily changes the visible collapse classes. Do
@@ -663,6 +770,10 @@ function coToggleLog(open) {
     summaryButton.setAttribute('aria-label', next ? coText('log_close') : coText('log_open'));
   }
   if (openButton) openButton.setAttribute('aria-label', coText('log_close'));
+  if (next) {
+    const entries = document.getElementById('log-entries');
+    if (entries) entries.scrollTop = entries.scrollHeight;
+  }
   coApplyTerminalSize();
   coScheduleSync();
 }
@@ -677,18 +788,20 @@ function coToggleGroup(group) {
   if (button) button.setAttribute('aria-expanded', String(open));
 }
 
-function coToggleAll() {
-  CO_STATE.allExpanded = !CO_STATE.allExpanded;
+/* The button reflects the cards: it offers to collapse while any card is
+   open and to expand once every card is folded. */
+function coUpdateToggleAllButton(records) {
   const button = document.getElementById('co-expand-all');
-  if (button) {
-    button.setAttribute('aria-pressed', String(CO_STATE.allExpanded));
-    button.textContent = coText(CO_STATE.allExpanded ? 'collapse_all' : 'expand_all');
-  }
+  if (!button) return;
+  const anyOpen = records.some(record => !(record.card || document.getElementById(record.id))?.classList.contains('collapsed'));
+  button.setAttribute('aria-pressed', String(!anyOpen));
+  button.textContent = coText(anyOpen ? 'collapse_all' : 'expand_all');
+}
+
+function coToggleAll() {
   const records = coRecords();
-  records.forEach(record => {
-    const card = record.card || document.getElementById(record.id);
-    if (card) card.classList.toggle('collapsed', !CO_STATE.allExpanded && record.id !== CO_STATE.activeId);
-  });
+  const anyOpen = records.some(record => !(record.card || document.getElementById(record.id))?.classList.contains('collapsed'));
+  records.forEach(record => CO_STATE.manualCollapse.set(record.id, anyOpen));
   coSyncCards();
 }
 
@@ -1001,6 +1114,10 @@ function coApplyLanguage() {
 }
 
 function coInitialise() {
+  try {
+    const sizes = JSON.parse(localStorage.getItem('co-card-sizes') || '{}');
+    if (sizes && typeof sizes === 'object' && !Array.isArray(sizes)) CO_STATE.cardSizes = sizes;
+  } catch (_) { /* Ignore malformed saved sizes. */ }
   /* The original DOMContentLoaded handler has already made its one
      synchronous first-run preference check. Restore Storage immediately
      so the alternative shell never changes the page's normal API after
