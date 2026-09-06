@@ -227,6 +227,8 @@ const STRINGS = {
     log_reset_state_done: 'Dane aplikacji usunięte. Odświeżam aplikację...',
     err_reset_state: 'Nie udało się wyczyścić wszystkich danych aplikacji: ',
     err_reset_tf: 'TensorFlow.js nie jest jeszcze gotowy, więc zapisane modele nie mogły zostać usunięte. Spróbuj ponownie.',
+    err_timeout: 'przekroczono limit czasu',
+    reset_step_drain: 'oczekiwanie na zapisy', reset_step_dataset: 'zdjęcia', reset_step_models: 'zapisane modele', reset_step_settings: 'ustawienia',
     empty_title: 'Pusty obszar roboczy',
     empty_subtitle: 'Kliknij lub przeciągnij blok z lewej strony albo użyj szablonu',
     empty_qs_train: '🎓 Szybki start: Trening',
@@ -523,6 +525,8 @@ const STRINGS = {
     log_reset_state_done: 'Application data deleted. Reloading the app...',
     err_reset_state: 'Could not clear all application data: ',
     err_reset_tf: 'TensorFlow.js is not ready, so saved models could not be deleted. Please try again.',
+    err_timeout: 'timed out',
+    reset_step_drain: 'waiting for pending saves', reset_step_dataset: 'images', reset_step_models: 'saved models', reset_step_settings: 'settings',
     empty_title: 'Empty workspace',
     empty_subtitle: 'Click or drag a block from the left, or use a template',
     empty_qs_train: '🎓 Quick start: Training',
@@ -845,6 +849,11 @@ function invalidatePreparedData() {
   datasetVersion++;
   disposeFeatureCache();
 }
+// Runners that read capturedSamples wait for an in-flight IndexedDB restore so
+// they never take a snapshot of a half-decoded dataset.
+async function awaitDatasetLoad() {
+  if (datasetLoadPromise) { try { await datasetLoadPromise; } catch (_) {} }
+}
 let baseModel = null;
 let fullModel = null;
 let trainingCancelled = false;
@@ -868,7 +877,6 @@ let evaluateCancelled = false;
 // late debounced save could resurrect data the learner just deleted.
 let appResetting = false;
 let appResetConfirming = false;
-let appResetPromise = null;
 const activePersistenceTasks = new Set();
 // True once the current fullModel has been saved/downloaded; drives the Save
 // pill, the remove/clear confirms and the beforeunload warning.
@@ -1358,6 +1366,9 @@ async function loadDatasetFromIDB() {
       });
       await Promise.all(decodePromises);
 
+      // The in-memory dataset just changed under any prepared snapshot or
+      // cached features, so bump the version and drop them.
+      invalidatePreparedData();
       log('success', t('log_idb_loaded', capturedSamples.flat().length));
       refreshDatasetUI();
     } catch (err) {
@@ -1585,17 +1596,11 @@ async function clearDatasetFromIDB() {
 // rather than in the shell so the same destructive action behaves identically
 // in the original and guided views.
 async function removeSavedAppModels() {
-  if (typeof tf === 'undefined' || !tf.io || typeof tf.io.listModels !== 'function') {
-    throw new Error(t('err_reset_tf'));
-  }
+  // performAppStateReset checks tf.io before anything destructive runs.
   const stored = await tf.io.listModels();
   const ownedUrls = Object.keys(stored).filter(url =>
     /^(?:indexeddb|localstorage):\/\/ml-blocks-/.test(url)
   );
-  if (typeof tf.io.removeModel !== 'function') {
-    if (ownedUrls.length) throw new Error('TensorFlow.js model removal is unavailable');
-    return;
-  }
   await Promise.all(ownedUrls.map(async url => {
     await tf.io.removeModel(url);
   }));
@@ -1661,54 +1666,6 @@ function disposeAppModels() {
   modelSaved = false;
 }
 
-function resetAppMemory() {
-  stopAppRuntime();
-  disposeAppModels();
-  placedBlocks.forEach(block => block.card?.remove());
-  document.getElementById('pipeline-connectors')?.replaceChildren();
-  placedBlocks = [];
-  blocksByType = {};
-  blockIdCounter = 0;
-  classNames = t('default_class_names').slice();
-  classColors = CLASS_COLORS.slice(0, 2);
-  capturedSamples = [[], []];
-  preparedData = null;
-  datasetLoadedFromIDB = true;
-  datasetLoadPromise = null;
-  datasetVersion++;
-  lossHistory = [];
-  accHistory = [];
-  valAccHistory = [];
-  predHistory = [];
-  frozenFrame = false;
-  predSnapshots.clear();
-  predFrameSeq = 0;
-  _lastLoggedClass = -1;
-  _lastLogTime = 0;
-  imagenetLabels = null;
-  Object.keys(xaiStates).forEach(id => delete xaiStates[id]);
-  xaiRunning = false;
-  xaiActiveId = null;
-  xaiCancelled = false;
-  xaiFrameCounter = 0;
-  trainingInProgress = false;
-  pipelineRunning = false;
-  prepareInProgress = false;
-  baseModelLoading = false;
-  modelFileLoading = false;
-  evaluateInProgress = false;
-  evaluateCancelled = false;
-  canvasStateRestoring = false;
-  eduMode = false;
-  window.activeClass = 0;
-  document.body?.classList.remove('edu-mode');
-  clearFlowPhase();
-  clearLog();
-  refreshEmptyState();
-  refreshDatasetInfo();
-  evaluatePipelineState();
-}
-
 // Every storage step gets its own deadline: a wedged IndexedDB request must
 // not leave appResetting stuck at true (which silently disables the whole UI).
 const RESET_STEP_TIMEOUT_MS = 8000;
@@ -1720,7 +1677,7 @@ const RESET_ERROR_KEY = 'ml-blocks-reset-error';
 function withTimeout(promise, ms) {
   let timer = null;
   const deadline = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error('timeout')), ms);
+    timer = setTimeout(() => reject(new Error(t('err_timeout'))), ms);
   });
   return Promise.race([Promise.resolve(promise), deadline]).finally(() => clearTimeout(timer));
 }
@@ -1740,7 +1697,7 @@ async function performAppStateReset() {
   const failures = [];
   const step = async (label, run) => {
     try { await withTimeout(run(), RESET_STEP_TIMEOUT_MS); }
-    catch (err) { failures.push(label + ': ' + (err?.message || String(err))); }
+    catch (err) { failures.push(t('reset_step_' + label) + ': ' + (err?.message || String(err))); }
   };
   // Dataset loading is read-only, but waiting for it prevents a decoder from
   // changing the in-memory arrays while the reset is taking its snapshot.
@@ -1753,7 +1710,7 @@ async function performAppStateReset() {
   // clear. Drain once more before deleting TensorFlow.js model records.
   await step('drain', waitForPersistenceTasks);
   await step('models', removeSavedAppModels);
-  try { removeAppLocalStorage(); } catch (err) { failures.push('settings: ' + (err?.message || String(err))); }
+  try { removeAppLocalStorage(); } catch (err) { failures.push(t('reset_step_settings') + ': ' + (err?.message || String(err))); }
   if (_datasetDB) {
     try { _datasetDB.close(); } catch (_) {}
     _datasetDB = null;
@@ -1762,7 +1719,6 @@ async function performAppStateReset() {
     console.error('resetAppState: partial failure', failures);
     try { sessionStorage.setItem(RESET_ERROR_KEY, failures.join('; ')); } catch (_) {}
   }
-  resetAppMemory();
   log(failures.length ? 'error' : 'success', t('log_reset_state_done'));
   window.location.reload();
   return failures.length === 0;
@@ -1792,14 +1748,13 @@ window.resetAppState = function resetAppState() {
   }).then(ok => {
     appResetConfirming = false;
     if (!ok) return false;
-    appResetPromise = performAppStateReset().catch(err => {
+    return performAppStateReset().catch(err => {
       // Only the pre-flight check can reject; nothing was wiped, so re-enable the UI.
       console.error('resetAppState failed:', err);
       appResetting = false;
       showToast(t('err_reset_state') + (err?.message || String(err)), 'error', { duration: 6000 });
       return false;
     });
-    return appResetPromise;
   }, err => {
     appResetConfirming = false;
     throw err;
@@ -3164,6 +3119,7 @@ function previewAugmentation(id) {
 // on false).
 async function runPrepare(id) {
   if (appResetting) return false;
+  await awaitDatasetLoad();
   const totalSamples = capturedSamples.reduce((s, a) => s + a.length, 0);
   if (totalSamples === 0) { log('warn', t('log_no_data')); return false; }
 
@@ -3527,6 +3483,7 @@ async function validateTrainingData() {
 // cancel or error (runPipeline stops on false).
 async function runTraining(id) {
   if (appResetting) return false;
+  await awaitDatasetLoad();
   if (!preparedData) {
     log('warn', t('log_no_data'));
     if (!placedBlocks.some(b => b.type === 'prepare-data')) {
@@ -3810,10 +3767,11 @@ async function getCachedFeatures(source, samples, ident, opts) {
 
 async function runEvaluate(id) {
   if (appResetting) return;
-  // TRUE hold-out evaluation. Split samples 80/20 (stratified), train a FRESH
-  // head on the 80% only, then test on the 20% the fresh head has never seen.
-  // (The deployed model can't give a genuine hold-out because it trained on all
-  // images.) Only the test-set numbers are reported.
+  await awaitDatasetLoad();
+  // Hold-out evaluation on the 20% shared with the Train block. An up-to-date
+  // trained head is scored directly; otherwise a fresh head is trained on the
+  // 80% so the test images are still genuinely unseen. Only the test-set
+  // numbers are reported.
   if (!baseModel) {
     log('warn', t('log_no_model_base'));
     if (!placedBlocks.some(b => b.type === 'pretrained-model')) ensureBlockOnCanvas('pretrained-model');
@@ -3863,7 +3821,9 @@ async function runEvaluate(id) {
   // The Train block holds out the same 20%, so an up-to-date trained head is
   // tested directly. Without one (or after the dataset changed), a fresh head
   // is trained on the 80% here so the test is still genuinely held out.
-  const useTrained = !!(fullModel && modelMetadata && modelMetadata.holdoutSamples > 0
+  // inferModel === fullModel rules out a model loaded via Upload Model, which
+  // replaces only the inference head and was never trained on this split.
+  const useTrained = !!(fullModel && inferModel === fullModel && modelMetadata && modelMetadata.holdoutSamples > 0
     && trainedDatasetVersion === datasetVersion
     && (modelMetadata.classLabels || []).length === numClasses);
   log('info', t(useTrained ? 'log_eval_trained' : 'log_eval_fresh'));
@@ -3871,17 +3831,25 @@ async function runEvaluate(id) {
   let trainFeat = null, testFeat = null, ysTensor = null, classifier = null, trainProbT = null, testProbT = null;
   try {
     setStatus(t('eval_extracting'));
-    // Owned by featureCache (never disposed here); trainFeat/testFeat are ours.
-    const allFeat = await getCachedFeatures('raw', flatSamples, 'raw', {
+    const featOpts = {
       shouldCancel: () => evaluateCancelled || appResetting,
       onProgress: (done, total) => setStatus(t('feat_progress', done, total))
-    });
-    if (appResetting || evaluateCancelled) throw new Error(appResetting ? 'resetting' : 'cancelled');
-    trainFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(trainIdx, 'int32')));
-    testFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(testIdx, 'int32')));
-    const featSize = trainFeat.shape[1];
-
+    };
     let head = fullModel;
+    if (useTrained) {
+      // Only the held-out rows are needed; the trained head already knows its
+      // training accuracy, so skip the backbone on the other 80%.
+      testFeat = await extractFeatures(testSamples, featOpts);
+    } else {
+      // Owned by featureCache (never disposed here); trainFeat/testFeat are ours.
+      const allFeat = await getCachedFeatures('raw', flatSamples, 'raw', featOpts);
+      if (appResetting || evaluateCancelled) throw new Error(appResetting ? 'resetting' : 'cancelled');
+      trainFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(trainIdx, 'int32')));
+      testFeat = tf.tidy(() => tf.gather(allFeat, tf.tensor1d(testIdx, 'int32')));
+    }
+    if (appResetting || evaluateCancelled) throw new Error(appResetting ? 'resetting' : 'cancelled');
+    const featSize = testFeat.shape[1];
+
     if (!useTrained) {
       const idxT = tf.tensor1d(trainLabels, 'int32');
       ysTensor = tf.oneHot(idxT, numClasses);
@@ -3906,17 +3874,22 @@ async function runEvaluate(id) {
     }
 
     setStatus(t(useTrained ? 'eval_testing_trained' : 'eval_testing'));
-    trainProbT = head.predict(trainFeat);
     testProbT = head.predict(testFeat);
-    const trainProbs = await trainProbT.data();
     const testProbs = await testProbT.data();
 
     // Row `row` of a flat [N, numClasses] probability buffer.
     const argmaxRow = (probs, row) => argmax(probs.subarray(row * numClasses, (row + 1) * numClasses));
-    // Train accuracy is computed for the overfit verdict but not displayed.
-    let trainCorrect = 0;
-    for (let i = 0; i < trainLabels.length; i++) if (argmaxRow(trainProbs, i) === trainLabels[i]) trainCorrect++;
-    const trainAcc = trainLabels.length ? trainCorrect / trainLabels.length : 0;
+    // Train accuracy feeds the overfit verdict but is not displayed.
+    let trainAcc = 0;
+    if (useTrained) {
+      trainAcc = modelMetadata.trainingAccuracy || 0;
+    } else {
+      trainProbT = head.predict(trainFeat);
+      const trainProbs = await trainProbT.data();
+      let trainCorrect = 0;
+      for (let i = 0; i < trainLabels.length; i++) if (argmaxRow(trainProbs, i) === trainLabels[i]) trainCorrect++;
+      trainAcc = trainLabels.length ? trainCorrect / trainLabels.length : 0;
+    }
 
     // Test confusion matrix + misclassified thumbnails – the 20% hold-out only.
     const confusion = Array.from({ length: numClasses }, () => new Array(numClasses).fill(0));
@@ -6795,7 +6768,12 @@ function updatePipelineOrder() {
 function tidyUpCanvas() {
   if (!placedBlocks.length) return;
   const canvas = document.getElementById('canvas');
-  const COL_W = 300, START_X = 16, START_Y = 24, ROW_GAP = 28, GROUP_GAP = 56;
+  // Column pitch follows the real card width (the shell sets it via the
+  // --co-card-width token; fall back to the first card's box) plus a gap.
+  const tokenWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--co-card-width'));
+  const firstCard = document.querySelector('.block-card');
+  const cardWidth = Number.isFinite(tokenWidth) ? tokenWidth : (firstCard ? firstCard.offsetWidth : 340);
+  const COL_W = cardWidth + 16, START_X = 16, START_Y = 24, ROW_GAP = 28, GROUP_GAP = 56;
   // How many columns fit in the visible canvas – wrap so a long pipeline never
   // forces horizontal scrolling.
   const avail = (canvas ? canvas.clientWidth : 1200) - START_X;

@@ -165,10 +165,8 @@ function coRestoreValues(snapshot) {
    end and tidy. Restoring a snapshot here would snap a freshly dragged card
    back to where it was before the drag. */
 function coPositionCardsFree() {
-  document.querySelectorAll('.block-card').forEach(card => {
-    const size = coCardSize(card);
-    card.style.width = size ? size.width + 'px' : '';
-  });
+  const maxWidth = coCardMaxWidth();
+  document.querySelectorAll('.block-card').forEach(card => coCardSize(card, maxWidth));
 }
 
 function coSettingsValue(card, idPart) {
@@ -291,16 +289,25 @@ function coCardMaxWidth() {
   return Math.max(160, (document.getElementById('canvas')?.clientWidth || 320) - (window.innerWidth <= 768 ? 32 : 48));
 }
 
-function coCardSize(card) {
+/* maxWidth is passed in by callers that size many cards so the canvas is
+   measured once per pass, not once per card between DOM writes. Styles are
+   written only when they change to keep syncs cheap. */
+function coCardSize(card, maxWidth) {
   const stored = CO_STATE.cardSizes[card.dataset.coType];
-  const maxWidth = coCardMaxWidth();
+  const limit = maxWidth != null ? maxWidth : coCardMaxWidth();
   const size = stored && Number.isFinite(stored.width) && Number.isFinite(stored.height)
-    ? { width: Math.max(Math.min(220, maxWidth), Math.min(maxWidth, stored.width)), height: Math.max(320, Math.min(1200, stored.height)) } : null;
+    ? { width: Math.max(Math.min(220, limit), Math.min(limit, stored.width)), height: Math.max(320, Math.min(1200, stored.height)) } : null;
   /* Only a manual size is written inline, so the stylesheet token stays the
      default and a theme or breakpoint can still change it. */
-  if (size) card.style.setProperty('--co-card-height', size.height + 'px');
-  else card.style.removeProperty('--co-card-height');
-  card.dataset.manualSize = String(!!size);
+  const height = size ? size.height + 'px' : '';
+  if (card.style.getPropertyValue('--co-card-height') !== height) {
+    if (size) card.style.setProperty('--co-card-height', height);
+    else card.style.removeProperty('--co-card-height');
+  }
+  const width = size ? size.width + 'px' : '';
+  if (card.style.width !== width) card.style.width = width;
+  const manual = String(!!size);
+  if (card.dataset.manualSize !== manual) card.dataset.manualSize = manual;
   return size;
 }
 
@@ -309,7 +316,6 @@ function coSaveCardSizes() {
 }
 
 function coEnsureCardResize(card) {
-  coCardSize(card);
   let handle = card.querySelector(':scope > .co-card-resize');
   if (!handle) {
     handle = document.createElement('button');
@@ -323,8 +329,7 @@ function coEnsureCardResize(card) {
        let the rAF-coalesced sync re-flow the rest of the layout. */
     const resize = (width, height) => {
       CO_STATE.cardSizes[card.dataset.coType] = { width, height };
-      const size = coCardSize(card);
-      if (size) card.style.width = size.width + 'px';
+      coCardSize(card);
       coScheduleSync();
     };
     const reset = () => {
@@ -363,7 +368,10 @@ function coEnsureCardResize(card) {
       event.preventDefault(); event.stopPropagation();
       const rect = card.getBoundingClientRect(), step = event.shiftKey ? 50 : 20;
       resize(rect.width + delta[0] * step, rect.height + delta[1] * step);
-      coSaveCardSizes();
+    });
+    /* Persist once per key press, not on every auto-repeat. */
+    handle.addEventListener('keyup', event => {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) coSaveCardSizes();
     });
   }
   handle.title = coText('resize_card');
@@ -659,6 +667,8 @@ if (typeof CO_NATIVE_PLACE_BLOCK === 'function') {
         card.style.top = slot.y + 'px';
         const record = placedBlocks.find(item => item.id === id);
         if (record) { record.x = slot.x; record.y = slot.y; }
+        /* Native placeBlock already persisted the caller's coordinates. */
+        if (typeof persistCanvasState === 'function') persistCanvasState();
       }
     }
     coSyncCards();
@@ -709,9 +719,10 @@ if (typeof CO_NATIVE_APPLY_LANG === 'function') {
 
 if (typeof CO_NATIVE_SET_STATUS === 'function') {
   window.setBlockStatus = function (card, status) {
-    /* A failure or an in-flight step must remain visible even when the
-       learner previously collapsed that card. */
-    if (card && (status === 'running' || status === 'error')) card.classList.remove('collapsed');
+    /* A failure must be visible even on a card the learner collapsed. Running
+       is deliberately excluded: every capture flips the camera card to
+       running, and a collapsed card should stay collapsed. */
+    if (card && status === 'error') card.classList.remove('collapsed');
     const result = CO_NATIVE_SET_STATUS(card, status);
     coSyncCards();
     return result;

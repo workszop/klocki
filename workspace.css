@@ -485,6 +485,11 @@ body[data-library-open="false"] #co-reset-state { display: none; }
 @media (max-width: 768px) {
   body.co-shell { --log-w: 100%; }
 
+  /* A phone is narrower than the default card: cap it to the canvas. */
+  body.co-shell .block-card {
+    max-width: calc(100vw - 48px);
+  }
+
   #topbar.co-topbar {
     padding: 8px 10px;
   }
