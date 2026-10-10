@@ -7,6 +7,9 @@
   <title>KlockiAI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
   <link rel="stylesheet" href="workspace.css">
@@ -21,7 +24,6 @@
    Foundations" for substitution notes.
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap');
 
 :root {
   /* ---- Brand fonts ---- */
@@ -293,9 +295,8 @@ body.edu { background: var(--paper); color: var(--ink); font-family: var(--font-
 
 /* ─── Chrome: edulab top menu ─── */
 #topbar.co-topbar {
-  background: color-mix(in srgb, var(--paper) 85%, transparent);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  border-bottom: 1px solid var(--line-2);
   padding-inline: 20px;
 }
 #logo { display: flex; align-items: center; }
@@ -309,14 +310,14 @@ body.edu { background: var(--paper); color: var(--ink); font-family: var(--font-
   font-family: var(--font-sans); font-weight: 600; transition: background .15s, color .15s;
 }
 #topbar.co-topbar .tb-btn:hover { background: var(--paper-3); color: var(--ink); }
-#topbar.co-topbar .tb-btn.active { background: var(--blue); color: var(--blue-ink); border-color: transparent; }
+#topbar.co-topbar .tb-btn.active { background: var(--blue-soft); color: var(--blue-ink); border-color: transparent; }
 #topbar.co-topbar #btn-run {
   background: var(--yellow); color: var(--yellow-ink); border: none; box-shadow: var(--shadow-primary);
   border-radius: var(--r-pill); font-family: var(--font-display); font-weight: 700; font-size: 14px;
 }
 #topbar.co-topbar #btn-run:hover { background: var(--yellow-600); }
 #topbar.co-topbar #btn-run:active { transform: scale(.97); box-shadow: var(--shadow-sm); }
-#topbar.co-topbar #btn-clear { color: var(--red); }
+#topbar.co-topbar #btn-clear { color: var(--red-600); }
 #co-tools-menu { border-radius: var(--r-md); box-shadow: var(--shadow-md); }
 
 /* ─── Sidebar / library: larger type, sized by importance ─── */
@@ -341,13 +342,13 @@ body.co-shell .co-dataset-section .sidebar-action-btn { font-size: 13px; padding
 /* 5. Reset: important but not primary */
 #co-reset-state { font-family: var(--font-sans); font-size: 14px; padding: 12px; margin: 12px; }
 body.co-shell .palette-block {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-md);
   box-shadow: var(--shadow-sm); font-family: var(--font-sans);
   transition: background .15s, border-color .15s;
 }
-body.co-shell .palette-block:hover { background: var(--paper-2); border-color: var(--line-2); transform: none; }
+body.co-shell .palette-block:hover { background: var(--paper-2); border-color: var(--line-strong); transform: none; }
 .co-palette-action { font-family: var(--font-mono); color: var(--ink-3); }
-#co-reset-state { border-radius: var(--r-pill); background: var(--red); color: var(--red-ink); border: none; font-weight: 600; }
+#co-reset-state { border-radius: var(--r-pill); background: var(--red-soft); color: var(--red-ink); border: none; font-weight: 600; }
 .sidebar-action-btn { border-radius: var(--r-pill); }
 
 /* ─── Canvas + cards ─── */
@@ -356,27 +357,27 @@ body.co-shell .palette-block:hover { background: var(--paper-2); border-color: v
 .empty-subtitle, .empty-hint { color: var(--ink-2); }
 .empty-btn { border-radius: var(--r-pill); border: none; box-shadow: var(--shadow-sm); font-family: var(--font-sans); }
 .empty-btn-primary { background: var(--yellow); color: var(--yellow-ink); }
-.empty-btn-secondary { background: var(--blue); color: var(--blue-ink); }
+.empty-btn-secondary { background: var(--blue-soft); color: var(--blue-ink); }
 body.co-shell .block-card {
-  border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-md);
-  border-color: var(--line) !important;
+  border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow-md);
+  border-color: var(--line-2) !important;
 }
-/* ─── Calm cards: white header, phase colour only on the small badge ─── */
-.bk-header { background: var(--surface) !important; color: var(--ink); border-bottom: 1px solid var(--line); padding-top: 10px; padding-bottom: 10px; }
+/* ─── Card anatomy: stone head strip, white body, phase colour only on the small badge ─── */
+.bk-header { background: var(--paper-2) !important; color: var(--ink); border-bottom: 1px solid var(--line); padding-top: 10px; padding-bottom: 10px; }
 .bk-header .bk-title { color: var(--ink); }
 .bk-header .drag-handle, .bk-header .bk-close, .bk-header .co-card-toggle { color: var(--ink-3); background: transparent; }
-.bk-header .bk-close:hover, .bk-header .co-card-toggle:hover { background: var(--paper-2); color: var(--ink); }
+.bk-header .bk-close:hover, .bk-header .co-card-toggle:hover { background: var(--paper-3); color: var(--ink); }
 .bk-header .order-badge { background: var(--paper-3); color: var(--ink); }
-.bk-header .bk-status { background: var(--paper-2); color: var(--ink-2); border: none; }
-.block-card.status-running .bk-header .bk-status { background: var(--yellow); color: var(--yellow-ink); }
-.block-card.status-done .bk-header .bk-status { background: var(--green); color: var(--green-ink); }
-.block-card.status-error .bk-header .bk-status { background: var(--red); color: var(--red-ink); }
+.bk-header .bk-status { background: var(--surface); color: var(--ink-2); border: 1px solid var(--line-2); }
+.block-card.status-running .bk-header .bk-status { background: var(--yellow); color: var(--yellow-ink); border-color: var(--yellow); }
+.block-card.status-done .bk-header .bk-status { background: var(--green-soft); color: var(--green-ink); border-color: var(--green-soft); }
+.block-card.status-error .bk-header .bk-status { background: var(--red-soft); color: var(--red-ink); border-color: var(--red-soft); }
 .bk-header .bk-badge { color: var(--paper); border: none; }
-.block-card[data-co-type="camera-input"] .bk-badge, .block-card[data-co-type="upload-model"] .bk-badge { background: var(--play-sky); }
+.block-card[data-co-type="camera-input"] .bk-badge, .block-card[data-co-type="upload-model"] .bk-badge { background: var(--blue-soft); }
 .block-card[data-co-type="label-classes"] .bk-badge, .block-card[data-co-type="camera-infer"] .bk-badge, .block-card[data-co-type="show-results"] .bk-badge { background: var(--play-grape); }
-.block-card[data-co-type="prepare-data"] .bk-badge { background: var(--play-berry); }
-.block-card[data-co-type="pretrained-model"] .bk-badge, .block-card[data-co-type="model-explorer"] .bk-badge { background: var(--green); }
-.block-card[data-co-type="train-model"] .bk-badge { background: var(--red); }
+.block-card[data-co-type="prepare-data"] .bk-badge { background: color-mix(in srgb, var(--play-berry) 88%, var(--ink)); }
+.block-card[data-co-type="pretrained-model"] .bk-badge, .block-card[data-co-type="model-explorer"] .bk-badge { background: var(--green-soft); }
+.block-card[data-co-type="train-model"] .bk-badge { background: var(--red-soft); }
 .block-card[data-co-type="evaluate"] .bk-badge, .block-card[data-co-type="zero-shot"] .bk-badge, .block-card[data-co-type="explain-ai"] .bk-badge { background: var(--blue-600); }
 .block-card[data-co-type="save-model"] .bk-badge, .block-card[data-co-type="deploy-export"] .bk-badge { background: var(--ink); }
 /* Actions: one dark primary per card, everything else sand */
@@ -394,9 +395,9 @@ body.co-shell .block-card {
 /* Requirement strips: neutral sand box, colour only in the small marks */
 .bk-prereq, .bk-prereq.all-ok { background: var(--paper-2); border: none; border-radius: var(--r-md); padding: 8px 10px; }
 .prereq-heading, .bk-prereq.all-ok .prereq-heading { color: var(--ink-2); font-family: var(--font-mono); }
-.prereq-pill { background: var(--surface); border: 1px solid var(--line); color: var(--ink-2); }
-.prereq-pill.ok { background: var(--surface); border-color: var(--line); color: var(--green-600); }
-.prereq-pill.missing { background: var(--surface); border-color: var(--line); color: var(--red-600); }
+.prereq-pill { background: var(--surface); border: 1px solid var(--line-2); color: var(--ink-2); }
+.prereq-pill.ok { background: var(--surface); border-color: var(--line-2); color: var(--green-600); }
+.prereq-pill.missing { background: var(--surface); border-color: var(--line-2); color: var(--red-600); }
 body.co-shell .block-card.dragging { box-shadow: var(--shadow-lg); }
 body.co-shell .block-card.save-prompt { animation: none; box-shadow: 0 0 0 3px var(--yellow), var(--shadow-md); }
 .bk-header { border-radius: var(--r-lg) var(--r-lg) 0 0; }
@@ -405,9 +406,26 @@ body.co-shell .block-card.save-prompt { animation: none; box-shadow: 0 0 0 3px v
 .bk-btn { border: none; border-radius: var(--r-pill); box-shadow: var(--shadow-sm); font-family: var(--font-sans); font-weight: 600; }
 .bk-btn:hover { filter: brightness(.95); }
 .bk-btn--muted { background: var(--paper-3) !important; color: var(--ink) !important; }
-.param-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+.param-label { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); }
+/* Fields & controls: every control boundary is --line-strong (>= 3:1) */
+body.co-shell .block-card input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),
+body.co-shell .block-card select, body.co-shell .block-card textarea,
+body.co-shell .class-name-input { border: 1px solid var(--line-strong) !important; background: var(--surface) !important; color: var(--ink); }
+body.co-shell input[type=range] { -webkit-appearance: none; appearance: none; height: 8px; border-radius: var(--r-pill); background: var(--track); accent-color: var(--ink); }
+body.co-shell input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); box-shadow: var(--shadow-sm); cursor: pointer; }
+body.co-shell input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); box-shadow: var(--shadow-sm); cursor: pointer; }
+body.co-shell input[type=range]::-moz-range-track { height: 8px; border-radius: var(--r-pill); background: var(--track); }
+/* Notes and prediction cards: neutral fills and full contours, never a coloured side bar */
+.bk-note { border-left: none; background: var(--paper-2); color: var(--ink-2); }
+.pred-result { border: 2px solid var(--pred-winner-color, var(--line-2)); }
+.pred-history-point { border: 1px solid transparent; }
+.pred-history-point.class-change { border-color: var(--pred-history-color, var(--line-2)); }
+/* Focus: white gap + ink band on every surface */
+:focus-visible, .palette-block:focus-visible, .block-card:focus-visible,
+#topbar :focus-visible, .bk-header :focus-visible, .toast :focus-visible { outline: 3px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+#log-panel :focus-visible { outline: 3px solid transparent; box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px var(--paper); }
 input, select, textarea { font-family: var(--font-sans); border-radius: var(--r-sm); }
-.co-settings-details { border-radius: var(--r-md); background: var(--paper-2); border: none; }
+.co-settings-details { border-radius: var(--r-md); background: var(--paper-2); border: 1px solid var(--line); }
 .co-settings-details summary { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
 .co-card-summary, .co-card-prereq { font-family: var(--font-mono); }
 .prep-split-note { border: none; border-left: none; background: var(--paper-2); color: var(--ink-2); border-radius: var(--r-md); }
@@ -427,19 +445,19 @@ progress { accent-color: var(--yellow); }
 .log-line { color: var(--paper-3); }
 .ll-step { color: var(--yellow); }
 .ll-success { color: var(--green); }
-.ll-error { color: var(--red); }
+.ll-error { color: color-mix(in srgb, var(--red) 75%, var(--paper)); }
 .ll-warn { color: var(--yellow-600); }
 .ll-data { color: var(--blue); }
-.ll-info { color: var(--ink-3); }
+.ll-info { color: var(--line-2); }
 #co-log-resize { border-left-color: var(--line-2); }
 #co-log-resize:hover, #co-log-resize:focus-visible { border-color: var(--yellow); background: color-mix(in srgb, var(--yellow) 35%, transparent); }
 
 /* ─── Toasts, dialogs ─── */
 .toast { border: none; border-radius: var(--r-md); box-shadow: var(--shadow-lg); background: var(--ink); color: var(--paper); font-family: var(--font-sans); }
-.toast-success { background: var(--green); color: var(--green-ink); }
+.toast-success { background: var(--green-soft); color: var(--green-ink); }
 .toast-warn { background: var(--yellow); color: var(--yellow-ink); }
-.toast-error { background: var(--red); color: var(--red-ink); }
-.modal-box { border-radius: var(--r-xl); border: 1px solid var(--line); box-shadow: var(--shadow-lg); }
+.toast-error { background: var(--red-soft); color: var(--red-ink); }
+.modal-box { border-radius: var(--r-xl); border: 1px solid var(--line-2); box-shadow: var(--shadow-lg); }
 .modal-title { font-family: var(--font-display); }
 .modal-close-btn { border-radius: var(--r-pill); background: var(--yellow); color: var(--yellow-ink); border: none; }
 #trash-zone { border-radius: var(--r-lg); }
