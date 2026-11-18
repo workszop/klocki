@@ -7,15 +7,10 @@
   <title>KlockiAI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&family=Raleway:wght@700;800&display=swap">
   <link rel="stylesheet" href="style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
   <link rel="stylesheet" href="workspace.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@700;800&display=swap" rel="stylesheet">
   <!-- edulab design system tokens (inlined so this experiment is self-contained) -->
   <style>
 /* ============================================================
@@ -235,7 +230,7 @@ body.edu { background: var(--paper); color: var(--ink); font-family: var(--font-
   --c-chrome-2: var(--ink-2);
   --c-chrome-3: var(--ink-3);
   --c-chrome-text: var(--paper-3);
-  --c-log-muted: var(--ink-3);
+  --c-log-muted: color-mix(in srgb, var(--paper-3) 75%, var(--ink));
   --c-logo-accent: var(--yellow);
   --c-focus: var(--blue);
   --c-focus-on-dark: var(--yellow);
@@ -410,20 +405,24 @@ body.co-shell .block-card.save-prompt { animation: none; box-shadow: 0 0 0 3px v
 /* Fields & controls: every control boundary is --line-strong (>= 3:1) */
 body.co-shell .block-card input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),
 body.co-shell .block-card select, body.co-shell .block-card textarea,
-body.co-shell .class-name-input { border: 1px solid var(--line-strong) !important; background: var(--surface) !important; color: var(--ink); }
-body.co-shell input[type=range] { -webkit-appearance: none; appearance: none; height: 8px; border-radius: var(--r-pill); background: var(--track); accent-color: var(--ink); }
-body.co-shell input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); box-shadow: var(--shadow-sm); cursor: pointer; }
-body.co-shell input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); box-shadow: var(--shadow-sm); cursor: pointer; }
+body.co-shell .class-name-input { border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); }
+/* Range: 20px hit area, 8px track drawn on the track pseudo-elements only; the filled part comes from --range-fill (set by eduSyncRange) or ::-moz-range-progress */
+body.co-shell input[type=range] { -webkit-appearance: none; appearance: none; height: 20px; background: transparent; cursor: pointer; }
+body.co-shell input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: var(--r-pill); background: linear-gradient(to right, var(--ink) var(--range-fill, 0%), var(--track) var(--range-fill, 0%)); }
+body.co-shell input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; box-sizing: border-box; width: 20px; height: 20px; margin-top: -6px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); box-shadow: var(--shadow-sm); cursor: pointer; }
+body.co-shell input[type=range]::-moz-range-thumb { box-sizing: border-box; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); box-shadow: var(--shadow-sm); cursor: pointer; }
 body.co-shell input[type=range]::-moz-range-track { height: 8px; border-radius: var(--r-pill); background: var(--track); }
+body.co-shell input[type=range]::-moz-range-progress { height: 8px; border-radius: var(--r-pill); background: var(--ink); }
 /* Notes and prediction cards: neutral fills and full contours, never a coloured side bar */
 .bk-note { border-left: none; background: var(--paper-2); color: var(--ink-2); }
 .pred-result { border: 2px solid var(--pred-winner-color, var(--line-2)); }
-.pred-history-point { border: 1px solid transparent; }
-.pred-history-point.class-change { border-color: var(--pred-history-color, var(--line-2)); }
-/* Focus: white gap + ink band on every surface */
+/* Below threshold: keep the class colour, mark the uncertainty with a dashed contour */
+.pred-result.is-below-threshold { border-color: var(--pred-winner-color, var(--line-strong)); border-style: dashed; }
+/* Focus: the ink band is a real outline, so no component box-shadow can hide it (and it survives forced colours);
+   the paper gap is a box-shadow where the control has none of its own. Dark surfaces invert the pair. */
 :focus-visible, .palette-block:focus-visible, .block-card:focus-visible,
-#topbar :focus-visible, .bk-header :focus-visible, .toast :focus-visible { outline: 3px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
-#log-panel :focus-visible { outline: 3px solid transparent; box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px var(--paper); }
+#topbar :focus-visible, .bk-header :focus-visible, .toast :focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; box-shadow: 0 0 0 2px var(--paper); }
+#log-panel :focus-visible, .toast:not(.toast-success):not(.toast-warn):not(.toast-error) :focus-visible { outline-color: var(--paper); box-shadow: 0 0 0 2px var(--ink); }
 input, select, textarea { font-family: var(--font-sans); border-radius: var(--r-sm); }
 .co-settings-details { border-radius: var(--r-md); background: var(--paper-2); border: 1px solid var(--line); }
 .co-settings-details summary { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
@@ -448,7 +447,6 @@ progress { accent-color: var(--yellow); }
 .ll-error { color: color-mix(in srgb, var(--red) 75%, var(--paper)); }
 .ll-warn { color: var(--yellow-600); }
 .ll-data { color: var(--blue); }
-.ll-info { color: var(--line-2); }
 #co-log-resize { border-left-color: var(--line-2); }
 #co-log-resize:hover, #co-log-resize:focus-visible { border-color: var(--yellow); background: color-mix(in srgb, var(--yellow) 35%, transparent); }
 
@@ -715,12 +713,38 @@ progress { accent-color: var(--yellow); }
       });
     }
 
+    // ─── Range fill: publish the slider value as --range-fill for the track gradient ───
+    const EDU_RANGE_SELECTOR = 'input[type=range]';
+    function eduSyncRange(input) {
+      const min = input.min === '' ? 0 : Number(input.min);
+      const max = input.max === '' ? 100 : Number(input.max);
+      const pct = max > min ? (Number(input.value) - min) / (max - min) * 100 : 0;
+      input.style.setProperty('--range-fill', Math.max(0, Math.min(100, pct)) + '%');
+    }
+    function eduSyncRangesIn(root) {
+      if (root.matches(EDU_RANGE_SELECTOR)) eduSyncRange(root);
+      root.querySelectorAll(EDU_RANGE_SELECTOR).forEach(eduSyncRange);
+    }
+    // app.js also writes input.value directly (no input event), so the setter reports range changes too
+    const EDU_INPUT_VALUE = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    Object.defineProperty(HTMLInputElement.prototype, 'value', {
+      ...EDU_INPUT_VALUE,
+      set(value) { EDU_INPUT_VALUE.set.call(this, value); if (this.type === 'range') eduSyncRange(this); }
+    });
+    document.addEventListener('input', event => {
+      if (event.target instanceof Element && event.target.matches(EDU_RANGE_SELECTOR)) eduSyncRange(event.target);
+    });
+
     window.addEventListener('load', () => {
       eduIconify(document.body);
+      eduSyncRangesIn(document.body);
       new MutationObserver(records => {
         records.forEach(record => {
           if (record.type === 'characterData') eduScheduleIconify(record.target);
-          record.addedNodes.forEach(node => { if (node.nodeType === 1 || node.nodeType === 3) eduScheduleIconify(node); });
+          record.addedNodes.forEach(node => {
+            if (node.nodeType === 1 || node.nodeType === 3) eduScheduleIconify(node);
+            if (node.nodeType === 1) eduSyncRangesIn(node);
+          });
         });
       }).observe(document.body, { subtree: true, childList: true, characterData: true });
     });

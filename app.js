@@ -2293,7 +2293,7 @@ function buildUploadModelBody(id) {
 <input type="file" id="file-model-${id}" accept=".json,.bin,.weights.bin" multiple style="display:none">
 ${makeBtn(t('btn_pick_files'), `pickModelFiles('${id}')`, 'var(--c-data)')}
 <div style="display:flex;gap:4px;align-items:center;margin-top:2px">
-  <select id="idb-select-${id}" style="flex:1;font-size:12px;padding:4px 6px;border-radius:4px;border:1px solid var(--c-border);background:var(--c-bg)">
+  <select id="idb-select-${id}" style="flex:1;font-size:12px;padding:4px 6px;border-radius:4px">
     <option value="" disabled selected>${t('lbl_no_saved_models')}</option>
   </select>
   <button class="bk-btn bk-btn--muted bk-btn--icon" onclick="refreshIDBList('${id}')" title="${t('aria_refresh_models')}" aria-label="${t('aria_refresh_models')}">↺</button>
