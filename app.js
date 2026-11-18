@@ -162,11 +162,11 @@ const STRINGS = {
     btn_guide: 'Przewodnik', btn_clear: 'Wyczyść', btn_run: 'Uruchom', btn_edu: '🎓 Edu', btn_tidy: '🧹 Uporządkuj',
     sidebar_training: 'Trening', sidebar_inference: 'Predykcja',
     block_camera_input: 'Kamera: Dane', block_label_classes: 'Etykiety klas',
-    block_prepare_data: 'Augmentacja danych', block_pretrained_model: 'Model bazowy',
+    block_prepare_data: 'Przygotuj dane', block_pretrained_model: 'Model bazowy',
     block_train_model: 'Trenuj model', block_save_model: 'Zapisz model',
     block_upload_model: 'Wczytaj model', block_camera_infer: 'Kamera: Predykcja',
     block_predict: 'Predykcja', block_show_results: 'Pokaż wyniki',
-    block_zero_shot: 'Model bazowy / Predykcja', block_explain_ai: 'Explainable AI', block_model_explorer: 'Eksplorator modelu',
+    block_zero_shot: 'Predykcja bez treningu', block_explain_ai: 'Explainable AI', block_model_explorer: 'Eksplorator modelu',
     block_evaluate: 'Ocena modelu', block_deploy_export: 'Eksport aplikacji',
     log_title: 'Pipeline Log',
     guide_title: 'Przewodnik – KlockiAI', guide_subtitle: 'Jak zbudować swój pierwszy model AI w przeglądarce',
@@ -178,7 +178,7 @@ const STRINGS = {
     param_augment: 'Augmentacja', param_augment_none: 'Brak',
     param_epochs: 'Epoki', param_lr: 'Learning rate', param_batch: 'Batch size',
     param_freeze: 'Zamroź warstwy', param_fps: 'FPS', param_threshold: 'Próg',
-    btn_load_model: 'Załaduj z CDN', btn_save_idb: 'Zapisz w przeglądarce',
+    btn_load_model: 'Pobierz model', btn_save_idb: 'Zapisz w przeglądarce',
     btn_download: 'Pobierz model', btn_load_idb: 'Wczytaj z przeglądarki',
     btn_pick_files: 'Wybierz plik (.json)', param_model_name: 'Nazwa modelu', lbl_no_saved_models: 'Brak zapisanych modeli',
     btn_train: 'Trenuj', btn_stop_train: 'Zatrzymaj',
@@ -290,7 +290,7 @@ const STRINGS = {
     ph_class_name: 'nazwa klasy...',
     btn_capture_short: 'zbierz',
     prep_hint: 'Przeskaluj zebrane zdjęcia do rozmiaru modelu. Opcjonalnie augmentuj dane, aby zwiększyć liczbę próbek.',
-    prep_split_note: 'Zbiór testowy: 20% zdjęć jest odkładane jako zbiór testowy, którego model nie widzi podczas treningu. Blok „Trenuj model” uczy się na pozostałych 80% (wraz z ich augmentacjami) i po każdej epoce sprawdza wynik na odłożonych 20%. Blok „Sprawdź na nowych danych” używa tego samego podziału.',
+    prep_split_note: 'Zbiór testowy: 20% zdjęć jest odkładane jako zbiór testowy, którego model nie widzi podczas treningu. Blok „Trenuj model” uczy się na pozostałych 80% (wraz z ich augmentacjami) i po każdej epoce sprawdza wynik na odłożonych 20%. Blok „Ocena modelu” używa tego samego podziału.',
     opt_prepare_only: 'Tylko przygotowanie',
     btn_preview_aug: '👁 Podgląd augmentacji',
     btn_prepare: 'Przygotuj dane',
@@ -315,7 +315,7 @@ const STRINGS = {
     confirm_remove_labels: 'Próbki klas zostaną zachowane (możesz dodać blok ponownie). Usunąć blok?',
     btn_remove_block: 'Usuń blok',
     btn_confirm: 'Potwierdź', btn_cancel: 'Anuluj',
-    log_block_added: (type, n) => `+ ${type} #${n}`,
+    log_block_added: (name) => `Dodano blok: ${name}`,
     log_block_removed: (id) => `Usunięto blok #${id}`,
     log_canvas_cleared: 'Obszar roboczy wyczyszczony',
     toast_tidied: 'Uporządkowano bloki',
@@ -446,12 +446,12 @@ const STRINGS = {
     log_pipeline_stopped: (name) => `Pipeline zatrzymany na kroku „${name}"`,
     guide_shortcuts: 'Skróty: ? przewodnik, Esc zamknij, Ctrl+Enter uruchom, T uporządkuj, L język, E tryb Edu',
     guide_steps: [
-      { title: 'Krok 1 – Kamera', desc: 'Dodaj blok "Kamera – Dane" na tablicę. Uruchom kamerę i zbieraj zdjęcia dla każdej klasy, klikając "Zbierz próbki".' },
-      { title: 'Krok 2 – Etykiety', desc: 'Dodaj blok "Etykiety klas" i nazwij swoje kategorie, np. "Pies", "Kot", "Inne". Wybierz aktywną klasę przed zbieraniem.' },
-      { title: 'Krok 3 – Przygotowanie danych', desc: 'Blok "Przygotuj dane" zmieni rozmiar zdjęć i opcjonalnie wygeneruje więcej próbek przez augmentację (obrócenie, jasność).' },
-      { title: 'Krok 4 – Model bazowy', desc: 'Blok "Model bazowy" pobierze MobileNetV3-Small z sieci (~3MB). Ten model "widział" miliony zdjęć i rozumie cechy wizualne.' },
-      { title: 'Krok 5 – Trening', desc: 'Blok "Trenuj model" dostosuje model do Twoich klas. Obserwuj wykres straty i dokładności w czasie rzeczywistym!' },
-      { title: 'Krok 6: Predykcja', desc: 'Po treningu użyj bloków predykcji: wczytaj model, uruchom kamerę i obserwuj predykcje na żywo.' },
+      { title: 'Krok 1 – Zbierz zdjęcia', desc: 'W bloku „Kamera: Dane” uruchom kamerę. W bloku „Etykiety klas” nazwij swoje kategorie, np. „Kubek” i „Długopis”. Potem kliknij przycisk z nazwą klasy, aby zebrać dla niej zdjęcia.' },
+      { title: 'Krok 2 – Przygotuj dane', desc: 'Blok „Przygotuj dane” zmienia rozmiar zdjęć i odkłada 20% z nich na test. Opcjonalnie tworzy dodatkowe próbki przez augmentację (odbicie, jasność).' },
+      { title: 'Krok 3 – Model bazowy', desc: 'Blok „Model bazowy” pobiera MobileNetV3-Small z sieci (~3 MB). Ten model „widział” miliony zdjęć i rozpoznaje cechy wizualne.' },
+      { title: 'Krok 4 – Trenuj model', desc: 'Blok „Trenuj model” dostosowuje model do Twoich klas. Obserwuj wykres straty i dokładności na żywo. Kroki 2–4 uruchamia też przycisk „Uruchom pipeline”.' },
+      { title: 'Krok 5 – Ocena modelu', desc: 'Blok „Ocena modelu” sprawdza model na odłożonych zdjęciach, których nie widział podczas treningu.' },
+      { title: 'Krok 6 – Zapisz model', desc: 'Blok „Zapisz model” zachowuje model w przeglądarce albo jako plik. Potem użyj „Szybki start: Predykcja”, aby wczytać go i oglądać predykcje na żywo.' },
     ]
   },
   en: {
@@ -464,7 +464,7 @@ const STRINGS = {
     block_train_model: 'Train Model', block_save_model: 'Save Model',
     block_upload_model: 'Load Model', block_camera_infer: 'Camera: Prediction',
     block_predict: 'Predict', block_show_results: 'Show Results',
-    block_zero_shot: 'Base Model / Predict', block_explain_ai: 'Explainable AI', block_model_explorer: 'Model Explorer',
+    block_zero_shot: 'Predict without training', block_explain_ai: 'Explainable AI', block_model_explorer: 'Model Explorer',
     block_evaluate: 'Evaluate Model', block_deploy_export: 'Export App',
     log_title: 'Pipeline Log',
     guide_title: 'Guide – KlockiAI', guide_subtitle: 'How to build your first AI model in the browser',
@@ -476,7 +476,7 @@ const STRINGS = {
     param_augment: 'Augmentation', param_augment_none: 'None',
     param_epochs: 'Epochs', param_lr: 'Learning rate', param_batch: 'Batch size',
     param_freeze: 'Freeze layers', param_fps: 'FPS', param_threshold: 'Threshold',
-    btn_load_model: 'Load from CDN', btn_save_idb: 'Save to Browser',
+    btn_load_model: 'Download model', btn_save_idb: 'Save to Browser',
     btn_download: 'Download model', btn_load_idb: 'Load from Browser',
     btn_pick_files: 'Pick file (.json)', param_model_name: 'Model name', lbl_no_saved_models: 'No saved models',
     btn_train: 'Train', btn_stop_train: 'Stop',
@@ -588,7 +588,7 @@ const STRINGS = {
     ph_class_name: 'class name...',
     btn_capture_short: 'capture',
     prep_hint: 'Resize captured images to model input size. Optionally augment to increase sample count.',
-    prep_split_note: 'Test set: 20% of the images are set aside as a test set the model never sees during training. The “Train model” block learns on the other 80% (plus their augmentations) and checks the score on the held-out 20% after every epoch. The “Test on new data” block uses the same split.',
+    prep_split_note: 'Test set: 20% of the images are set aside as a test set the model never sees during training. The “Train model” block learns on the other 80% (plus their augmentations) and checks the score on the held-out 20% after every epoch. The “Evaluate Model” block uses the same split.',
     opt_prepare_only: 'Prepare only',
     btn_preview_aug: '👁 Preview augmentation',
     btn_prepare: 'Prepare data',
@@ -613,7 +613,7 @@ const STRINGS = {
     confirm_remove_labels: 'Class samples will be preserved (you can add the block again). Remove block?',
     btn_remove_block: 'Remove block',
     btn_confirm: 'Confirm', btn_cancel: 'Cancel',
-    log_block_added: (type, n) => `+ ${type} #${n}`,
+    log_block_added: (name) => `Block added: ${name}`,
     log_block_removed: (id) => `Removed block #${id}`,
     log_canvas_cleared: 'Canvas cleared',
     toast_tidied: 'Blocks tidied up',
@@ -744,12 +744,12 @@ const STRINGS = {
     log_pipeline_stopped: (name) => `Pipeline stopped at step "${name}"`,
     guide_shortcuts: 'Shortcuts: ? guide, Esc close, Ctrl+Enter run, T tidy up, L language, E Edu mode',
     guide_steps: [
-      { title: 'Step 1 – Camera', desc: 'Add the "Camera – Input" block to the canvas. Start the camera and collect images for each class by clicking "Collect Samples".' },
-      { title: 'Step 2 – Labels', desc: 'Add the "Label Classes" block and name your categories, e.g. "Dog", "Cat", "Other". Select the active class before collecting.' },
-      { title: 'Step 3 – Prepare Data', desc: 'The "Prepare Data" block resizes images and can generate more samples through augmentation (flips, rotations, brightness).' },
-      { title: 'Step 4 – Base Model', desc: 'The "Pretrained Model" block downloads MobileNetV3-Small (~3MB). It has seen millions of images and understands visual features.' },
-      { title: 'Step 5 – Training', desc: 'The "Train Model" block fine-tunes the model for your classes. Watch the loss and accuracy chart update in real time!' },
-      { title: 'Step 6: Prediction', desc: 'After training, use the prediction blocks: load the model, start the camera, and watch live predictions.' },
+      { title: 'Step 1 – Collect images', desc: 'Start the camera in the "Camera: Input" block. Name your categories in the "Label Classes" block, e.g. "Mug" and "Pen". Then click the button with a class name to collect images for it.' },
+      { title: 'Step 2 – Prepare Data', desc: 'The "Prepare Data" block resizes the images and sets 20% of them aside for testing. It can also create extra samples through augmentation (flip, brightness).' },
+      { title: 'Step 3 – Pretrained Model', desc: 'The "Pretrained Model" block downloads MobileNetV3-Small (~3 MB). It has seen millions of images and recognises visual features.' },
+      { title: 'Step 4 – Train Model', desc: 'The "Train Model" block adapts the model to your classes. Watch the loss and accuracy chart live. The "Run pipeline" button also runs steps 2–4.' },
+      { title: 'Step 5 – Evaluate Model', desc: 'The "Evaluate Model" block checks the model on the held-out images it never saw during training.' },
+      { title: 'Step 6 – Save Model', desc: 'The "Save Model" block keeps the model in the browser or as a file. Then use "Quick start: Prediction" to load it and watch live predictions.' },
     ]
   }
 };
@@ -2468,7 +2468,7 @@ function placeBlock(type, x, y) {
   // First-of-type wins; if you place two predict blocks the second is ignored
   // by the inference hot path (matches previous .find() behaviour).
   if (!blocksByType[type]) blocksByType[type] = record;
-  log('info', t('log_block_added', type, blockIdCounter));
+  log('info', t('log_block_added', blockTitle(type)));
   initBlockAfterPlace(id, type);
   // Drag is disabled in edu mode by the guard in cardDragStart, so the handlers
   // stay attached and dragging works again when edu mode is toggled off.
@@ -2782,7 +2782,7 @@ function updateClassNamesEverywhere(source) {
     const container = document.getElementById('capture-btns-' + b.id);
     if (!container) return;
     container.innerHTML = classNames.map((name, i) =>
-      `<button class="bk-btn" style="background:${classColors[i]};font-size:10px;padding:4px 8px" onclick="blockCapture('${b.id}',${i})">${escapeHtml(name)}</button>`
+      `<button class="bk-btn bk-btn--xs" style="background:${classColors[i]}" onclick="blockCapture('${b.id}',${i})">${escapeHtml(name)}</button>`
     ).join('');
   });
   persistCanvasState();

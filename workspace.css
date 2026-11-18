@@ -86,10 +86,22 @@ body.co-shell {
   font-size: var(--co-size-sm);
 }
 
+#co-tools-menu button {
+  color: var(--co-ink);
+  white-space: nowrap;
+}
+
 #co-tools-menu button:hover,
 #co-tools-menu button:focus-visible {
-  background: var(--c-chrome-2);
-  color: var(--c-surface);
+  background: var(--co-panel-soft);
+  color: var(--co-ink);
+}
+
+#co-tools-menu .co-menu-danger {
+  margin-top: 4px;
+  border-top: 1px solid var(--co-line);
+  border-radius: 0 0 7px 7px;
+  color: var(--c-danger);
 }
 
 /* Keep the playful block language,
@@ -120,7 +132,9 @@ body.co-shell .block-card.dragging {
   box-shadow: 2px 2px 0 var(--c-border-strong);
 }
 
-body.co-shell .block-card:not(.collapsed) {
+/* A card is as tall as its content. Only a card the learner resized by hand
+   gets a fixed height and scrolls inside. */
+body.co-shell .block-card[data-manual-size="true"]:not(.collapsed) {
   height: var(--co-card-height, var(--co-open-card-height));
   display: flex;
   flex-direction: column;
@@ -129,11 +143,36 @@ body.co-shell .block-card:not(.collapsed) {
 body.co-shell .block-card > .bk-header,
 body.co-shell .block-card > .co-card-summary { flex-shrink: 0; }
 
-body.co-shell .block-card:not(.collapsed) > .bk-body {
+body.co-shell .block-card[data-manual-size="true"]:not(.collapsed) > .bk-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+/* The header colour dot and the title already say what the block is; the
+   English phase badge only pushed the title into an ellipsis. */
+body.co-shell .bk-header .bk-badge { display: none; }
+body.co-shell .bk-header .bk-title { flex: 1; min-width: 0; }
+
+/* One status per card: once a block has run, "ready to run" is noise. */
+body.co-shell .block-card.status-done .bk-prereq.all-ok,
+body.co-shell .block-card.status-running .bk-prereq.all-ok { display: none; }
+
+/* Class thumbnails live in the Labels card when it is on the board. */
+body.co-shell[data-has-labels="true"] .block-card[data-co-type="camera-input"] .thumb-strip { display: none; }
+
+/* A message from a stopped pipeline, shown on the card that stopped it. */
+.co-card-alert {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-danger-border);
+  border-radius: 8px;
+  background: var(--c-danger-bg);
+  color: var(--c-danger);
+  font-size: var(--co-size-sm);
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 body.co-shell .block-card > .bk-body > * { flex-shrink: 0; }
@@ -467,19 +506,80 @@ body.co-shell #pipeline-connectors {
 .block-card.collapsed > .co-card-resize { display: none; }
 body[data-card-resizing="true"] { user-select: none; }
 body.co-shell .block-card:not(.collapsed) > .bk-body { padding-bottom: 28px; }
-#co-reset-state {
-  margin: 10px;
-  flex-shrink: 0;
-  width: auto;
-  color: var(--c-danger);
-  border: 1px solid var(--c-danger);
-  border-radius: 8px;
-  padding: 10px;
-  font-size: var(--co-size-sm);
-  background: var(--co-panel);
-}
-body[data-library-open="false"] #co-reset-state { display: none; }
 #log-entries > .log-line { flex-shrink: 0; }
+
+/* ─── Status strip and on-demand log ─── */
+body[data-log-open="false"] #log-panel.co-log-panel { display: none; }
+
+#co-statusbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 5px 14px;
+  border-top: 1px solid var(--co-line);
+  background: var(--co-panel);
+  color: var(--co-copy);
+  font-size: var(--co-size-md);
+}
+
+#co-status-dot {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--co-muted);
+}
+
+#co-statusbar[data-kind="step"] #co-status-dot { background: var(--c-data); }
+#co-statusbar[data-kind="success"] #co-status-dot { background: var(--c-ok); }
+#co-statusbar[data-kind="warn"] #co-status-dot { background: var(--c-warn); }
+#co-statusbar[data-kind="error"] #co-status-dot { background: var(--c-danger); }
+
+#co-status-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#co-log-toggle {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border: 1px solid var(--co-line);
+  border-radius: 999px;
+  background: var(--co-panel-soft);
+  color: var(--co-ink);
+  font-family: var(--co-font-ui);
+  font-size: var(--co-size-sm);
+  font-weight: 600;
+}
+
+#co-log-toggle:hover { background: var(--co-line); }
+
+/* A folded card shows one line: what it still needs, else its settings. */
+.block-card.collapsed:has(> .co-card-prereq:not([hidden])) > .co-card-summary { display: none; }
+
+/* Toasts sit above the status strip instead of covering its button. */
+body.co-shell #toast-stack { bottom: 52px; }
+
+.co-card-prereq[hidden] { display: none !important; }
+
+/* Before the camera starts, the preview says so instead of being a blank box. */
+body.co-shell .video-wrap { isolation: isolate; background: var(--co-panel-soft); }
+body.co-shell .video-wrap::before {
+  content: attr(data-co-hint);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--co-muted);
+  font-size: var(--co-size-sm);
+}
 
 /* ─── Mobile ─── */
 @media (max-width: 768px) {
@@ -503,6 +603,10 @@ body[data-library-open="false"] #co-reset-state { display: none; }
     padding: 7px 8px;
     font-size: var(--co-size-xs);
   }
+
+  /* The folded library still says what it is. */
+  body[data-library-open="false"] #co-library-toggle { justify-content: space-between; padding-inline: 8px; }
+  body[data-library-open="false"] #co-library-toggle .co-toggle-label { display: inline; }
 
   #sidebar.co-sidebar {
     width: 100%;

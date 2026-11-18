@@ -312,7 +312,6 @@ body.edu { background: var(--paper); color: var(--ink); font-family: var(--font-
 }
 #topbar.co-topbar #btn-run:hover { background: var(--yellow-600); }
 #topbar.co-topbar #btn-run:active { transform: scale(.97); box-shadow: var(--shadow-sm); }
-#topbar.co-topbar #btn-clear { color: var(--red-600); }
 #co-tools-menu { border-radius: var(--r-md); box-shadow: var(--shadow-md); }
 
 /* ─── Sidebar / library: larger type, sized by importance ─── */
@@ -330,12 +329,9 @@ body.co-shell .co-library-group .palette-block { font-family: var(--font-sans); 
 body.co-shell .co-library-group .palette-block .block-dot { width: 12px; height: 12px; }
 .co-palette-action { font-size: 13px; }
 /* 4. Supporting copy */
-.co-library-lead { font-family: var(--font-sans); font-size: 14px; line-height: 1.5; color: var(--ink-2); padding: 12px 14px 6px; }
 .co-dataset-section summary { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); padding: 6px 0 10px; }
 body.co-shell .co-dataset-section .sidebar-action-btn { font-size: 13px; padding: 9px 12px; }
 .dataset-info { font-size: 12px; }
-/* 5. Reset: important but not primary */
-#co-reset-state { font-family: var(--font-sans); font-size: 14px; padding: 12px; margin: 12px; }
 body.co-shell .palette-block {
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-md);
   box-shadow: var(--shadow-sm); font-family: var(--font-sans);
@@ -343,7 +339,6 @@ body.co-shell .palette-block {
 }
 body.co-shell .palette-block:hover { background: var(--paper-2); border-color: var(--line-strong); transform: none; }
 .co-palette-action { font-family: var(--font-mono); color: var(--ink-3); }
-#co-reset-state { border-radius: var(--r-pill); background: var(--red-soft); color: var(--red-ink); border: none; font-weight: 600; }
 .sidebar-action-btn { border-radius: var(--r-pill); }
 
 /* ─── Canvas + cards ─── */
@@ -486,13 +481,14 @@ progress { accent-color: var(--yellow); }
 
     <div id="topbar-actions">
       <button id="btn-run" class="tb-btn" onclick="runPipeline()" data-co-i18n="run_pipeline" data-i18n-title="title_run">Uruchom pipeline</button>
-      <button id="btn-clear" class="tb-btn" type="button" onclick="clearCanvas()" data-co-i18n="clear">Wyczyść tablicę</button>
       <button id="btn-edu" class="tb-btn" onclick="toggleEduMode()" data-i18n="btn_edu" data-i18n-title="title_edu">🎓 Edu</button>
       <button id="btn-guide" class="tb-btn" type="button" onclick="coOpenGuide()" data-co-i18n="guide_button" data-i18n-title="title_guide">Pomoc</button>
       <div id="co-tools">
         <button id="co-tools-toggle" class="tb-btn" type="button" aria-expanded="false" aria-controls="co-tools-menu" data-co-i18n="tools">Narzędzia</button>
         <div id="co-tools-menu" hidden>
           <button id="co-tidy" type="button" onclick="tidyUpCanvas()" data-co-i18n="tidy">Uporządkuj bloki</button>
+          <button id="btn-clear" type="button" onclick="clearCanvas()" data-co-i18n="clear">Wyczyść tablicę</button>
+          <button id="co-reset-state" class="co-menu-danger" type="button" onclick="resetAppState()" data-co-i18n="reset_state">Resetuj stan aplikacji</button>
         </div>
       </div>
       <button id="btn-lang" class="tb-btn" onclick="toggleLang()" data-i18n-title="title_lang" data-i18n-aria="title_lang">EN</button>
@@ -510,8 +506,6 @@ progress { accent-color: var(--yellow); }
         </button>
       </div>
       <div id="co-library-content">
-        <p class="co-library-lead" data-co-i18n="library_lead">Wybierz blok, aby dodać go do tablicy. Grupowanie pokazuje rolę każdego kroku.</p>
-
         <section class="co-library-group" data-group="build" data-open="true">
           <button class="co-library-group-toggle" type="button" aria-expanded="true" aria-controls="co-group-build">
             <span data-co-i18n="group_build">Buduj i trenuj</span><span class="co-toggle-mark" aria-hidden="true">⌄</span>
@@ -524,7 +518,7 @@ progress { accent-color: var(--yellow); }
               <div class="block-dot" style="background:var(--c-label)"></div><span data-i18n="block_label_classes">Etykiety klas</span><span class="co-palette-action">+</span>
             </div>
             <div class="palette-block" draggable="true" tabindex="0" role="button" data-type="prepare-data" ondragstart="paletteDragStart(event)">
-              <div class="block-dot" style="background:var(--c-prep)"></div><span data-i18n="block_prepare_data">Augmentacja danych</span><span class="co-palette-action">+</span>
+              <div class="block-dot" style="background:var(--c-prep)"></div><span data-i18n="block_prepare_data">Przygotuj dane</span><span class="co-palette-action">+</span>
             </div>
             <div class="palette-block" draggable="true" tabindex="0" role="button" data-type="pretrained-model" ondragstart="paletteDragStart(event)">
               <div class="block-dot" style="background:var(--c-model)"></div><span data-i18n="block_pretrained_model">Model bazowy</span><span class="co-palette-action">+</span>
@@ -553,7 +547,7 @@ progress { accent-color: var(--yellow); }
               <div class="block-dot" style="background:var(--c-eval)"></div><span data-i18n="block_show_results">Pokaż wyniki</span><span class="co-palette-action">+</span>
             </div>
             <div class="palette-block" draggable="true" tabindex="0" role="button" data-type="zero-shot" ondragstart="paletteDragStart(event)">
-              <div class="block-dot" style="background:var(--c-model)"></div><span data-i18n="block_zero_shot">Model bazowy / Predykcja</span><span class="co-palette-action">+</span>
+              <div class="block-dot" style="background:var(--c-model)"></div><span data-i18n="block_zero_shot">Predykcja bez treningu</span><span class="co-palette-action">+</span>
             </div>
           </div>
         </section>
@@ -593,7 +587,6 @@ progress { accent-color: var(--yellow); }
           <div id="dataset-info" class="dataset-info"></div>
         </details>
       </div>
-      <button id="co-reset-state" type="button" onclick="resetAppState()" data-co-i18n="reset_state">Resetuj stan aplikacji</button>
     </aside>
 
     <!-- CANVAS -->
@@ -616,10 +609,16 @@ progress { accent-color: var(--yellow); }
       <div id="co-log-resize" role="separator" tabindex="0" aria-controls="log-panel" aria-orientation="vertical" aria-label="Zmień rozmiar terminala" aria-valuemin="200" aria-valuemax="800" aria-valuenow="320"></div>
       <div id="log-header">
         <div id="log-header-title" data-i18n="log_title">Pipeline Log</div>
-        <button id="log-clear" onclick="clearLog()" data-i18n-title="title_log_clear" data-i18n-aria="title_log_clear">CLR</button>
-      </div>
+        <button id="log-clear" onclick="clearLog()" data-i18n-title="title_log_clear" data-i18n-aria="title_log_clear">CLR</button>      </div>
       <div id="log-entries" role="log" aria-live="polite"></div>
     </aside>
+  </div>
+
+  <!-- STATUS STRIP: the latest pipeline message; the full log opens on demand -->
+  <div id="co-statusbar" data-kind="idle">
+    <span id="co-status-dot" aria-hidden="true"></span>
+    <span id="co-status-text" role="status" aria-live="polite" data-co-i18n="status_ready">Gotowe do pracy</span>
+    <button id="co-log-toggle" type="button" aria-controls="log-panel" aria-expanded="false" onclick="coSetLogOpen(document.body.dataset.logOpen !== 'true')" data-co-i18n="log_show">Pokaż log</button>
   </div>
 
   <!-- GUIDE MODAL, kept compatible with app.js -->
