@@ -303,8 +303,8 @@ const STRINGS = {
     xai_legend_hi: '🟥 patrzył tutaj', xai_legend_lo: 'myliło 🟦',
     xai_wait: 'Uruchom kamerę predykcji, potem kliknij „Analizuj"',
     xai_howto: 'Podświetlone obszary to te, na które model patrzył, podejmując decyzję. Czerwone = główny dowód.',
-    explorer_desc: 'Eksploruj architekturę MobileNet V3 Small – warstwy, mapy cech i inferencję na żywo.',
-    btn_open_explorer: 'Otwórz eksplorator',
+    explorer_desc: 'Poznaj model bazowy MobileNetV3-Small: kto go stworzył, na jakich zdjęciach się uczył, jak działa transfer learning i co jest w środku.',
+    btn_open_explorer: 'Otwórz eksplorator', btn_read_model: 'Poczytaj o modelu',
     eval_hint: 'Sprawdza wytrenowany model na odłożonych 20% zdjęć, których nie widział w treningu – prawdziwy sprawdzian generalizacji. Bez aktualnego modelu trenuje świeży model na 80% i testuje go na tych samych odłożonych 20%.',
     btn_evaluate: '▶ Oceń model',
     deploy_hint: 'Eksportuj samodzielną stronę HTML z Twoim modelem w środku – działa offline, klasyfikuje z kamery. Podziel się nią z innymi!',
@@ -601,8 +601,8 @@ const STRINGS = {
     xai_legend_hi: '🟥 looked here', xai_legend_lo: 'distracting 🟦',
     xai_wait: 'Start the prediction camera, then click "Analyze"',
     xai_howto: 'The highlighted areas are what the model looked at to decide. Red = its main evidence.',
-    explorer_desc: 'Explore MobileNet V3 Small – layers, feature maps and live inference.',
-    btn_open_explorer: 'Open Explorer',
+    explorer_desc: 'Meet the base model MobileNetV3-Small: who made it, what photos it learned from, how transfer learning works and what is inside.',
+    btn_open_explorer: 'Open Explorer', btn_read_model: 'Read about the model',
     eval_hint: 'Checks the trained model on the held-out 20% of images it never saw in training – a true generalisation check. Without an up-to-date model it trains a fresh one on the 80% and tests it on the same held-out 20%.',
     btn_evaluate: '▶ Evaluate model',
     deploy_hint: 'Export a self-contained HTML page with your model baked in – works offline, classifies from the camera. Share it with anyone!',
@@ -2258,7 +2258,8 @@ function buildPretrainedModelBody(id) {
   return `
 <progress id="prog-${id}" value="0" max="100"></progress>
 <div id="model-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">–</div>
-${makeBtn(t('btn_load_model'), `runLoadBaseModel('${id}')`, 'var(--c-model)')}`;
+${makeBtn(t('btn_load_model'), `runLoadBaseModel('${id}')`, 'var(--c-model)')}
+<button class="bk-btn bk-btn--muted" onclick="window.open('model-explorer.html','_blank')">${t('btn_read_model')}</button>`;
 }
 
 function buildTrainModelBody(id) {

@@ -526,17 +526,17 @@ progress { accent-color: var(--yellow); }
             <div class="palette-block" draggable="true" tabindex="0" role="button" data-type="train-model" ondragstart="paletteDragStart(event)">
               <div class="block-dot" style="background:var(--c-train)"></div><span data-i18n="block_train_model">Trenuj model</span><span class="co-palette-action">+</span>
             </div>
+            <div class="palette-block" draggable="true" tabindex="0" role="button" data-type="evaluate" ondragstart="paletteDragStart(event)">
+              <div class="block-dot" style="background:var(--c-eval)"></div><span data-i18n="block_evaluate">Ocena modelu</span><span class="co-palette-action">+</span>
+            </div>
           </div>
         </section>
 
         <section class="co-library-group" data-group="test" data-open="false">
           <button class="co-library-group-toggle" type="button" aria-expanded="false" aria-controls="co-group-test">
-            <span data-co-i18n="group_test">Testuj i przewiduj</span><span class="co-toggle-mark" aria-hidden="true">⌄</span>
+            <span data-co-i18n="group_test">Wykorzystaj model</span><span class="co-toggle-mark" aria-hidden="true">⌄</span>
           </button>
           <div id="co-group-test" class="co-library-group-items">
-            <div class="palette-block" draggable="true" tabindex="0" role="button" data-type="evaluate" ondragstart="paletteDragStart(event)">
-              <div class="block-dot" style="background:var(--c-eval)"></div><span data-i18n="block_evaluate">Ocena modelu</span><span class="co-palette-action">+</span>
-            </div>
             <div class="palette-block" draggable="true" tabindex="0" role="button" data-type="upload-model" ondragstart="paletteDragStart(event)">
               <div class="block-dot" style="background:var(--c-data)"></div><span data-i18n="block_upload_model">Wczytaj model</span><span class="co-palette-action">+</span>
             </div>
