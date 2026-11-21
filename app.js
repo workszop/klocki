@@ -765,6 +765,7 @@ const PREDICTION_TEXT = {
     paused: 'Wstrzymano',
     stopped: 'Kamera zatrzymana',
     belowThreshold: 'Poniżej progu',
+    unsure: 'Nie wiem',
     winnerLabel: 'Najlepsza klasa',
     ranking: 'Ranking klas',
     history: 'Historia predykcji',
@@ -781,6 +782,7 @@ const PREDICTION_TEXT = {
     paused: 'Paused',
     stopped: 'Camera stopped',
     belowThreshold: 'Below threshold',
+    unsure: "I don't know",
     winnerLabel: 'Top class',
     ranking: 'Class ranking',
     history: 'Prediction history',
@@ -4861,6 +4863,12 @@ function updatePredictionWinner(id, snapshot) {
   if (snapshot.maxIdx < 0) {
     winner.textContent = predictionText('noPrediction');
     score.textContent = '';
+    result.style.removeProperty('--pred-winner-color');
+  } else if (snapshot.belowThreshold) {
+    // Below the threshold the model does not commit to a class. The closest
+    // candidate stays visible in the score line so the learner sees why.
+    winner.textContent = predictionText('unsure');
+    score.textContent = `${snapshot.labels[snapshot.maxIdx]} ${(snapshot.confidence * 100).toFixed(1)}% · ${predictionText('belowThreshold').toLowerCase()} ${Math.round(snapshot.threshold * 100)}%`;
     result.style.removeProperty('--pred-winner-color');
   } else {
     winner.textContent = snapshot.labels[snapshot.maxIdx];

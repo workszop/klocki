@@ -411,7 +411,7 @@ body.co-shell input[type=range]::-moz-range-progress { height: 8px; border-radiu
 /* Notes and prediction cards: neutral fills and full contours, never a coloured side bar */
 .bk-note { border-left: none; background: var(--paper-2); color: var(--ink-2); }
 .pred-result { border: 2px solid var(--pred-winner-color, var(--line-2)); }
-/* Below threshold: keep the class colour, mark the uncertainty with a dashed contour */
+/* Below threshold: neutral contour (no class is named), dashed to mark the uncertainty */
 .pred-result.is-below-threshold { border-color: var(--pred-winner-color, var(--line-strong)); border-style: dashed; }
 /* Focus: the ink band is a real outline, so no component box-shadow can hide it (and it survives forced colours);
    the paper gap is a box-shadow where the control has none of its own. Dark surfaces invert the pair. */
