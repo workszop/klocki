@@ -881,8 +881,8 @@ const activePersistenceTasks = new Set();
 // True once the current fullModel has been saved/downloaded; drives the Save
 // pill, the remove/clear confirms and the beforeunload warning.
 let modelSaved = false;
-// Educational mode: shows annotation tooltips above each block, disables drag
-// repositioning, and pre-populates a training pipeline. Toggleable from the
+// Educational mode: shows annotation tooltips above each block, disables block
+// removal (cards can still be moved), and pre-populates a training pipeline. Toggleable from the
 // topbar; URL param ?edu=1 also enables it (for embedding in iframes).
 let eduMode = (new URLSearchParams(location.search).get('edu') === '1')
   || (localStorage.getItem('ml-blocks-edu') === '1');
@@ -2470,8 +2470,6 @@ function placeBlock(type, x, y) {
   if (!blocksByType[type]) blocksByType[type] = record;
   log('info', t('log_block_added', blockTitle(type)));
   initBlockAfterPlace(id, type);
-  // Drag is disabled in edu mode by the guard in cardDragStart, so the handlers
-  // stay attached and dragging works again when edu mode is toggled off.
   if (eduMode) {
     const ann = document.getElementById('ann-' + id);
     if (ann) ann.textContent = getEduAnnotation(type) || '';
@@ -2525,7 +2523,6 @@ function toggleCollapse(id) {
 // cleaner but onmousedown is wired into block markup (educational simplicity),
 // so we add a parallel touchstart path that synthesises clientX/clientY.
 function cardDragStart(e, id) {
-  if (eduMode) return;
   // The close button has its own handler; starting a drag from it would
   // swallow the tap on touch devices.
   if (e.target && e.target.closest && e.target.closest('.bk-close')) return;
@@ -2544,7 +2541,8 @@ function cardDragStart(e, id) {
   dragOffsetX = point.clientX - rect.left;
   dragOffsetY = point.clientY - rect.top;
   card.classList.add('dragging');
-  trash.classList.add('visible');
+  // Edu mode keeps the pipeline intact: cards can be moved but not binned.
+  if (!eduMode) trash.classList.add('visible');
 
   function pointFromEvent(ev) {
     if (ev.touches && ev.touches.length) return ev.touches[0];
