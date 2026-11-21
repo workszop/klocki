@@ -368,7 +368,7 @@ body.co-shell .block-card {
 .block-card[data-co-type="prepare-data"] .bk-badge { background: color-mix(in srgb, var(--play-berry) 88%, var(--ink)); }
 .block-card[data-co-type="pretrained-model"] .bk-badge, .block-card[data-co-type="model-explorer"] .bk-badge { background: var(--green-soft); }
 .block-card[data-co-type="train-model"] .bk-badge { background: var(--red-soft); }
-.block-card[data-co-type="evaluate"] .bk-badge, .block-card[data-co-type="zero-shot"] .bk-badge, .block-card[data-co-type="explain-ai"] .bk-badge { background: var(--blue-600); }
+.block-card[data-co-type="evaluate"] .bk-badge, .block-card[data-co-type="explain-ai"] .bk-badge { background: var(--blue-600); }
 .block-card[data-co-type="save-model"] .bk-badge, .block-card[data-co-type="deploy-export"] .bk-badge { background: var(--ink); }
 /* Actions: one dark primary per card, everything else sand */
 .bk-btn[style*="background"]:not(.bk-btn--xs) { background: var(--ink) !important; color: var(--paper); }
@@ -545,9 +545,6 @@ progress { accent-color: var(--yellow); }
             </div>
             <div class="palette-block" draggable="true" tabindex="0" role="button" data-type="show-results" ondragstart="paletteDragStart(event)">
               <div class="block-dot" style="background:var(--c-eval)"></div><span data-i18n="block_show_results">Pokaż wyniki</span><span class="co-palette-action">+</span>
-            </div>
-            <div class="palette-block" draggable="true" tabindex="0" role="button" data-type="zero-shot" ondragstart="paletteDragStart(event)">
-              <div class="block-dot" style="background:var(--c-model)"></div><span data-i18n="block_zero_shot">Predykcja bez treningu</span><span class="co-palette-action">+</span>
             </div>
           </div>
         </section>

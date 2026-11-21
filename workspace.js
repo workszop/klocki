@@ -35,7 +35,6 @@ const CO_SETTINGS = {
   'pretrained-model': { keys: [], summary: 'base' },
   'train-model': { keys: ['ep', 'lr', 'bs'], summary: 'train' },
   'show-results': { keys: ['threshold'], summary: 'threshold' },
-  'zero-shot': { keys: ['zsfps'], summary: 'zero' },
   'explain-ai': { keys: ['xai-method', 'xai-patch'], summary: 'xai' }
 };
 
@@ -133,7 +132,6 @@ function coInferType(card) {
   if (card.querySelector('[id^="model-name-"]')) return 'save-model';
   if (card.querySelector('[id^="file-model-"]')) return 'upload-model';
   if (card.querySelector('[id^="pred-bars-"]')) return 'show-results';
-  if (card.querySelector('[id^="zsfps-"]')) return 'zero-shot';
   if (card.querySelector('[id^="xai-method-"]')) return 'explain-ai';
   if (card.querySelector('[id^="eval-status-"]')) return 'evaluate';
   if (card.querySelector('[id^="deploy-status-"]')) return 'deploy-export';
@@ -204,7 +202,6 @@ function coSummaryText(record) {
     case 'prepare-data': return join([coLang() === 'pl' ? 'Augmentacja' : 'Augmentation', coSettingsValue(card, 'aug') === 'all' ? 'Flip + Brightness + Zoom + Skew' : (coLang() === 'pl' ? 'brak' : 'none')]);
     case 'train-model': return join([coSettingsValue(card, 'ep') ? coSettingsValue(card, 'ep') + (coLang() === 'pl' ? ' epok' : ' epochs') : '', coSettingsValue(card, 'lr') ? 'lr ' + coSettingsValue(card, 'lr') : '', coSettingsValue(card, 'bs') ? 'batch ' + coSettingsValue(card, 'bs') : '']);
     case 'show-results': return join([coLang() === 'pl' ? 'Próg' : 'Threshold', coSettingsValue(card, 'thr') ? Math.round(Number(coSettingsValue(card, 'thr')) * 100) + '%' : '']);
-    case 'zero-shot': return join(['FPS', coSettingsValue(card, 'zsfps') ? (1000 / Number(coSettingsValue(card, 'zsfps'))).toFixed(0) : '']);
     case 'save-model': return coSettingsValue(card, 'model-name') || 'model-1';
     case 'pretrained-model': return coLang() === 'pl' ? 'MobileNetV3-Small' : 'MobileNetV3-Small';
     case 'evaluate': return coLang() === 'pl' ? '80% trening · 20% test' : '80% train · 20% test';

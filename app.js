@@ -30,7 +30,6 @@ const BLOCK_META = {
   'upload-model':     { phase: 'infer',  color: 'var(--c-data)',   badge: 'DATA',   titleKey: 'block_upload_model',     rank: 8,  group: 'infer' },
   'camera-infer':     { phase: 'infer',  color: 'var(--c-data)',   badge: 'DATA',   titleKey: 'block_camera_infer',     rank: 9,  group: 'infer' },
   'show-results':     { phase: 'infer',  color: 'var(--c-eval)',   badge: 'PRED',   titleKey: 'block_show_results',     rank: 10, group: 'infer' },
-  'zero-shot':        { phase: 'infer',  color: 'var(--c-model)',  badge: 'PRED',   titleKey: 'block_zero_shot',        rank: 11, group: 'infer' },
   'explain-ai':       { phase: 'infer',  color: 'var(--c-eval)',   badge: 'EVAL',   titleKey: 'block_explain_ai',       rank: 12, group: 'infer' },
   'model-explorer':   { phase: 'model',  color: 'var(--c-eval)',   badge: 'EVAL',   titleKey: 'block_model_explorer',   rank: 13, group: 'infer' }
 };
@@ -294,7 +293,8 @@ const STRINGS = {
     opt_prepare_only: 'Tylko przygotowanie',
     btn_preview_aug: '👁 Podgląd augmentacji',
     btn_prepare: 'Przygotuj dane',
-    zs_note: 'Pełny klasyfikator MobileNetV3 (1001 klas ImageNet). Pierwsze uruchomienie pobiera ~5 MB.',
+    zs_base_note: 'Tak model rozpoznaje obraz bez Twojego treningu: wybiera z 1000 kategorii ImageNet (nazwy po angielsku). Pierwsze uruchomienie pobiera ok. 10 MB.',
+    btn_zs_stop: 'Zatrzymaj predykcję',
     btn_start: 'Uruchom', btn_stop: 'Stop',
     pred_waiting: 'oczekiwanie na predykcję...',
     xai_granularity: 'Rozdzielczość', xai_method: 'Metoda',
@@ -592,7 +592,8 @@ const STRINGS = {
     opt_prepare_only: 'Prepare only',
     btn_preview_aug: '👁 Preview augmentation',
     btn_prepare: 'Prepare data',
-    zs_note: 'Full MobileNetV3 classifier (1001 ImageNet classes). First start downloads ~5 MB.',
+    zs_base_note: 'This is how the model sees an image without your training: it picks from 1000 ImageNet categories. The first start downloads about 10 MB.',
+    btn_zs_stop: 'Stop prediction',
     btn_start: 'Start', btn_stop: 'Stop',
     pred_waiting: 'waiting for prediction...',
     xai_granularity: 'Granularity', xai_method: 'Method',
@@ -943,7 +944,7 @@ function isBlockBusy(b) {
     case 'camera-input': return !!cameraStreams[b.id];
     case 'camera-infer':
     case 'show-results': return !!inferInterval;
-    case 'zero-shot': return !!zsIntervals[b.id];
+    case 'pretrained-model':
     case 'train-model': return trainingInProgress;
     case 'explain-ai': return xaiRunning;
     default: return false;
@@ -1044,10 +1045,6 @@ const BLOCK_NOTES = {
   'explain-ai': {
     pl: 'Analizuje pojedynczą klatkę kamery predykcji i pokazuje, które obszary wpłynęły na decyzję.',
     en: 'Analyses a single inference-camera frame and highlights which regions drove the decision.'
-  },
-  'zero-shot': {
-    pl: 'Pokazuje, co model bazowy rozpoznaje samodzielnie – przed jakimkolwiek treningiem.',
-    en: 'Shows what the base model recognises on its own – before any training.'
   }
 };
 
@@ -1069,7 +1066,6 @@ const EDU_ANNOTATIONS = {
   'upload-model':     { pl: '📤 Wczytujemy wagi modelu z pliku .json + .bin',        en: '📤 Load model weights from .json + .bin file' },
   'camera-infer':     { pl: '📷 Kamera streamuje klatki do predykcji',                en: '📷 Camera streams frames for prediction' },
   'show-results':     { pl: '🎯 model.predict() – paski pewności + klasa o najwyższym prawdopodobieństwie', en: '🎯 model.predict() – confidence bars + class with the highest probability' },
-  'zero-shot':        { pl: '🌍 1001 klas ImageNet – to, co MobileNet już zna',      en: '🌍 1001 ImageNet classes – what MobileNet already knows' },
   'explain-ai':       { pl: '🔍 Sprawdzamy które fragmenty obrazu wpływają na decyzję', en: '🔍 Find which image regions drove the decision' },
   'model-explorer':   { pl: '🔬 Architektura warstwa po warstwie',                   en: '🔬 Architecture layer by layer' },
   'evaluate':         { pl: '📊 Test na odłożonych 20% zdjęć, których model nie widział w treningu', en: '📊 Tests on the held-out 20% the model never saw in training' },
@@ -1855,7 +1851,6 @@ const BLOCK_PREREQS = {
   'upload-model': [],
   'camera-infer': ['inferModel', 'baseModel'],
   'show-results': ['inferModel', 'baseModel', 'inferStream'],
-  'zero-shot': [], // self-contained – loads its own classifier on demand
   'explain-ai': ['inferModel', 'baseModel', 'inferStream'],
   'model-explorer': [],
   'evaluate': ['baseModel', 'samples', 'classes'], // trains fresh head on 80%, tests 20%
@@ -1992,7 +1987,6 @@ function renderBlockBody(type, id) {
     case 'upload-model': body = buildUploadModelBody(id); break;
     case 'camera-infer': body = buildCameraInferBody(id); break;
     case 'show-results': body = buildShowResultsBody(id); break;
-    case 'zero-shot': body = buildZeroShotBody(id); break;
     case 'explain-ai': body = buildExplainAIBody(id); break;
     case 'model-explorer': body = buildModelExplorerBody(id); break;
     case 'evaluate': body = buildEvaluateBody(id); break;
@@ -2259,7 +2253,29 @@ function buildPretrainedModelBody(id) {
 <progress id="prog-${id}" value="0" max="100"></progress>
 <div id="model-status-${id}" style="font-size:10px;color:var(--c-muted);text-align:center">–</div>
 ${makeBtn(t('btn_load_model'), `runLoadBaseModel('${id}')`, 'var(--c-model)')}
+<button class="bk-btn bk-btn--muted" id="zsbtn-${id}" aria-expanded="false" aria-controls="zswrap-${id}" onclick="toggleBaseZeroShot('${id}')">${t('block_zero_shot')}</button>
+<div id="zswrap-${id}" class="zs-inline" style="display:none">
+<div class="bk-note">${t('zs_base_note')}</div>
+<div class="video-wrap"><video class="bk-video" id="zsvid-${id}" autoplay playsinline muted></video></div>
+<div id="zs-status-${id}" aria-live="polite" style="font-size:10px;color:var(--c-muted);text-align:center;min-height:14px"></div>
+<div id="zs-results-${id}" style="margin-top:6px"></div>
+</div>
 <button class="bk-btn bk-btn--muted" onclick="window.open('model-explorer.html','_blank')">${t('btn_read_model')}</button>`;
+}
+
+// "Predict without training" inside the base model card: one button opens the
+// camera in the card and shows what the original ImageNet classifier sees.
+// Reuses the zero-shot loop, keyed by this card's id.
+function toggleBaseZeroShot(id) {
+  const wrap = document.getElementById('zswrap-' + id);
+  const btn = document.getElementById('zsbtn-' + id);
+  if (!wrap || !btn) return;
+  const open = wrap.style.display === 'none';
+  wrap.style.display = open ? '' : 'none';
+  btn.setAttribute('aria-expanded', String(open));
+  btn.textContent = t(open ? 'btn_zs_stop' : 'block_zero_shot');
+  if (open) startZeroShot(id);
+  else stopZeroShot(id);
 }
 
 function buildTrainModelBody(id) {
@@ -2311,21 +2327,6 @@ function buildCameraInferBody(id) {
 ${makeParam(t('param_fps'), `<select id="fps-${id}"><option value="1000">1</option><option value="200" selected>5</option><option value="100">10</option></select>`)}
 ${makeBtn(t('btn_start_camera'), `startInferCamera('${id}')`, 'var(--c-data)')}
 ${makeBtn(t('btn_stop_camera'), `stopInferCamera('${id}')`, 'var(--c-muted)')}`;
-}
-
-
-function buildZeroShotBody(id) {
-  const note = t('zs_note');
-  return `
-<div style="font-size:10px;color:var(--c-muted);line-height:1.6;padding:4px 0 6px;border-bottom:1px solid var(--c-border);margin-bottom:6px">${note}</div>
-<div class="video-wrap"><video class="bk-video" id="zsvid-${id}" autoplay playsinline muted></video></div>
-${makeParam('FPS', `<select id="zsfps-${id}"><option value="1000">1</option><option value="200" selected>5</option><option value="100">10</option></select>`)}
-<div id="zs-status-${id}" aria-live="polite" style="font-size:10px;color:var(--c-muted);text-align:center;min-height:14px"></div>
-<div id="zs-results-${id}" style="margin-top:6px"></div>
-<div style="display:flex;gap:6px;margin-top:4px">
-${makeBtn(t('btn_start'), `startZeroShot('${id}')`, 'var(--c-model)')}
-${makeBtn(t('btn_stop'), `stopZeroShot('${id}')`, 'var(--c-muted)')}
-</div>`;
 }
 
 
@@ -2649,7 +2650,7 @@ function removeBlock(id) {
   // Stop streams/intervals associated with this block before tearing it down
   if (block) {
     if (block.type === 'camera-infer') cancelCameraOpening('infer');
-    else if (block.type === 'zero-shot') cancelCameraOpening('zs-' + id);
+    else if (block.type === 'pretrained-model') cancelCameraOpening('zs-' + id);
     else if (block.type === 'camera-input') cancelCameraOpening(id);
     if (cameraStreams[id]) {
       try { cameraStreams[id].getTracks().forEach(t => t.stop()); } catch (_) {}
@@ -2678,9 +2679,9 @@ function removeBlock(id) {
       stopXAI(id);
       window.XAI_UI.drop(id);
     }
-    // The zero-shot classifier is large (~5 MB GPU memory). Free it when
-    // the user removes the only zero-shot block – they can reload it.
-    if (block.type === 'zero-shot' && !placedBlocks.some(b => b.type === 'zero-shot' && b.id !== id)) {
+    // The ImageNet classifier is large (~10 MB). Free it when the base model
+    // card that runs it is removed – it reloads on the next start.
+    if (block.type === 'pretrained-model' && !placedBlocks.some(b => b.type === 'pretrained-model' && b.id !== id)) {
       if (zeroShotModel) { try { zeroShotModel.dispose(); } catch (_) {} zeroShotModel = null; }
     }
   }
@@ -4505,7 +4506,6 @@ async function startZeroShot(id) {
   if (!opening) return;
   if (zsStreams[id]) zsStreams[id].getTracks().forEach(t => t.stop());
   try {
-    setBlockStatus(document.getElementById(id), 'running');
     if (!zeroShotModel) {
       if (statusEl) statusEl.textContent = t('zs_downloading');
       await loadZeroShotModel(statusEl);
@@ -4521,8 +4521,7 @@ async function startZeroShot(id) {
     zsStreams[id] = stream;
     const vid = document.getElementById('zsvid-' + id);
     if (vid) { vid.srcObject = stream; vid.play().catch(() => {}); }
-    const fpsEl = document.getElementById('zsfps-' + id);
-    const interval = fpsEl ? parseInt(fpsEl.value) : 200;
+    const interval = 200; // 5 predictions per second
     if (zsIntervals[id]) clearInterval(zsIntervals[id]);
     zsIntervals[id] = setInterval(() => runZeroShot(id), interval);
     log('success', t('log_zs_started'));
@@ -4530,7 +4529,6 @@ async function startZeroShot(id) {
     if (!isCameraOpeningCurrent(openingKey, opening) || appResetting) return;
     if (statusEl) statusEl.textContent = err.message || '';
     log('error', t('err_zs') + err.message);
-    setBlockStatus(document.getElementById(id), 'error');
   } finally {
     finishCameraOpening(openingKey, opening);
   }
@@ -4540,7 +4538,6 @@ function stopZeroShot(id) {
   cancelCameraOpening('zs-' + id);
   if (zsIntervals[id]) { clearInterval(zsIntervals[id]); delete zsIntervals[id]; }
   if (zsStreams[id]) { zsStreams[id].getTracks().forEach(t => t.stop()); delete zsStreams[id]; }
-  setBlockStatus(document.getElementById(id), 'idle');
   log('info', t('log_zs_stopped'));
 }
 

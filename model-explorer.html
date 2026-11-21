@@ -339,20 +339,15 @@ details.more > .more-body { padding: 14px 18px 18px; display: grid; gap: 12px; f
 .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
 .drop strong { font-size: var(--body-sm); }
 .drop span { font-size: var(--caption); color: var(--ink-2); }
-.lab-grid { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 20px; align-items: start; }
 #preview { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line-2); display: none; }
 .progress { height: 8px; border-radius: var(--r-pill); background: var(--track); overflow: hidden; }
 .progress span { display: block; height: 100%; width: 0; background: var(--ink); border-radius: var(--r-pill); transition: width .2s; }
-.pred { display: grid; gap: 4px; }
-.pred-top { display: flex; justify-content: space-between; gap: 10px; font-size: var(--body-sm); }
-.pred-top b { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
-.pred-top span { font-family: var(--font-mono); color: var(--ink-2); }
 .bar { height: 8px; border-radius: var(--r-pill); background: var(--track); overflow: hidden; }
 .bar span { display: block; height: 100%; background: var(--ink); border-radius: var(--r-pill); }
 .empty { font-size: var(--body-sm); color: var(--ink-2); background: var(--paper-2); border-radius: var(--r-md); padding: 14px 16px; }
 .error { font-size: var(--body-sm); background: var(--red-soft); color: var(--red-ink); border-radius: var(--r-md); padding: 12px 16px; }
-#finger { width: 100%; max-width: 320px; aspect-ratio: 1; image-rendering: pixelated; border: 1px solid var(--line-2); border-radius: var(--r-sm); display: none; }
-.finger-grid { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 20px; align-items: start; }
+#finger { width: 100%; max-width: 280px; aspect-ratio: 1; image-rendering: pixelated; border: 1px solid var(--line-2); border-radius: var(--r-sm); display: none; }
+.finger-grid { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 280px) minmax(0, 1fr); gap: 20px; align-items: start; }
 .scale { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: var(--caption); color: var(--ink-2); }
 .scale i { flex: 1; max-width: 160px; height: 10px; border-radius: var(--r-pill); border: 1px solid var(--line-2); background: linear-gradient(90deg, #FFFFFF, #177AA8); }
 
@@ -394,7 +389,7 @@ th.num, td.num { text-align: right; font-family: var(--font-mono); }
   .sec-head { flex-wrap: wrap; }
   .sec-head h2 { flex: 1; min-width: 0; }
   .sec-head::after { flex: 1 0 100%; }
-  .grid-3, .grid-2, .split, .stats, .stats.three, .lab-grid, .finger-grid { grid-template-columns: minmax(0, 1fr); }
+  .grid-3, .grid-2, .split, .stats, .stats.three, .finger-grid { grid-template-columns: minmax(0, 1fr); }
   .layer, .layer-head { grid-template-columns: 4.6rem minmax(0, 1fr); }
   .layer .meter, .layer-head .m { display: none; }
   .sticky { position: static; }
@@ -485,33 +480,7 @@ th.num, td.num { text-align: right; font-family: var(--font-mono); }
       <article class="card"><div class="card-head"><span class="tile-h"><span class="badge tone-red"><i data-ic="alert"></i></span><h3 data-i18n="data_t3_h"></h3></span></div><div class="card-body"><p data-i18n="data_t3"></p></div></article>
     </div>
 
-    <article class="card" id="lab" data-model-state="idle" data-has-image="false" data-top-label="">
-      <div class="card-head">
-        <span class="tile-h"><span class="badge tone-yellow"><i data-ic="zap"></i></span><h3 data-i18n="lab_h"></h3></span>
-        <span class="chip tone-stone" id="status" role="status" aria-live="polite" data-i18n="st_idle"></span>
-      </div>
-      <div class="card-body">
-        <p data-i18n="lab_intro"></p>
-        <div class="lab-grid">
-          <div class="stack" style="gap:12px">
-            <button class="btn btn-primary" id="btn-load" type="button"><i data-ic="download"></i><span data-i18n="btn_load"></span></button>
-            <div class="progress" id="progress" hidden><span></span></div>
-            <label class="drop" id="drop">
-              <input type="file" id="file" accept="image/*" data-i18n-aria="drop_h">
-              <i data-ic="upload"></i>
-              <strong data-i18n="drop_h"></strong>
-              <span data-i18n="drop_s"></span>
-            </label>
-            <img id="preview" alt="">
-          </div>
-          <div class="stack" style="gap:12px">
-            <span class="label" data-i18n="pred_label"></span>
-            <div id="predictions" class="stack" style="gap:12px"><div class="empty" data-i18n="pred_empty"></div></div>
-          </div>
-        </div>
-      </div>
-      <div class="card-foot"><span data-i18n="lab_foot"></span><span id="meta"></span></div>
-    </article>
+    <div class="callout tone-yellow"><i data-ic="zap"></i><p data-i18n="try_hint"></p></div>
 
     <details class="more">
       <summary data-i18n="limits_h"></summary>
@@ -545,13 +514,26 @@ th.num, td.num { text-align: right; font-family: var(--font-mono); }
           <li><span class="label" data-i18n="vs_learn"></span><span data-i18n="vs_b_3"></span></li>
         </ul></div></article>
     </div>
-    <article class="card" id="finger-card" data-has-fingerprint="false">
-      <div class="card-head"><span class="tile-h"><span class="badge tone-blue"><i data-ic="grid"></i></span><h3 data-i18n="fp_h"></h3></span></div>
+    <article class="card" id="finger-card" data-model-state="idle" data-has-image="false" data-has-fingerprint="false">
+      <div class="card-head">
+        <span class="tile-h"><span class="badge tone-blue"><i data-ic="grid"></i></span><h3 data-i18n="fp_h"></h3></span>
+        <span class="chip tone-stone" id="status" role="status" aria-live="polite" hidden></span>
+      </div>
       <div class="card-body">
         <div class="finger-grid">
+          <div class="stack" style="gap:12px">
+            <label class="drop" id="drop">
+              <input type="file" id="file" accept="image/*" data-i18n-aria="drop_h">
+              <i data-ic="upload"></i>
+              <strong data-i18n="drop_h"></strong>
+              <span data-i18n="drop_s"></span>
+            </label>
+            <div class="progress" id="progress" hidden><span></span></div>
+            <img id="preview" alt="">
+          </div>
           <div class="stack" style="gap:10px">
             <canvas id="finger" width="32" height="32" role="img" data-i18n-aria="fp_aria"></canvas>
-            <div class="empty" id="finger-empty"><span data-i18n="fp_empty"></span> <a href="#lab" data-i18n="fp_empty_link"></a></div>
+            <div class="empty" id="finger-empty" data-i18n="fp_empty"></div>
             <div class="scale" id="finger-scale" hidden><span data-i18n="fp_low"></span><i></i><span data-i18n="fp_high"></span></div>
           </div>
           <div class="stack" style="gap:10px">
@@ -560,6 +542,7 @@ th.num, td.num { text-align: right; font-family: var(--font-mono); }
           </div>
         </div>
       </div>
+      <div class="card-foot"><span data-i18n="fp_foot"></span><span id="meta"></span></div>
     </article>
   </div></section>
 
@@ -608,15 +591,12 @@ th.num, td.num { text-align: right; font-family: var(--font-mono); }
 <script>
 // ─── Constants ───
 const LANG_KEY = 'ml-blocks-lang'; // shared with the main KlockiAI app
-// The same pretrained MobileNetV3-Small files KlockiAI uses: the classifier
-// (1001 ImageNet outputs) for the demo and the feature-vector variant (1024
-// numbers) that the training app builds on.
-const V3_CLASSIFIER_URL = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-classification/versions/1/model.json?tfjs-format=file';
+// The same pretrained MobileNetV3-Small feature model (1024 numbers) that the
+// training app builds on.
 const V3_FEATURE_URL = 'https://www.kaggle.com/models/google/mobilenet-v3/frameworks/tfJs/variations/small-100-224-feature-vector/versions/1/model.json?tfjs-format=file';
 // Backbone the main app stores once when a model is saved to the browser
 // (BASE_MODEL_IDB_KEY in app.js). Tried first to skip that download.
 const BASE_MODEL_IDB_KEY = 'indexeddb://ml-blocks-base-v1';
-const IMAGENET_LABELS_URL = 'https://storage.googleapis.com/download.tensorflow.org/data/ImageNetLabels.txt';
 const FINGER_SIDE = 32; // 32 × 32 = 1024 features
 // Canvas cannot read CSS variables: literal edulab values (paper → blue-600).
 const FINGER_LOW = [255, 255, 255];
@@ -701,17 +681,9 @@ const T = {
     data_t1_h: 'Zdjęcia z internetu', data_t1: 'Naukowcy zebrali zdjęcia z wyszukiwarek i serwisów ze zdjęciami. Każde zdjęcie obejrzał człowiek i potwierdził, co na nim jest.',
     data_t2_h: 'Co jest w zbiorze', data_t2: 'Zwierzęta (w tym ponad sto ras psów), rośliny, jedzenie, pojazdy, instrumenty, meble i przedmioty codziennego użytku.',
     data_t3_h: 'Czego w nim nie ma', data_t3: 'Twoich klas. Model nie zna Twojego kubka, Twoich gestów ani twarzy kolegów. Umie za to rozpoznawać kształty, kolory i faktury, a z tego korzysta transfer learning.',
-    lab_h: 'Sprawdź, co model rozpoznaje sam',
-    lab_intro: 'To jest oryginalny model z 1000 kategorii ImageNet, bez Twojego treningu. Wgraj zdjęcie i zobacz, do której kategorii je przypisze. Nazwy kategorii są po angielsku.',
-    btn_load: 'Pobierz model', btn_loading: 'Pobieranie…', btn_loaded: 'Model gotowy', btn_retry: 'Spróbuj ponownie',
     drop_h: 'Wybierz zdjęcie', drop_s: 'Kliknij albo upuść plik. Zdjęcie zostaje na Twoim komputerze.',
-    pred_label: '5 najbardziej prawdopodobnych kategorii',
-    pred_empty: 'Pobierz model i wybierz zdjęcie, a tu pojawi się wynik.',
-    pred_need_model: 'Zdjęcie jest gotowe. Teraz pobierz model.',
-    pred_need_image: 'Model jest gotowy. Teraz wybierz zdjęcie.',
-    pred_running: 'Model analizuje zdjęcie…',
-    lab_foot: 'Pobranie: ok. 16 MB, jeden raz.',
-    st_idle: 'Nie pobrano', st_loading: 'Pobieranie', st_ready: 'Gotowy', st_error: 'Błąd',
+    st_loading: 'Pobieranie modelu', st_ready: 'Model gotowy', st_error: 'Błąd',
+    try_hint: '<strong>Chcesz zobaczyć, co model rozpoznaje sam?</strong> W aplikacji, na karcie „Model bazowy”, kliknij „Predykcja bez treningu”. Karta włączy kamerę i pokaże, które z 1000 kategorii model widzi w obrazie.',
     meta: (ms, backend) => `Czas: ${ms} ms · silnik: ${backend}`,
     err: 'Coś poszło nie tak: ',
     limits_h: 'Ograniczenia zbioru ImageNet',
@@ -732,10 +704,11 @@ const T = {
     vs_b_1: 'Kilkadziesiąt na klasę.', vs_b_2: 'Twoja przeglądarka.', vs_b_3: 'Tylko nowa warstwa: ok. 131 tys. liczb.',
     fp_h: 'Opis zdjęcia w 1024 liczbach',
     fp_aria: 'Siatka 32 na 32 pola. Każde pole to jedna z 1024 liczb opisujących zdjęcie.',
-    fp_empty: 'Tu zobaczysz 1024 liczby dla swojego zdjęcia.', fp_empty_link: 'Wgraj zdjęcie w sekcji wyżej.',
+    fp_empty: 'Wybierz zdjęcie, a tu zobaczysz jego 1024 liczby.', fp_loading: 'Pobieranie modelu bazowego…',
+    fp_foot: 'Pierwsze zdjęcie pobiera model bazowy (ok. 6 MB).',
     fp_low: 'mała', fp_high: 'duża',
     fp_1: 'Każde pole to jedna liczba wyliczona przez model bazowy dla Twojego zdjęcia. Im ciemniejszy niebieski, tym większa liczba.',
-    fp_2: 'Podobne zdjęcia dają podobny wzór, a różne zdjęcia inny. Twoja warstwa uczy się rozróżniać klasy właśnie po tym wzorze. Wgraj drugie zdjęcie i porównaj.',
+    fp_2: 'Podobne zdjęcia dają podobny wzór, a różne zdjęcia inny. Twoja warstwa uczy się rozróżniać klasy właśnie po tym wzorze. Wybierz drugie zdjęcie i porównaj.',
     in_h: 'Zajrzyj do środka',
     in_lead: 'Zdjęcie przechodzi przez 17 etapów. Z każdym etapem siatka robi się mniejsza, a w każdym polu jest więcej liczb. Kliknij etap, aby zobaczyć, co robi.',
     col_stage: 'Etap', col_name: 'Nazwa', col_size: 'Rozmiar siatki', col_ch: 'Liczb w polu',
@@ -791,17 +764,9 @@ const T = {
     data_t1_h: 'Photos from the internet', data_t1: 'Researchers collected photos from search engines and photo sites. A person looked at every photo and confirmed what it shows.',
     data_t2_h: 'What is in the set', data_t2: 'Animals (including over a hundred dog breeds), plants, food, vehicles, instruments, furniture and everyday objects.',
     data_t3_h: 'What is missing', data_t3: 'Your classes. The model does not know your mug, your gestures or your friends\' faces. It can recognise shapes, colours and textures though, and transfer learning builds on that.',
-    lab_h: 'See what the model recognises on its own',
-    lab_intro: 'This is the original model with its 1000 ImageNet categories, without your training. Upload a photo and see which category it picks.',
-    btn_load: 'Download the model', btn_loading: 'Downloading…', btn_loaded: 'Model ready', btn_retry: 'Try again',
     drop_h: 'Choose a photo', drop_s: 'Click or drop a file. The photo stays on your computer.',
-    pred_label: 'Top 5 most likely categories',
-    pred_empty: 'Download the model and choose a photo to see the result here.',
-    pred_need_model: 'The photo is ready. Now download the model.',
-    pred_need_image: 'The model is ready. Now choose a photo.',
-    pred_running: 'The model is analysing the photo…',
-    lab_foot: 'Download: about 16 MB, once.',
-    st_idle: 'Not downloaded', st_loading: 'Downloading', st_ready: 'Ready', st_error: 'Error',
+    st_loading: 'Downloading the model', st_ready: 'Model ready', st_error: 'Error',
+    try_hint: '<strong>Want to see what the model recognises on its own?</strong> In the app, on the "Base model" card, click "Predict without training". The card turns the camera on and shows which of the 1000 categories the model sees in the picture.',
     meta: (ms, backend) => `Time: ${ms} ms · engine: ${backend}`,
     err: 'Something went wrong: ',
     limits_h: 'Limits of ImageNet',
@@ -822,7 +787,8 @@ const T = {
     vs_b_1: 'A few dozen per class.', vs_b_2: 'Your browser.', vs_b_3: 'Only the new layer: about 131 k numbers.',
     fp_h: 'A photo described in 1024 numbers',
     fp_aria: 'A 32 by 32 grid. Each cell is one of the 1024 numbers describing the photo.',
-    fp_empty: 'The 1024 numbers for your photo will show here.', fp_empty_link: 'Upload a photo in the section above.',
+    fp_empty: 'Choose a photo to see its 1024 numbers here.', fp_loading: 'Downloading the base model…',
+    fp_foot: 'The first photo downloads the base model (about 6 MB).',
     fp_low: 'small', fp_high: 'large',
     fp_1: 'Each cell is one number the base model computed for your photo. The darker the blue, the larger the number.',
     fp_2: 'Similar photos give a similar pattern, different photos a different one. Your layer learns to tell classes apart by this pattern. Upload a second photo and compare.',
@@ -855,12 +821,10 @@ const T = {
 // ─── State ───
 const STATE = {
   lang: T[localStorage.getItem(LANG_KEY)] ? localStorage.getItem(LANG_KEY) : 'pl',
-  model: null,            // { classifier, feature } once loaded
+  model: null,            // the feature model once loaded
   modelState: 'idle',     // idle | loading | ready | error
-  labels: null,           // 1001 entries, index 0 = background
   image: null,            // the preview <img> once decoded
   layer: ARCH[0],
-  predictions: null,      // last top-5 [{ name, p }]
   meta: null,             // { ms, backend }
   error: ''
 };
@@ -868,8 +832,8 @@ const STATE = {
 // ─── DOM refs ───
 const $ = id => document.getElementById(id);
 const DOM = {
-  lab: $('lab'), status: $('status'), btnLoad: $('btn-load'), progress: $('progress'), drop: $('drop'), file: $('file'),
-  preview: $('preview'), predictions: $('predictions'), meta: $('meta'), finger: $('finger'), fingerCard: $('finger-card'),
+  status: $('status'), progress: $('progress'), drop: $('drop'), file: $('file'),
+  preview: $('preview'), meta: $('meta'), finger: $('finger'), fingerCard: $('finger-card'),
   fingerEmpty: $('finger-empty'), fingerScale: $('finger-scale'), layers: $('layers'), detailTitle: $('detail-title'),
   detailDesc: $('detail-desc'), detailGrid: $('detail-grid'), btnLang: $('btn-lang'), btnBack: $('btn-back')
 };
@@ -926,25 +890,21 @@ function renderDetail() {
 }
 function renderLab() {
   const s = STATE.modelState;
-  DOM.lab.dataset.modelState = s;
-  DOM.lab.dataset.hasImage = String(!!STATE.image);
-  DOM.lab.dataset.topLabel = STATE.predictions ? STATE.predictions[0].name : '';
-  DOM.status.textContent = t('st_' + s);
+  DOM.fingerCard.dataset.modelState = s;
+  DOM.fingerCard.dataset.hasImage = String(!!STATE.image);
+  DOM.status.hidden = s === 'idle';
+  DOM.status.textContent = s === 'idle' ? '' : t('st_' + s);
   DOM.status.className = 'chip ' + ({ idle: 'tone-stone', loading: 'tone-yellow', ready: 'tone-green', error: 'tone-red' })[s];
-  DOM.btnLoad.disabled = s === 'loading' || s === 'ready';
-  const key = ({ idle: 'btn_load', loading: 'btn_loading', ready: 'btn_loaded', error: 'btn_retry' })[s];
-  DOM.btnLoad.innerHTML = icon(s === 'ready' ? 'check' : 'download') + `<span>${t(key)}</span>`;
   DOM.progress.hidden = s !== 'loading';
   DOM.meta.textContent = STATE.meta ? t('meta', STATE.meta.ms, STATE.meta.backend) : '';
   if (STATE.error) {
-    DOM.predictions.innerHTML = `<div class="error">${t('err')}${escapeHtml(STATE.error)}</div>`;
-  } else if (STATE.predictions) {
-    DOM.predictions.innerHTML = STATE.predictions.map(p => `<div class="pred">
-      <div class="pred-top"><b>${escapeHtml(p.name)}</b><span>${(p.p * 100).toFixed(1)}%</span></div>
-      <div class="bar"><span style="width:${(p.p * 100).toFixed(1)}%"></span></div></div>`).join('');
+    DOM.fingerEmpty.hidden = false;
+    DOM.fingerEmpty.className = 'error';
+    DOM.fingerEmpty.textContent = t('err') + STATE.error;
   } else {
-    const hint = STATE.image && s !== 'ready' ? 'pred_need_model' : (!STATE.image && s === 'ready' ? 'pred_need_image' : (STATE.image && s === 'ready' ? 'pred_running' : 'pred_empty'));
-    DOM.predictions.innerHTML = `<div class="empty">${t(hint)}</div>`;
+    DOM.fingerEmpty.className = 'empty';
+    DOM.fingerEmpty.textContent = t(s === 'loading' ? 'fp_loading' : 'fp_empty');
+    DOM.fingerEmpty.hidden = DOM.fingerCard.dataset.hasFingerprint === 'true';
   }
 }
 function renderFingerprint(values) {
@@ -968,39 +928,32 @@ function render() { renderText(); renderLayers(); renderDetail(); renderLab(); d
 
 // ─── Model ───
 async function loadModel() {
-  if (STATE.modelState === 'loading' || STATE.modelState === 'ready') return;
+  if (STATE.modelState === 'ready') return true;
+  if (STATE.modelState === 'loading') return false;
   STATE.modelState = 'loading'; STATE.error = ''; renderLab();
   const bar = DOM.progress.firstElementChild;
   bar.style.width = '0%';
   try {
-    const [classifier, feature, labelsText] = await Promise.all([
-      tf.loadGraphModel(V3_CLASSIFIER_URL, { onProgress: frac => { bar.style.width = Math.round(frac * 100) + '%'; } }),
-      tf.loadGraphModel(BASE_MODEL_IDB_KEY).catch(() => tf.loadGraphModel(V3_FEATURE_URL)),
-      fetch(IMAGENET_LABELS_URL).then(r => { if (!r.ok) throw new Error('labels ' + r.status); return r.text(); })
-    ]);
-    STATE.labels = labelsText.trim().split('\n');
-    STATE.model = { classifier, feature };
-    tf.tidy(() => { const dummy = tf.zeros([1, 224, 224, 3]); classifier.predict(dummy); feature.predict(dummy); });
+    const onProgress = frac => { bar.style.width = Math.round(frac * 100) + '%'; };
+    STATE.model = await tf.loadGraphModel(BASE_MODEL_IDB_KEY).catch(() => tf.loadGraphModel(V3_FEATURE_URL, { onProgress }));
+    tf.tidy(() => { STATE.model.predict(tf.zeros([1, 224, 224, 3])); });
     STATE.modelState = 'ready';
   } catch (e) {
     console.error(e);
     STATE.modelState = 'error'; STATE.error = e.message || String(e);
   }
   renderLab();
-  if (STATE.modelState === 'ready' && STATE.image) classify();
+  return STATE.modelState === 'ready';
 }
-async function classify() {
-  if (!STATE.model || !STATE.image) return;
-  STATE.error = ''; STATE.predictions = null; renderLab();
+async function describeImage() {
+  if (!STATE.image) return;
+  if (!(await loadModel()) || !STATE.image) return;
+  STATE.error = '';
   try {
     const start = performance.now();
-    const input = tf.tidy(imageTensor);
-    const probs = tf.tidy(() => tf.softmax(STATE.model.classifier.predict(input).squeeze()));
-    const embedding = tf.tidy(() => STATE.model.feature.predict(input).squeeze());
-    const [data, features] = await Promise.all([probs.data(), embedding.data()]);
-    tf.dispose([input, probs, embedding]);
-    const top = Array.from(data.keys()).sort((a, b) => data[b] - data[a]).slice(0, 5);
-    STATE.predictions = top.map(i => ({ name: ((STATE.labels && STATE.labels[i]) || `class ${i}`).split(',')[0], p: data[i] }));
+    const embedding = tf.tidy(() => STATE.model.predict(imageTensor()).squeeze());
+    const features = await embedding.data();
+    embedding.dispose();
     STATE.meta = { ms: (performance.now() - start).toFixed(0), backend: tf.getBackend() };
     renderFingerprint(features);
   } catch (e) {
@@ -1014,9 +967,9 @@ function setImage(file) {
   const reader = new FileReader();
   reader.onload = () => {
     DOM.preview.onload = () => {
-      STATE.image = DOM.preview; STATE.predictions = null; STATE.error = '';
+      STATE.image = DOM.preview; STATE.error = '';
       renderLab();
-      if (STATE.modelState === 'ready') classify();
+      describeImage();
     };
     DOM.preview.src = reader.result;
     DOM.preview.style.display = 'block';
@@ -1025,7 +978,6 @@ function setImage(file) {
 }
 
 // ─── Listeners ───
-DOM.btnLoad.addEventListener('click', loadModel);
 DOM.file.addEventListener('change', event => setImage(event.target.files[0]));
 ['dragenter', 'dragover'].forEach(type => DOM.drop.addEventListener(type, event => { event.preventDefault(); DOM.drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(type => DOM.drop.addEventListener(type, event => { event.preventDefault(); DOM.drop.classList.remove('over'); }));
